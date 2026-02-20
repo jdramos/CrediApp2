@@ -1,0 +1,23 @@
+# Expo
+.expo/
+expo-env.d.ts
+
+# React Native / Metro
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Builds
+dist/
+build/
+web-build/
+
+# iOS / Android (si algún día haces prebuild)
+ios/
+android/
+
+# Env
+.env
+.env.* 
