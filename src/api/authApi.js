@@ -1,28 +1,48 @@
-// Mock login. Luego lo cambias a fetch real.
-export async function loginRequest({ user_name, password }) {
-  await sleep(450);
+import { apiGet } from "./apiClient";
 
-  // usuarios mock
-  const users = {
-    admin: { id: 1, user_name: "admin", full_name: "Admin", role: "ADMIN", branch_id: 1 },
-    supervisor: { id: 2, user_name: "supervisor", full_name: "Supervisor", role: "SUPERVISOR", branch_id: 1 },
-    promotor: { id: 3, user_name: "promotor", full_name: "Promotor", role: "PROMOTOR", branch_id: 1 },
-    cobrador: { id: 4, user_name: "cobrador", full_name: "Cobrador", role: "COBRADOR", branch_id: 1 },
-  };
+/**
+ * Login real contra PHP.
+ * Endpoint esperado: /login.php
+ * Respuesta: array con 1 registro de appusuario, o ["CODE"].
+ */
+export async function loginRequest({ nomUser, pasUser, token, deviceId }) {
+  const data = await apiGet("validar_login.php", {
+    nomUser,
+    pasUser,
+    token,
+    deviceId,
+  });
 
-  const u = users[user_name?.toLowerCase()];
-  if (!u || password !== "1234") {
-    const err = new Error("Usuario o contraseña incorrectos");
-    err.status = 401;
+  // Casos de error: ["FALTAN_DATOS"] / ["USERNO"] / ["PASSNO"] / ["APPINACTIVA"] / ["SESSION_REPLACED"]...
+  if (Array.isArray(data) && data.length === 1 && typeof data[0] === "string") {
+    const code = data[0];
+    const err = new Error(mapLoginError(code));
+    err.code = code;
     throw err;
   }
 
-  return {
-    token: "mock-token-" + Date.now(),
-    user: u,
-  };
+  // Caso OK: array de objetos (normalmente 1)
+  const user = Array.isArray(data) ? data[0] : null;
+  if (!user) {
+    const err = new Error("Respuesta inesperada del servidor");
+    err.data = data;
+    throw err;
+  }
+
+  return { user };
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
+function mapLoginError(code) {
+  switch (code) {
+    case "FALTAN_DATOS":
+      return "Faltan datos para iniciar sesión";
+    case "USERNO":
+      return "Usuario no existe o está inactivo";
+    case "PASSNO":
+      return "Contraseña incorrecta";
+    case "APPINACTIVA":
+      return "Acceso fuera de horario permitido";
+    default:
+      return `Error de login: ${code}`;
+  }
 }
