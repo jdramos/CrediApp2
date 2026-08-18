@@ -1,111 +1,66 @@
 import React, { createContext, useEffect, useMemo, useState } from "react";
 import { clearSession, loadSession, saveSession } from "../storage/session";
-import { loginRequest } from "../api/authApi";
-import { ROLE_PERMISSIONS } from "./permissions";
-import * as Application from "expo-application";
-
+import { credimasterLoginRequest } from "../api/credimasterAuthApi";
 
 export const SessionContext = createContext(null);
 
+// Sesión real contra el backend Node/Express de CrediMaster (JWT). El
+// backend fuerza sesión única por usuario — cada login invalida
+// cualquier otra sesión activa de esa cuenta (web u otro dispositivo),
+// así que dos personas no pueden compartir un mismo usuario a la vez.
 export function SessionProvider({ children }) {
   const [loadingBoot, setLoadingBoot] = useState(true);
-  const [session, setSession] = useState(null); // { user, token, permissions }
+  const [session, setSession] = useState(null); // { token, user, permissions, tenant }
 
   useEffect(() => {
-  (async () => {
-    const s = await loadSession();
+    (async () => {
+      const s = await loadSession();
+      const ok = s && s.token && s.user;
 
-    const ok =
-      s &&
-      s.token &&
-      s.deviceId &&
-      s.user &&
-      s.user.codOfi;
+      if (ok) setSession(s);
+      else {
+        setSession(null);
+        await clearSession();
+      }
 
-    if (ok) setSession(s);
-    else {
-      setSession(null);
-      await clearSession();
-    }
+      setLoadingBoot(false);
+    })();
+  }, []);
 
-    setLoadingBoot(false);
-  })();
-}, []);
- 
+  const signIn = async ({ username, password, tenant_code }) => {
+    const res = await credimasterLoginRequest({
+      username: (username ?? "").trim(),
+      password: (password ?? "").trim(),
+      tenant_code,
+    });
 
-const signIn = async ({ nomUser, pasUser }) => {
-  
-  nomUser = (nomUser ?? "").trim();
-  pasUser = (pasUser ?? "").trim();
-  const deviceIdLocal = await getDeviceId();
-  const tokenLocal = randomToken();
+    const newSession = {
+      token: res.token,
+      permissions: res.permissions || [],
+      user: {
+        id: res.user_id,
+        user_name: res.user_name,
+        full_name: res.full_name,
+        role_id: res.role_id,
+        department_id: res.department_id,
+        branches: res.branches || [],
+      },
+      tenant: res.tenant,
+    };
 
-  const res = await loginRequest({ nomUser, pasUser, token: tokenLocal, deviceId: deviceIdLocal });
-
-  const u = res?.user ?? {};
-
-// ✅ usa lo que devuelve el servidor (source of truth)
-const tokenServer = String(u.token ?? tokenLocal);
-const deviceIdServer = String(u.device_id ?? deviceIdLocal);
-
-  console.log("LOGIN RESPONSE FULL:", res);
-console.log("LOGIN RESPONSE USER:", res?.user);
-
-  // Tu PHP devuelve campos tipo: rolUser, codOfi, numSuc, etc.
-  const roleId = Number(res.user?.rolUser ?? 0);
-
-  // Mapea roleId -> nombre de rol (ajusta según tu sistema)
-  const roleName =
-    roleId === 1 ? "ADMIN" :
-    roleId === 2 ? "SUPERVISOR" :
-    roleId === 3 ? "PROMOTOR" :
-    "COBRADOR";
-
-  const permissions = ROLE_PERMISSIONS[roleName] ?? [];
-
-  const newSession = {
-    token: tokenServer,
-    deviceId: deviceIdServer,
-    user: {
-      ...res.user,
-      role: roleName,    // útil para UI
-      rol: roleId,       // útil para endpoints que piden rol
-      codOfi: res.user?.codOfi,
-      numSuc: res.user?.numSuc,
-    },
-    permissions,
+    setSession(newSession);
+    await saveSession(newSession);
+    return newSession;
   };
-
-  setSession(newSession);
-  await saveSession(newSession);
-  return newSession;
-};
-
-async function getDeviceId() {
-  try {
-    if (Application.getAndroidId) {
-      const id = Application.getAndroidId();
-      if (id) return id;
-    }
-    if (Application.getIosIdForVendorAsync) {
-      const id = await Application.getIosIdForVendorAsync();
-      if (id) return id;
-    }
-  } catch {}
-  return `sim-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function randomToken() {
-  // token simple (suficiente para tu caso); si quieres algo más largo lo hacemos
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
-}
-
 
   const signOut = async () => {
     setSession(null);
     await clearSession();
   };
 
+  // Permisos reales de CrediMaster: cadenas tipo "clientes.ver",
+  // "clientes.editar" (permission_tag), no roles inventados del lado
+  // móvil.
   const hasPerm = (perm) => {
     if (!session?.permissions) return false;
     return session.permissions.includes(perm);

@@ -3,7 +3,6 @@
   import { SafeAreaView } from "react-native-safe-area-context";
   import { Text, TextInput, Button, HelperText, Card } from "react-native-paper";
   import { SessionContext } from "../auth/SessionContext";
-  import { getDeviceId } from "../utils/getDevice";
   import { COLORS } from "../theme/colors";
   import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -54,8 +53,8 @@
 
   export default function LoginScreen() {
     const { signIn } = useContext(SessionContext);
-    const [nomUser, setNomUser] = useState("");
-    const [pasUser, setPasUser] = useState("");
+    const [username, setUsername] = useState("");
+    const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
@@ -65,8 +64,8 @@
       try {
         setError("");
 
-        const u = nomUser.trim();
-        const p = pasUser.trim();
+        const u = username.trim();
+        const p = password.trim();
 
         if (!u || !p) {
           setError("Debe ingresar usuario y contraseña");
@@ -74,7 +73,7 @@
         }
 
         setLoading(true);
-        await signIn({ nomUser: u, pasUser: p });
+        await signIn({ username: u, password: p });
       } catch (e) {
         setError(e?.message ?? "Error al iniciar sesión");
       } finally {
@@ -82,7 +81,7 @@
       }
     };
 
-    const canSubmit = nomUser.trim().length > 0 && pasUser.trim().length > 0;
+    const canSubmit = username.trim().length > 0 && password.trim().length > 0;
 
     return (
       <SafeAreaView style={styles.safe}>
@@ -96,8 +95,8 @@
 
           <TextInput
             label="Usuario"
-            value={nomUser}
-            onChangeText={setNomUser}
+            value={username}
+            onChangeText={setUsername}
             autoCapitalize="none"
             autoCorrect={false}
             mode="outlined"
@@ -111,8 +110,8 @@
           <TextInput
             ref={passRef}
             label="Contraseña"
-            value={pasUser}
-            onChangeText={setPasUser}
+            value={password}
+            onChangeText={setPassword}
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
@@ -142,7 +141,7 @@
 
           <View style={styles.footer}>
             <Text variant="labelSmall" style={styles.footerText}>
-              Usuarios demo: admin / supervisor / promotor / cobrador — pass: 1234
+              Ingrese con su usuario y contraseña de CrediMaster.
             </Text>
           </View>
         </Card>
