@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "CrediApp2",
-    "slug": "CrediApp2",
+    "slug": "crediapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,8 +15,12 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "CrediApp usa tu ubicación para registrar la casa y el negocio del cliente."
-      }
+        "NSLocationWhenInUseUsageDescription": "CrediApp usa tu ubicación para registrar la casa y el negocio del cliente.",
+        "NSCameraUsageDescription": "CrediApp usa la cámara para fotografiar garantías y documentos del cliente.",
+        "NSPhotoLibraryUsageDescription": "CrediApp accede a tus fotos para adjuntar imágenes de garantías y documentos del cliente.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.jdramos395steam.crediapp"
     },
     "android": {
       "adaptiveIcon": {
@@ -25,9 +29,13 @@
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
-      ]
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.jdramos395steam.crediapp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -39,7 +47,27 @@
         {
           "locationWhenInUsePermission": "CrediApp usa tu ubicación para registrar la casa y el negocio del cliente."
         }
-      ]
-    ]
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#1D4ED8"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CrediApp accede a tus fotos para adjuntar imágenes de garantías y documentos del cliente.",
+          "cameraPermission": "CrediApp usa la cámara para fotografiar garantías y documentos del cliente."
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "dce93494-d231-4513-ad36-acd7a51ea822"
+      }
+    },
+    "owner": "jdramos395s-team"
   }
 }

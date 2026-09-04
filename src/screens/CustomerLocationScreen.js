@@ -1,16 +1,20 @@
 import React, { useContext, useEffect, useState } from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet, ScrollView, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, Card, Button, ActivityIndicator, HelperText, Snackbar } from "react-native-paper";
 import * as Location from "expo-location";
 import { SessionContext } from "../auth/SessionContext";
 import { getCustomer, saveCustomerLocation } from "../api/customerApi";
+import { isNetworkError } from "../api/credimasterClient";
+import { enqueue } from "../offline/queue";
+import { useSync } from "../offline/SyncProvider";
+import { confirmAction } from "../utils/confirm";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
-  content: { padding: SPACING.lg },
+  content: { padding: SPACING.lg, paddingBottom: 110 },
   header: { fontWeight: "800", color: COLORS.text },
   sub: { color: COLORS.muted, marginTop: 2 },
   card: {
@@ -39,6 +43,7 @@ const formatCoords = (lat, lng) =>
 export default function CustomerLocationScreen({ route }) {
   const { customerId } = route.params;
   const { session } = useContext(SessionContext);
+  const { refreshPendingCount } = useSync();
 
   const [customer, setCustomer] = useState(null);
   const [homeLat, setHomeLat] = useState(null);
@@ -100,22 +105,42 @@ export default function CustomerLocationScreen({ route }) {
     }
   };
 
-  const onSave = async () => {
+  const saveLocation = async () => {
     setError("");
+    // Nota: el backend reemplaza el registro COMPLETO del cliente en cada
+    // PUT (ver customerApi.js::saveCustomerLocation). Si esto se encola sin
+    // conexión y otra persona edita al mismo cliente antes de que vuelva la
+    // señal, la sincronización posterior pisará esos cambios -- riesgo
+    // aceptado igual que en el resto de la cola offline, no hay
+    // reconciliación de conflictos en esta versión.
+    const location = { home_lat: homeLat, home_lng: homeLng, business_lat: businessLat, business_lng: businessLng };
     try {
       setSaving(true);
-      await saveCustomerLocation(session.token, customerId, customer, {
-        home_lat: homeLat,
-        home_lng: homeLng,
-        business_lat: businessLat,
-        business_lng: businessLng,
-      });
+      await saveCustomerLocation(session.token, customerId, customer, location);
       setSnackbar("Ubicación guardada");
     } catch (e) {
+      if (isNetworkError(e)) {
+        try {
+          await enqueue({
+            type: "CUSTOMER_LOCATION",
+            label: `Ubicación — ${customer?.customer_name || "cliente"}`,
+            payload: { customerId, fullCustomer: customer, location },
+          });
+          refreshPendingCount();
+          Alert.alert("Sin conexión", "La ubicación se guardó en el equipo y se enviará sola cuando vuelva la señal.");
+        } catch (queueErr) {
+          setError(queueErr?.message ?? "No se pudo guardar la ubicación para enviarla después");
+        }
+        return;
+      }
       setError(e?.message ?? "Error al guardar la ubicación");
     } finally {
       setSaving(false);
     }
+  };
+
+  const onSave = () => {
+    confirmAction("Guardar ubicación", `¿Guardar la ubicación de ${customer?.customer_name || "este cliente"}?`, saveLocation);
   };
 
   if (loading) {

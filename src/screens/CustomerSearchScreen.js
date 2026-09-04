@@ -24,10 +24,10 @@ const styles = StyleSheet.create({
   empty: { marginTop: SPACING.lg, textAlign: "center", color: COLORS.muted },
 });
 
-// Búsqueda de clientes para capturar/editar su ubicación GPS. Requiere
-// el permiso clientes.ver en CrediMaster (verificado por el backend, no
-// por esta pantalla — un usuario sin ese permiso simplemente recibe un
-// 403 al buscar).
+// Búsqueda de clientes: entrada a su perfil (créditos activos +
+// ubicación GPS de casa/negocio). Requiere el permiso clientes.ver en
+// CrediMaster (verificado por el backend, no por esta pantalla — un
+// usuario sin ese permiso simplemente recibe un 403 al buscar).
 export default function CustomerSearchScreen({ navigation }) {
   const { session } = useContext(SessionContext);
   const [query, setQuery] = useState("");
@@ -59,10 +59,10 @@ export default function CustomerSearchScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.safe}>
       <Text variant="headlineSmall" style={{ fontWeight: "800", color: COLORS.text }}>
-        Ubicación de clientes
+        Clientes
       </Text>
       <Text variant="bodyMedium" style={{ color: COLORS.muted, marginTop: 2, marginBottom: SPACING.md }}>
-        Busque un cliente para fijar la ubicación de su casa o negocio.
+        Busque un cliente para ver sus créditos y ubicación.
       </Text>
 
       <TextInput
@@ -85,6 +85,7 @@ export default function CustomerSearchScreen({ navigation }) {
       <FlatList
         data={results}
         keyExtractor={(item) => String(item.id)}
+        contentContainerStyle={{ paddingBottom: 110 }}
         ListEmptyComponent={
           !loading && query.trim().length >= 2 ? (
             <Text style={styles.empty}>Sin resultados</Text>
@@ -93,7 +94,7 @@ export default function CustomerSearchScreen({ navigation }) {
         renderItem={({ item }) => (
           <Card
             style={styles.row}
-            onPress={() => navigation.navigate("CustomerLocation", { customerId: item.id })}
+            onPress={() => navigation.navigate("CustomerDetail", { customerId: item.id })}
           >
             <Text style={styles.name}>{item.customer_name}</Text>
             <Text style={styles.id}>Cédula: {item.identification}</Text>
