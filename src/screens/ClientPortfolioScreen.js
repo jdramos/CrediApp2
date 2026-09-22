@@ -193,8 +193,10 @@ export default function ClientPortfolioScreen() {
                 <Text style={styles.muted}>Código: {item.customer_identification} · Crédito #{item.credit_code || item.loan_id}</Text>
                 <View style={styles.balancesRow}>
                   <View>
-                    <Text style={styles.balanceLabel}>Cuota</Text>
-                    <Text style={styles.balanceValue}>{money(item.installment_amount)}</Text>
+                    <Text style={styles.balanceLabel}>Próxima cuota</Text>
+                    <Text style={styles.balanceValue}>
+                      {item.installment_amount != null ? money(item.installment_amount) : "—"}
+                    </Text>
                   </View>
                   <View>
                     <Text style={styles.balanceLabel}>Saldo capital</Text>

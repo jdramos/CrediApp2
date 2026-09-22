@@ -454,16 +454,18 @@ export default function PaymentsScreen({ route }) {
                   </View>
                   <Text style={styles.balance}>{money(item.current_balance)}</Text>
                   <Text style={styles.muted}>Saldo pendiente</Text>
-                  {item.next_installment_amount != null && (
-                    <Text style={[styles.muted, { marginTop: SPACING.xs }]}>
-                      Próxima cuota: {money(item.next_installment_amount)}
-                      {item.next_payment_date ? ` — vence ${String(item.next_payment_date).slice(0, 10)}` : ""}
-                    </Text>
-                  )}
                   {inArrears && (
                     <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: SPACING.xs }}>
                       {item.overdue_installments} cuota{item.overdue_installments === 1 ? "" : "s"} vencida
-                      {item.overdue_installments === 1 ? "" : "s"} — {money(item.overdue_amount)}
+                      {item.overdue_installments === 1 ? "" : "s"}
+                      {item.oldest_overdue_date ? `, la más antigua desde ${String(item.oldest_overdue_date).slice(0, 10)} (${daysOverdue}d)` : ""}
+                      {" — "}{money(item.overdue_amount)}
+                    </Text>
+                  )}
+                  {item.next_installment_amount != null && (
+                    <Text style={[styles.muted, { marginTop: SPACING.xs }]}>
+                      Próxima cuota a vencer: {money(item.next_installment_amount)}
+                      {item.next_payment_date ? ` — vence ${String(item.next_payment_date).slice(0, 10)}` : ""}
                     </Text>
                   )}
                 </Card>
