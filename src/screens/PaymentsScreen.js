@@ -172,7 +172,7 @@ export default function PaymentsScreen({ route }) {
         const list = methodsRes?.data || [];
         setMethods(list);
         if (list[0]) setMethodId(list[0].id);
-        if (loansRes) setLoans(loansRes?.data?.loans || []);
+        if (loansRes) setLoans(loansRes?.loans || []);
       } catch (e) {
         setError(e?.message ?? "Error cargando el crédito");
       } finally {
@@ -222,7 +222,7 @@ export default function PaymentsScreen({ route }) {
     try {
       setLoadingLoans(true);
       const res = await getCustomerActiveLoans(session.token, c.id);
-      setLoans(res?.data?.loans || []);
+      setLoans(res?.loans || []);
     } catch (e) {
       setError(e?.message ?? "Error cargando créditos del cliente");
     } finally {
@@ -432,13 +432,43 @@ export default function PaymentsScreen({ route }) {
               data={loans}
               keyExtractor={(item) => String(item.id || item.loan_id)}
               scrollEnabled={false}
-              renderItem={({ item }) => (
+              renderItem={({ item }) => {
+                const daysOverdue = Number(item.days_overdue || 0);
+                const inArrears = daysOverdue > 0;
+                return (
                 <Card style={styles.row} onPress={() => pickLoan(item)}>
-                  <Text style={styles.name}>Crédito #{item.id || item.loan_id}</Text>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <View>
+                      <Text style={styles.name}>Crédito #{item.credit_code || item.id || item.loan_id}</Text>
+                      {!!item.branch_name && <Text style={styles.muted}>{item.branch_name}</Text>}
+                    </View>
+                    {inArrears && (
+                      <Chip
+                        compact
+                        style={{ backgroundColor: COLORS.dangerSoft }}
+                        textStyle={{ color: COLORS.danger, fontWeight: "700" }}
+                      >
+                        Mora {daysOverdue}d
+                      </Chip>
+                    )}
+                  </View>
                   <Text style={styles.balance}>{money(item.current_balance)}</Text>
                   <Text style={styles.muted}>Saldo pendiente</Text>
+                  {item.next_installment_amount != null && (
+                    <Text style={[styles.muted, { marginTop: SPACING.xs }]}>
+                      Próxima cuota: {money(item.next_installment_amount)}
+                      {item.next_payment_date ? ` — vence ${String(item.next_payment_date).slice(0, 10)}` : ""}
+                    </Text>
+                  )}
+                  {inArrears && (
+                    <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: SPACING.xs }}>
+                      {item.overdue_installments} cuota{item.overdue_installments === 1 ? "" : "s"} vencida
+                      {item.overdue_installments === 1 ? "" : "s"} — {money(item.overdue_amount)}
+                    </Text>
+                  )}
                 </Card>
-              )}
+                );
+              }}
             />
           </Animated.View>
         )}
