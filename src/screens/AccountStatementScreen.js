@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { View, StyleSheet, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, Card, Button, ActivityIndicator, HelperText, Chip, IconButton, Divider } from "react-native-paper";
@@ -9,7 +9,7 @@ import { SessionContext } from "../auth/SessionContext";
 import { getAccountStatement } from "../api/loanApi";
 import { money } from "../utils/format";
 import { todayISO } from "../utils/date";
-import { printReceipt, buildAccountStatementReceiptLines } from "../utils/printer";
+import { printReceipt, buildAccountStatementReceiptLines, summarizeMovements } from "../utils/printer";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -52,6 +52,14 @@ export default function AccountStatementScreen({ route }) {
   const [loading, setLoading] = useState(true);
   const [sharing, setSharing] = useState(false);
   const [error, setError] = useState("");
+  const [showDetail, setShowDetail] = useState(false);
+
+  // Resumen a partir de las cuotas (no de capital/interés sueltos): lo que
+  // el cobrador necesita ver de un vistazo es cuánto está atrasado, cuánto
+  // todavía no vence, y desde cuándo empezó el atraso -- no el desglose
+  // capital/interés/seguro de cada rubro. Mismo cálculo que usa el ticket
+  // impreso (ver utils/printer.js) para que nunca queden desincronizados.
+  const summary = useMemo(() => summarizeMovements(statement?.movements), [statement?.movements]);
 
   useEffect(() => {
     (async () => {
@@ -160,43 +168,35 @@ export default function AccountStatementScreen({ route }) {
           </View>
 
           <View style={styles.card}>
-            <Text style={{ fontWeight: "800", color: COLORS.text, marginBottom: SPACING.xs }}>Saldo pendiente</Text>
+            <Text style={{ fontWeight: "800", color: COLORS.text, marginBottom: SPACING.xs }}>Resumen de saldo</Text>
             <View style={styles.balanceRow}>
-              <Text style={{ color: COLORS.muted }}>Capital</Text>
-              <Text style={{ color: COLORS.text, fontWeight: "600" }}>{money(statement.capital_balance)}</Text>
+              <Text style={{ color: COLORS.danger, fontWeight: "600" }}>Saldo atrasado</Text>
+              <Text style={{ color: COLORS.danger, fontWeight: "700" }}>{money(summary.overdueBalance)}</Text>
             </View>
             <View style={styles.balanceRow}>
-              <Text style={{ color: COLORS.muted }}>Interés</Text>
-              <Text style={{ color: COLORS.text, fontWeight: "600" }}>{money(statement.interest_balance)}</Text>
+              <Text style={{ color: COLORS.muted }}>Saldo vigente</Text>
+              <Text style={{ color: COLORS.text, fontWeight: "600" }}>{money(summary.currentBalance)}</Text>
             </View>
-            {Number(statement.insurance_balance || 0) > 0 && (
-              <View style={styles.balanceRow}>
-                <Text style={{ color: COLORS.muted }}>Seguro</Text>
-                <Text style={{ color: COLORS.text, fontWeight: "600" }}>{money(statement.insurance_balance)}</Text>
-              </View>
-            )}
-            {Number(statement.fee_balance || 0) > 0 && (
-              <View style={styles.balanceRow}>
-                <Text style={{ color: COLORS.muted }}>Comisión</Text>
-                <Text style={{ color: COLORS.text, fontWeight: "600" }}>{money(statement.fee_balance)}</Text>
-              </View>
-            )}
-            {Number(statement.other_charges_balance || 0) > 0 && (
-              <View style={styles.balanceRow}>
-                <Text style={{ color: COLORS.muted }}>Otros cargos</Text>
-                <Text style={{ color: COLORS.text, fontWeight: "600" }}>{money(statement.other_charges_balance)}</Text>
-              </View>
-            )}
             <View style={styles.totalRow}>
               <Text style={{ color: COLORS.text, fontWeight: "800" }}>Total adeudado</Text>
               <Text style={{ color: COLORS.primary, fontWeight: "800", fontSize: 18 }}>{money(statement.total_balance)}</Text>
             </View>
+            {!!summary.overdueSinceDate && (
+              <Text style={{ color: COLORS.danger, marginTop: SPACING.sm, fontSize: 12 }}>
+                En mora desde el {String(summary.overdueSinceDate).slice(0, 10)}
+              </Text>
+            )}
           </View>
 
           {Array.isArray(statement.movements) && statement.movements.length > 0 && (
             <View style={styles.card}>
-              <Text style={{ fontWeight: "800", color: COLORS.text, marginBottom: SPACING.xs }}>Detalle de cuotas</Text>
-              {statement.movements.map((m, idx) => (
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontWeight: "800", color: COLORS.text }}>Detalle de cuotas</Text>
+                <Button compact mode="text" onPress={() => setShowDetail((v) => !v)}>
+                  {showDetail ? "Ocultar" : "Ver detalle"}
+                </Button>
+              </View>
+              {showDetail && statement.movements.map((m, idx) => (
                 <View key={m.payment_number ?? idx}>
                   {idx > 0 && <Divider />}
                   <View style={styles.moveRow}>

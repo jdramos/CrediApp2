@@ -39,11 +39,33 @@ const twoCol = (left, right) => {
   return l + " ".repeat(gap) + r;
 };
 
+// Misma agrupación que AccountStatementScreen.js (saldo atrasado/vigente +
+// fecha de inicio de mora, a partir de las cuotas) -- se exporta acá para
+// que la pantalla y el ticket impreso nunca queden desincronizados.
+export function summarizeMovements(movements) {
+  let overdueBalance = 0;
+  let currentBalance = 0;
+  let overdueSinceDate = null;
+  for (const m of Array.isArray(movements) ? movements : []) {
+    const pending = Number(m.pending_total || 0);
+    if (m.status === "OVERDUE") {
+      overdueBalance += pending;
+      if (!overdueSinceDate || String(m.payment_date) < String(overdueSinceDate)) {
+        overdueSinceDate = m.payment_date;
+      }
+    } else if (m.status === "CURRENT" || m.status === "PARTIAL") {
+      currentBalance += pending;
+    }
+  }
+  return { overdueBalance, currentBalance, overdueSinceDate };
+}
+
 // Mismo contenido que AccountStatementScreen.js, en líneas de texto plano
 // para un ticket de 58mm. `tenantName` es el nombre comercial del tenant
 // (no "CrediMaster", que es solo el nombre de la plataforma) -- ver
 // session.tenant en SessionContext.js.
 export function buildAccountStatementReceiptLines(statement, tenantName) {
+  const { overdueBalance, currentBalance, overdueSinceDate } = summarizeMovements(statement.movements);
   const lines = [
     center((tenantName || "CrediMaster").toUpperCase()),
     center(statement.customer_name || ""),
@@ -51,20 +73,14 @@ export function buildAccountStatementReceiptLines(statement, tenantName) {
     `Credito #${statement.credit_code || statement.loan_id || "-"}`,
     `Corte: ${new Date().toISOString().slice(0, 10)}`,
     divider(),
-    twoCol("Capital", money(statement.capital_balance)),
-    twoCol("Interes", money(statement.interest_balance)),
+    twoCol("Saldo atrasado", money(overdueBalance)),
+    twoCol("Saldo vigente", money(currentBalance)),
+    divider(),
+    twoCol("TOTAL ADEUDADO", money(statement.total_balance)),
   ];
-  if (Number(statement.insurance_balance || 0) > 0) {
-    lines.push(twoCol("Seguro", money(statement.insurance_balance)));
-  }
-  if (Number(statement.fee_balance || 0) > 0) {
-    lines.push(twoCol("Comision", money(statement.fee_balance)));
-  }
-  lines.push(divider());
-  lines.push(twoCol("TOTAL ADEUDADO", money(statement.total_balance)));
-  if (Number(statement.defaulted_days || 0) > 0) {
+  if (overdueSinceDate) {
     lines.push("");
-    lines.push(`En mora: ${statement.defaulted_days} dias`);
+    lines.push(`En mora desde: ${String(overdueSinceDate).slice(0, 10)}`);
   }
   return lines;
 }
