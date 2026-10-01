@@ -90,7 +90,12 @@ export default function AccountStatementScreen({ route }) {
   };
 
   const onPrint = () => {
-    printReceipt(buildAccountStatementReceiptLines(statement));
+    printReceipt(
+      buildAccountStatementReceiptLines(
+        statement,
+        session?.tenant?.commercial_name || session?.tenant?.legal_name,
+      ),
+    );
   };
 
   const goToPayment = () => {
@@ -136,7 +141,9 @@ export default function AccountStatementScreen({ route }) {
       <ScrollView contentContainerStyle={styles.content}>
         <ViewShot ref={shotRef} options={{ format: "png", quality: 0.95 }} style={styles.shot}>
           <View style={styles.card}>
-            <Text style={styles.brand}>CREDIMASTER</Text>
+            <Text style={styles.brand}>
+              {(session?.tenant?.commercial_name || session?.tenant?.legal_name || "CrediMaster").toUpperCase()}
+            </Text>
             <Text variant="titleLarge" style={styles.name}>{statement.customer_name}</Text>
             <Text style={styles.muted}>Cédula: {statement.customer_identification}</Text>
             <Text style={styles.muted}>Crédito #{statement.credit_code || statement.loan_id}</Text>

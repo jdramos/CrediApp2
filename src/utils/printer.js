@@ -40,10 +40,12 @@ const twoCol = (left, right) => {
 };
 
 // Mismo contenido que AccountStatementScreen.js, en líneas de texto plano
-// para un ticket de 58mm.
-export function buildAccountStatementReceiptLines(statement) {
+// para un ticket de 58mm. `tenantName` es el nombre comercial del tenant
+// (no "CrediMaster", que es solo el nombre de la plataforma) -- ver
+// session.tenant en SessionContext.js.
+export function buildAccountStatementReceiptLines(statement, tenantName) {
   const lines = [
-    center("CREDIMASTER"),
+    center((tenantName || "CrediMaster").toUpperCase()),
     center(statement.customer_name || ""),
     `Cedula: ${statement.customer_identification || "-"}`,
     `Credito #${statement.credit_code || statement.loan_id || "-"}`,
@@ -67,10 +69,23 @@ export function buildAccountStatementReceiptLines(statement) {
   return lines;
 }
 
-// Mismo contenido que el comprobante de PaymentsScreen.js.
-export function buildPaymentReceiptLines({ customerName, customerIdentification, loanLabel, date, collectorName, amount, breakdownRows, newBalance }) {
+// Mismo contenido que el comprobante de PaymentsScreen.js. `tenantName` ver
+// comentario de buildAccountStatementReceiptLines arriba.
+export function buildPaymentReceiptLines({
+  tenantName,
+  customerName,
+  customerIdentification,
+  loanLabel,
+  date,
+  collectorName,
+  amount,
+  breakdownRows,
+  principalBalanceBefore,
+  principalBalanceAfter,
+  newBalance,
+}) {
   const lines = [
-    center("CREDIMASTER"),
+    center((tenantName || "CrediMaster").toUpperCase()),
     center("COMPROBANTE DE PAGO"),
     divider(),
     customerName || "",
@@ -82,9 +97,14 @@ export function buildPaymentReceiptLines({ customerName, customerIdentification,
   lines.push(divider());
   lines.push(twoCol("Monto pagado", money(amount)));
   (breakdownRows || []).forEach((r) => lines.push(twoCol(r.label, money(r.value))));
+  if (principalBalanceBefore != null) {
+    lines.push(divider());
+    lines.push(twoCol("Saldo capital anterior", money(principalBalanceBefore)));
+    lines.push(twoCol("Saldo capital nuevo", money(principalBalanceAfter)));
+  }
   if (newBalance != null) {
     lines.push(divider());
-    lines.push(twoCol("Nuevo saldo", money(newBalance)));
+    lines.push(twoCol("Nuevo saldo total", money(newBalance)));
   }
   return lines;
 }

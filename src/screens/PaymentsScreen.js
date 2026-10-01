@@ -340,6 +340,7 @@ export default function PaymentsScreen({ route }) {
   const onPrintReceipt = () => {
     printReceipt(
       buildPaymentReceiptLines({
+        tenantName: session?.tenant?.commercial_name || session?.tenant?.legal_name,
         customerName: customer?.customer_name,
         customerIdentification: customer?.identification,
         loanLabel: loan?.credit_code || loan?.id || loan?.loan_id,
@@ -347,6 +348,8 @@ export default function PaymentsScreen({ route }) {
         collectorName: session?.user?.full_name || session?.user?.user_name,
         amount: toNumber(amount),
         breakdownRows: receiptRows,
+        principalBalanceBefore: result?.principal_balance_before,
+        principalBalanceAfter: result?.principal_balance_after,
         newBalance: result?.loan?.current_balance,
       }),
     );
@@ -614,7 +617,8 @@ export default function PaymentsScreen({ route }) {
             <ViewShot ref={receiptShotRef} options={{ format: "png", quality: 0.95 }} style={{ gap: SPACING.md, backgroundColor: COLORS.bg }}>
               <View style={styles.card}>
                 <Text style={{ fontWeight: "800", color: COLORS.primary, fontSize: 12, letterSpacing: 1 }}>
-                  CREDIMASTER — {result?.pendingOffline ? "COMPROBANTE (PENDIENTE DE SINCRONIZAR)" : "COMPROBANTE DE PAGO"}
+                  {(session?.tenant?.commercial_name || session?.tenant?.legal_name || "CrediMaster").toUpperCase()}
+                  {" — "}{result?.pendingOffline ? "COMPROBANTE (PENDIENTE DE SINCRONIZAR)" : "COMPROBANTE DE PAGO"}
                 </Text>
                 <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text, marginTop: 2 }}>
                   {customer?.customer_name}
@@ -645,11 +649,24 @@ export default function PaymentsScreen({ route }) {
                     ))}
                   </>
                 )}
+                {result?.principal_balance_before != null && (
+                  <>
+                    <Divider style={{ marginVertical: SPACING.xs }} />
+                    <View style={styles.breakdownRow}>
+                      <Text style={{ color: COLORS.muted }}>Saldo capital anterior</Text>
+                      <Text style={{ color: COLORS.text, fontWeight: "600" }}>{money(result.principal_balance_before)}</Text>
+                    </View>
+                    <View style={styles.breakdownRow}>
+                      <Text style={{ color: COLORS.muted }}>Saldo capital nuevo</Text>
+                      <Text style={{ color: COLORS.text, fontWeight: "600" }}>{money(result.principal_balance_after)}</Text>
+                    </View>
+                  </>
+                )}
                 {result?.loan?.current_balance != null && (
                   <>
                     <Divider style={{ marginVertical: SPACING.xs }} />
                     <View style={styles.breakdownRow}>
-                      <Text style={{ color: COLORS.muted }}>Nuevo saldo</Text>
+                      <Text style={{ color: COLORS.muted }}>Nuevo saldo total</Text>
                       <Text style={{ color: COLORS.text, fontWeight: "700" }}>{money(result.loan.current_balance)}</Text>
                     </View>
                   </>
