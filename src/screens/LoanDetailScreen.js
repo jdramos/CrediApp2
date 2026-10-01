@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useState } from "react";
 import { View, StyleSheet, FlatList } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Text, ActivityIndicator, HelperText, Chip, Divider, IconButton } from "react-native-paper";
+import { Text, ActivityIndicator, HelperText, Chip, Divider, IconButton, Button } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
@@ -136,6 +136,15 @@ export default function LoanDetailScreen({ route }) {
         {!!loan?.created_by_name && (
           <Text style={[styles.sub, { marginTop: SPACING.xs }]}>Solicitado por {loan.created_by_name}</Text>
         )}
+        <Button
+          mode="contained"
+          icon="file-document-outline"
+          onPress={() => navigation.navigate("Pagos", { screen: "AccountStatement", params: { loanId } })}
+          style={{ marginTop: SPACING.md, borderRadius: RADIUS.md, backgroundColor: "rgba(255,255,255,0.18)", alignSelf: "flex-start" }}
+          labelStyle={{ color: COLORS.onGradient, fontWeight: "700" }}
+        >
+          Ver estado de cuenta
+        </Button>
       </LinearGradient>
 
       <HelperText type="error" visible={!!error} style={{ marginHorizontal: SPACING.lg }}>{error}</HelperText>

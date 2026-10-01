@@ -9,6 +9,7 @@ import { SessionContext } from "../auth/SessionContext";
 import { getAccountStatement } from "../api/loanApi";
 import { money } from "../utils/format";
 import { todayISO } from "../utils/date";
+import { printReceipt, buildAccountStatementReceiptLines } from "../utils/printer";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -86,6 +87,10 @@ export default function AccountStatementScreen({ route }) {
     } finally {
       setSharing(false);
     }
+  };
+
+  const onPrint = () => {
+    printReceipt(buildAccountStatementReceiptLines(statement));
   };
 
   const goToPayment = () => {
@@ -206,6 +211,30 @@ export default function AccountStatementScreen({ route }) {
         </ViewShot>
 
         <HelperText type="error" visible={!!error}>{error}</HelperText>
+
+        <Button
+          mode="outlined"
+          icon="share-variant"
+          onPress={onShare}
+          loading={sharing}
+          disabled={sharing}
+          style={{ borderRadius: RADIUS.md }}
+          contentStyle={{ height: 46 }}
+          labelStyle={{ fontWeight: "700" }}
+        >
+          Compartir (WhatsApp, correo, etc.)
+        </Button>
+
+        <Button
+          mode="outlined"
+          icon="printer-outline"
+          onPress={onPrint}
+          style={{ borderRadius: RADIUS.md }}
+          contentStyle={{ height: 46 }}
+          labelStyle={{ fontWeight: "700" }}
+        >
+          Imprimir (impresora Bluetooth)
+        </Button>
 
         <Button
           mode="contained"

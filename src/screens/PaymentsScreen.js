@@ -30,6 +30,7 @@ import BusinessDayBanner from "../components/BusinessDayBanner";
 import { confirmAction } from "../utils/confirm";
 import { money, toNumber } from "../utils/format";
 import { todayISO } from "../utils/date";
+import { printReceipt, buildPaymentReceiptLines } from "../utils/printer";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -334,6 +335,21 @@ export default function PaymentsScreen({ route }) {
     } finally {
       setSharing(false);
     }
+  };
+
+  const onPrintReceipt = () => {
+    printReceipt(
+      buildPaymentReceiptLines({
+        customerName: customer?.customer_name,
+        customerIdentification: customer?.identification,
+        loanLabel: loan?.credit_code || loan?.id || loan?.loan_id,
+        date,
+        collectorName: session?.user?.full_name || session?.user?.user_name,
+        amount: toNumber(amount),
+        breakdownRows: receiptRows,
+        newBalance: result?.loan?.current_balance,
+      }),
+    );
   };
 
   const onConfirm = () => {
@@ -652,7 +668,17 @@ export default function PaymentsScreen({ route }) {
               style={{ borderRadius: RADIUS.md }}
               contentStyle={{ height: 46 }}
             >
-              Compartir comprobante
+              Compartir comprobante (WhatsApp, correo, etc.)
+            </Button>
+
+            <Button
+              mode="outlined"
+              icon="printer-outline"
+              onPress={onPrintReceipt}
+              style={{ borderRadius: RADIUS.md }}
+              contentStyle={{ height: 46 }}
+            >
+              Imprimir (impresora Bluetooth)
             </Button>
 
             <Button mode="contained" onPress={reset} style={{ borderRadius: RADIUS.md }} contentStyle={{ height: 46 }}>
