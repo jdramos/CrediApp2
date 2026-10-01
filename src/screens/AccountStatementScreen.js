@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet, ScrollView, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, Card, Button, ActivityIndicator, HelperText, Chip, IconButton, Divider } from "react-native-paper";
 import { useNavigation } from "@react-navigation/native";
@@ -7,6 +7,7 @@ import ViewShot, { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import { SessionContext } from "../auth/SessionContext";
 import { getAccountStatement } from "../api/loanApi";
+import { useTenantLogo } from "../hooks/useTenantLogo";
 import { money } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { printReceipt, buildAccountStatementReceiptLines, summarizeMovements } from "../utils/printer";
@@ -35,6 +36,7 @@ const styles = StyleSheet.create({
     ...SHADOW.card,
   },
   brand: { fontWeight: "800", color: COLORS.primary, fontSize: 12, letterSpacing: 1 },
+  logo: { width: 120, height: 40, alignSelf: "flex-start" },
   name: { fontWeight: "800", color: COLORS.text, marginTop: 2 },
   muted: { color: COLORS.muted, marginTop: 2 },
   balanceRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6 },
@@ -47,6 +49,7 @@ export default function AccountStatementScreen({ route }) {
   const navigation = useNavigation();
   const { session } = useContext(SessionContext);
   const shotRef = useRef(null);
+  const logoUrl = useTenantLogo(session?.token);
 
   const [statement, setStatement] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -149,9 +152,13 @@ export default function AccountStatementScreen({ route }) {
       <ScrollView contentContainerStyle={styles.content}>
         <ViewShot ref={shotRef} options={{ format: "png", quality: 0.95 }} style={styles.shot}>
           <View style={styles.card}>
-            <Text style={styles.brand}>
-              {(session?.tenant?.commercial_name || session?.tenant?.legal_name || "CrediMaster").toUpperCase()}
-            </Text>
+            {logoUrl ? (
+              <Image source={{ uri: logoUrl }} style={styles.logo} resizeMode="contain" />
+            ) : (
+              <Text style={styles.brand}>
+                {(session?.tenant?.commercial_name || session?.tenant?.legal_name || "CrediMaster").toUpperCase()}
+              </Text>
+            )}
             <Text variant="titleLarge" style={styles.name}>{statement.customer_name}</Text>
             <Text style={styles.muted}>Cédula: {statement.customer_identification}</Text>
             <Text style={styles.muted}>Crédito #{statement.credit_code || statement.loan_id}</Text>

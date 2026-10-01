@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { View, StyleSheet, FlatList, ScrollView } from "react-native";
+import { View, StyleSheet, FlatList, ScrollView, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Text,
@@ -26,6 +26,7 @@ import { isNetworkError } from "../api/credimasterClient";
 import { enqueue } from "../offline/queue";
 import { useSync } from "../offline/SyncProvider";
 import { useBusinessDayStatus } from "../hooks/useBusinessDayStatus";
+import { useTenantLogo } from "../hooks/useTenantLogo";
 import BusinessDayBanner from "../components/BusinessDayBanner";
 import { confirmAction } from "../utils/confirm";
 import { money, toNumber } from "../utils/format";
@@ -128,6 +129,7 @@ export default function PaymentsScreen({ route }) {
   const receiptShotRef = useRef(null);
 
   const businessDayStatus = useBusinessDayStatus(session.token, loan?.branch_id);
+  const logoUrl = useTenantLogo(session.token);
 
   // Precarga el monto con la próxima cuota real (next_installment_amount,
   // de LoanController.js::getOne) para que el cobrador no tenga que
@@ -616,9 +618,12 @@ export default function PaymentsScreen({ route }) {
 
             <ViewShot ref={receiptShotRef} options={{ format: "png", quality: 0.95 }} style={{ gap: SPACING.md, backgroundColor: COLORS.bg }}>
               <View style={styles.card}>
+                {!!logoUrl && (
+                  <Image source={{ uri: logoUrl }} style={{ width: 120, height: 40, alignSelf: "flex-start", marginBottom: SPACING.xs }} resizeMode="contain" />
+                )}
                 <Text style={{ fontWeight: "800", color: COLORS.primary, fontSize: 12, letterSpacing: 1 }}>
-                  {(session?.tenant?.commercial_name || session?.tenant?.legal_name || "CrediMaster").toUpperCase()}
-                  {" — "}{result?.pendingOffline ? "COMPROBANTE (PENDIENTE DE SINCRONIZAR)" : "COMPROBANTE DE PAGO"}
+                  {logoUrl ? "" : `${(session?.tenant?.commercial_name || session?.tenant?.legal_name || "CrediMaster").toUpperCase()} — `}
+                  {result?.pendingOffline ? "COMPROBANTE (PENDIENTE DE SINCRONIZAR)" : "COMPROBANTE DE PAGO"}
                 </Text>
                 <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text, marginTop: 2 }}>
                   {customer?.customer_name}
