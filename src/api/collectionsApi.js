@@ -18,7 +18,11 @@ export const getAssignedLoans = (token, params = {}) => {
 // real de la visita cuando se encola sin conexión y se sincroniza horas
 // después — ver ClientPortfolioScreen.js::markVisited y
 // offline/syncManager.js.
-export const logVisit = (token, { loan_id, notes, action_date } = {}) =>
+// `visit_lat`/`visit_lng` son opcionales (si el cobrador negó el permiso de
+// ubicación, el backend igual registra la visita sin coordenadas) — el
+// backend las compara contra la casa/negocio guardados del cliente para
+// poder verificar si realmente estuvo ahí.
+export const logVisit = (token, { loan_id, notes, action_date, visit_lat, visit_lng } = {}) =>
   credimasterPost(
     "/api/collections/actions",
     {
@@ -27,6 +31,8 @@ export const logVisit = (token, { loan_id, notes, action_date } = {}) =>
       action_date: action_date || new Date().toISOString().slice(0, 10),
       stage: "PREVENTIVE",
       notes: notes || undefined,
+      visit_lat,
+      visit_lng,
     },
     token,
   );

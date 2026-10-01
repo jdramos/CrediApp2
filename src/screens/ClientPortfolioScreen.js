@@ -3,6 +3,7 @@ import { View, StyleSheet, FlatList, Linking, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Card, Chip, Button, ActivityIndicator, HelperText, IconButton } from "react-native-paper";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import * as Location from "expo-location";
 import { SessionContext } from "../auth/SessionContext";
 import { getAssignedLoans, logVisit } from "../api/collectionsApi";
 import { isNetworkError } from "../api/credimasterClient";
@@ -106,9 +107,35 @@ export default function ClientPortfolioScreen() {
         // señal, la fecha debe ser la de la visita real, no la del momento
         // en que se sincronice horas después.
         const actionDate = new Date().toISOString().slice(0, 10);
+
+        // La ubicación es best-effort: si el cobrador niega el permiso, el
+        // GPS está apagado, o tarda demasiado, la visita se registra igual
+        // sin coordenadas -- el backend la compara contra la casa/negocio
+        // guardados del cliente para verificar que realmente estuvo ahí,
+        // pero esa verificación no puede bloquear el registro en sí.
+        let visitLat = null;
+        let visitLng = null;
+        try {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (status === "granted") {
+            const position = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            });
+            visitLat = position.coords.latitude;
+            visitLng = position.coords.longitude;
+          }
+        } catch {
+          // sin ubicación, se sigue igual
+        }
+
         try {
           setVisitingId(item.loan_id);
-          await logVisit(session.token, { loan_id: item.loan_id, action_date: actionDate });
+          await logVisit(session.token, {
+            loan_id: item.loan_id,
+            action_date: actionDate,
+            visit_lat: visitLat,
+            visit_lng: visitLng,
+          });
           setVisitedIds((prev) => new Set(prev).add(item.loan_id));
         } catch (e) {
           if (isNetworkError(e)) {
@@ -116,7 +143,7 @@ export default function ClientPortfolioScreen() {
               await enqueue({
                 type: "VISIT",
                 label: `Visita — ${item.customer_name || "cliente"}`,
-                payload: { loan_id: item.loan_id, action_date: actionDate },
+                payload: { loan_id: item.loan_id, action_date: actionDate, visit_lat: visitLat, visit_lng: visitLng },
               });
               refreshPendingCount();
               setVisitedIds((prev) => new Set(prev).add(item.loan_id));
