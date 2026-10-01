@@ -1,18 +1,68 @@
 import React, { useCallback, useContext, useMemo, useState } from "react";
-import { View, StyleSheet, FlatList, Linking, Alert } from "react-native";
+import { View, StyleSheet, FlatList, Linking, Alert, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Text, TextInput, Card, Chip, Button, ActivityIndicator, HelperText, IconButton } from "react-native-paper";
+import {
+  Text,
+  TextInput,
+  Card,
+  Chip,
+  Button,
+  ActivityIndicator,
+  HelperText,
+  IconButton,
+  Portal,
+  Modal,
+  Divider,
+} from "react-native-paper";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Location from "expo-location";
 import { SessionContext } from "../auth/SessionContext";
 import { getAssignedLoans, logVisit } from "../api/collectionsApi";
 import { isNetworkError } from "../api/credimasterClient";
 import { enqueue } from "../offline/queue";
 import { useSync } from "../offline/SyncProvider";
-import { confirmAction } from "../utils/confirm";
-import { money } from "../utils/format";
+import { money, toNumber } from "../utils/format";
+import { todayISO } from "../utils/date";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+
+// Mismas opciones y mismos códigos que CollectionsWorklist.jsx (web), para
+// que una gestión registrada desde el celular se vea igual en la bitácora
+// de los dos lados.
+const ACTION_TYPES = [
+  ["CALL", "Llamada"],
+  ["VISIT", "Visita"],
+  ["WHATSAPP", "WhatsApp"],
+  ["MESSAGE", "Mensaje/SMS"],
+  ["EMAIL", "Correo"],
+  ["LETTER", "Carta/Notificación"],
+  ["OTHER", "Otro"],
+];
+const RESULTS = [
+  ["CONTACTED", "Contactado"],
+  ["PROMISE", "Promesa de pago"],
+  ["PARTIAL_PAYMENT", "Pago parcial"],
+  ["NO_ANSWER", "No contesta"],
+  ["NOT_LOCATED", "No localizado"],
+  ["REFUSED", "Se niega a pagar"],
+  ["OTHER", "Otro"],
+];
+const STAGES = [
+  ["PREVENTIVE", "Preventiva"],
+  ["ADMINISTRATIVE", "Administrativa"],
+  ["LEGAL", "Judicial"],
+];
+
+const emptyGestionForm = {
+  action_type: "VISIT",
+  action_date: todayISO(),
+  result: "CONTACTED",
+  stage: "PREVENTIVE",
+  notes: "",
+  promised_amount: "",
+  promised_date: "",
+};
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -51,8 +101,14 @@ export default function ClientPortfolioScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [visitedIds, setVisitedIds] = useState(new Set());
-  const [visitingId, setVisitingId] = useState(null);
+  const [managedIds, setManagedIds] = useState(new Set());
+
+  const [gestionItem, setGestionItem] = useState(null);
+  const [gestionForm, setGestionForm] = useState(emptyGestionForm);
+  const [gestionError, setGestionError] = useState("");
+  const [savingGestion, setSavingGestion] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showPromiseDatePicker, setShowPromiseDatePicker] = useState(false);
 
   const canLogVisit = session?.permissions?.includes("cobranza.gestionar");
 
@@ -70,7 +126,7 @@ export default function ClientPortfolioScreen() {
     }
   }, [session.token, search]);
 
-  useFocusEffect(useCallback(() => { setVisitedIds(new Set()); load(); }, [load]));
+  useFocusEffect(useCallback(() => { setManagedIds(new Set()); load(); }, [load]));
 
   const overdueSummary = useMemo(() => {
     const overdue = loans.filter((l) => Number(l.days_overdue) > 0);
@@ -98,67 +154,82 @@ export default function ClientPortfolioScreen() {
     Linking.openURL(`tel:${phone}`).catch(() => {});
   };
 
-  const markVisited = (item) => {
-    confirmAction(
-      "Marcar visitado",
-      `¿Registrar que visitaste hoy a ${item.customer_name || "este cliente"}?`,
-      async () => {
-        // Fijado ANTES del intento de red: si hay que encolar por falta de
-        // señal, la fecha debe ser la de la visita real, no la del momento
-        // en que se sincronice horas después.
-        const actionDate = new Date().toISOString().slice(0, 10);
+  const openGestion = (item) => {
+    setGestionItem(item);
+    setGestionForm(emptyGestionForm);
+    setGestionError("");
+  };
 
-        // La ubicación es best-effort: si el cobrador niega el permiso, el
-        // GPS está apagado, o tarda demasiado, la visita se registra igual
-        // sin coordenadas -- el backend la compara contra la casa/negocio
-        // guardados del cliente para verificar que realmente estuvo ahí,
-        // pero esa verificación no puede bloquear el registro en sí.
-        let visitLat = null;
-        let visitLng = null;
-        try {
-          const { status } = await Location.requestForegroundPermissionsAsync();
-          if (status === "granted") {
-            const position = await Location.getCurrentPositionAsync({
-              accuracy: Location.Accuracy.Balanced,
-            });
-            visitLat = position.coords.latitude;
-            visitLng = position.coords.longitude;
-          }
-        } catch {
-          // sin ubicación, se sigue igual
-        }
+  const closeGestion = () => {
+    if (savingGestion) return;
+    setGestionItem(null);
+  };
 
+  const setG = (field, value) => setGestionForm((prev) => ({ ...prev, [field]: value }));
+
+  const saveGestion = async () => {
+    if (!gestionItem) return;
+    setGestionError("");
+
+    // La ubicación es best-effort: si el cobrador niega el permiso, el GPS
+    // está apagado, o tarda demasiado, la gestión se registra igual sin
+    // coordenadas -- el backend las compara contra la casa/negocio
+    // guardados del cliente para verificar que realmente estuvo ahí, pero
+    // esa verificación no puede bloquear el registro en sí.
+    let visitLat = null;
+    let visitLng = null;
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === "granted") {
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        visitLat = position.coords.latitude;
+        visitLng = position.coords.longitude;
+      }
+    } catch {
+      // sin ubicación, se sigue igual
+    }
+
+    const payload = {
+      loan_id: gestionItem.loan_id,
+      action_type: gestionForm.action_type,
+      action_date: gestionForm.action_date,
+      result: gestionForm.result,
+      stage: gestionForm.stage,
+      notes: gestionForm.notes || undefined,
+      promised_amount: gestionForm.promised_amount ? toNumber(gestionForm.promised_amount) : undefined,
+      promised_date: gestionForm.promised_date || undefined,
+      visit_lat: visitLat,
+      visit_lng: visitLng,
+    };
+
+    try {
+      setSavingGestion(true);
+      await logVisit(session.token, payload);
+      setManagedIds((prev) => new Set(prev).add(gestionItem.loan_id));
+      setGestionItem(null);
+    } catch (e) {
+      if (isNetworkError(e)) {
         try {
-          setVisitingId(item.loan_id);
-          await logVisit(session.token, {
-            loan_id: item.loan_id,
-            action_date: actionDate,
-            visit_lat: visitLat,
-            visit_lng: visitLng,
+          await enqueue({
+            type: "VISIT",
+            label: `${ACTION_TYPES.find(([k]) => k === payload.action_type)?.[1] || "Gestión"} — ${gestionItem.customer_name || "cliente"}`,
+            payload,
           });
-          setVisitedIds((prev) => new Set(prev).add(item.loan_id));
-        } catch (e) {
-          if (isNetworkError(e)) {
-            try {
-              await enqueue({
-                type: "VISIT",
-                label: `Visita — ${item.customer_name || "cliente"}`,
-                payload: { loan_id: item.loan_id, action_date: actionDate, visit_lat: visitLat, visit_lng: visitLng },
-              });
-              refreshPendingCount();
-              setVisitedIds((prev) => new Set(prev).add(item.loan_id));
-              Alert.alert("Sin conexión", "La visita se guardó en el equipo y se registrará sola cuando vuelva la señal.");
-            } catch (queueErr) {
-              setError(queueErr?.message ?? "No se pudo guardar la visita para registrarla después");
-            }
-            return;
-          }
-          setError(e?.message ?? "No se pudo registrar la visita");
-        } finally {
-          setVisitingId(null);
+          refreshPendingCount();
+          setManagedIds((prev) => new Set(prev).add(gestionItem.loan_id));
+          setGestionItem(null);
+          Alert.alert("Sin conexión", "La gestión se guardó en el equipo y se registrará sola cuando vuelva la señal.");
+        } catch (queueErr) {
+          setGestionError(queueErr?.message ?? "No se pudo guardar la gestión para registrarla después");
         }
-      },
-    );
+        return;
+      }
+      setGestionError(e?.message ?? "No se pudo registrar la gestión");
+    } finally {
+      setSavingGestion(false);
+    }
   };
 
   return (
@@ -202,7 +273,7 @@ export default function ClientPortfolioScreen() {
           renderItem={({ item }) => {
             const inArrears = item.days_overdue != null && Number(item.days_overdue) > 0;
             const phone = item.cellphone || item.telephone;
-            const visited = visitedIds.has(item.loan_id);
+            const managed = managedIds.has(item.loan_id);
             return (
               <Card style={styles.row} onPress={() => navigation.navigate("AccountStatement", { loanId: item.loan_id })}>
                 <View style={styles.rowTop}>
@@ -252,15 +323,13 @@ export default function ClientPortfolioScreen() {
                   {canLogVisit && (
                     <Button
                       compact
-                      mode={visited ? "contained" : "outlined"}
-                      icon={visited ? "check-circle" : "map-marker-check-outline"}
-                      onPress={() => markVisited(item)}
-                      loading={visitingId === item.loan_id}
-                      disabled={visited || visitingId === item.loan_id}
+                      mode={managed ? "contained" : "outlined"}
+                      icon={managed ? "check-circle" : "clipboard-text-outline"}
+                      onPress={() => openGestion(item)}
                       style={styles.actionBtn}
                       labelStyle={styles.actionBtnLabel}
                     >
-                      {visited ? "Visitado" : "Visitar"}
+                      {managed ? "Gestionado" : "Gestión"}
                     </Button>
                   )}
                 </View>
@@ -269,6 +338,151 @@ export default function ClientPortfolioScreen() {
           }}
         />
       )}
+
+      <Portal>
+        <Modal
+          visible={!!gestionItem}
+          onDismiss={closeGestion}
+          contentContainerStyle={{
+            backgroundColor: COLORS.card,
+            margin: SPACING.lg,
+            borderRadius: RADIUS.lg,
+            padding: SPACING.md,
+            maxHeight: "85%",
+          }}
+        >
+          <ScrollView keyboardShouldPersistTaps="handled">
+            <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text }}>
+              Gestión de cobro
+            </Text>
+            <Text style={{ color: COLORS.muted, marginBottom: SPACING.md }}>
+              {gestionItem?.customer_name || "Cliente"} — Crédito #{gestionItem?.credit_code || gestionItem?.loan_id}
+            </Text>
+
+            <Text style={{ fontWeight: "700", color: COLORS.text, marginBottom: SPACING.xs }}>Tipo</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginBottom: SPACING.md }}>
+              {ACTION_TYPES.map(([k, label]) => (
+                <Chip
+                  key={k}
+                  selected={gestionForm.action_type === k}
+                  onPress={() => setG("action_type", k)}
+                  style={{ backgroundColor: gestionForm.action_type === k ? COLORS.primarySoft : COLORS.bg }}
+                >
+                  {label}
+                </Chip>
+              ))}
+            </View>
+
+            <Button
+              mode="outlined"
+              onPress={() => setShowDatePicker(true)}
+              icon="calendar"
+              style={{ marginBottom: SPACING.md, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+            >
+              {gestionForm.action_date}
+            </Button>
+            {showDatePicker && (
+              <DateTimePicker
+                value={new Date(gestionForm.action_date)}
+                mode="date"
+                display="default"
+                onChange={(_, selected) => {
+                  setShowDatePicker(false);
+                  if (selected) setG("action_date", selected.toISOString().slice(0, 10));
+                }}
+              />
+            )}
+
+            <Text style={{ fontWeight: "700", color: COLORS.text, marginBottom: SPACING.xs }}>Resultado</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginBottom: SPACING.md }}>
+              {RESULTS.map(([k, label]) => (
+                <Chip
+                  key={k}
+                  selected={gestionForm.result === k}
+                  onPress={() => setG("result", k)}
+                  style={{ backgroundColor: gestionForm.result === k ? COLORS.primarySoft : COLORS.bg }}
+                >
+                  {label}
+                </Chip>
+              ))}
+            </View>
+
+            <Text style={{ fontWeight: "700", color: COLORS.text, marginBottom: SPACING.xs }}>Etapa</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginBottom: SPACING.md }}>
+              {STAGES.map(([k, label]) => (
+                <Chip
+                  key={k}
+                  selected={gestionForm.stage === k}
+                  onPress={() => setG("stage", k)}
+                  style={{ backgroundColor: gestionForm.stage === k ? COLORS.primarySoft : COLORS.bg }}
+                >
+                  {label}
+                </Chip>
+              ))}
+            </View>
+
+            <TextInput
+              mode="outlined"
+              label="Notas"
+              value={gestionForm.notes}
+              onChangeText={(t) => setG("notes", t)}
+              multiline
+              numberOfLines={3}
+              style={{ backgroundColor: COLORS.card, marginBottom: SPACING.md }}
+              outlineStyle={{ borderRadius: RADIUS.md }}
+            />
+
+            <Divider style={{ marginBottom: SPACING.md }} />
+
+            <Text style={{ fontWeight: "700", color: COLORS.text, marginBottom: SPACING.xs }}>
+              Promesa de pago (opcional)
+            </Text>
+            <TextInput
+              mode="outlined"
+              label="Monto prometido"
+              value={gestionForm.promised_amount}
+              onChangeText={(t) => setG("promised_amount", t)}
+              keyboardType="decimal-pad"
+              style={{ backgroundColor: COLORS.card, marginBottom: SPACING.sm }}
+              outlineStyle={{ borderRadius: RADIUS.md }}
+              left={<TextInput.Icon icon="cash" />}
+            />
+            <Button
+              mode="outlined"
+              onPress={() => setShowPromiseDatePicker(true)}
+              icon="calendar"
+              style={{ marginBottom: SPACING.md, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+            >
+              {gestionForm.promised_date || "Fecha de promesa"}
+            </Button>
+            {showPromiseDatePicker && (
+              <DateTimePicker
+                value={gestionForm.promised_date ? new Date(gestionForm.promised_date) : new Date()}
+                mode="date"
+                display="default"
+                onChange={(_, selected) => {
+                  setShowPromiseDatePicker(false);
+                  if (selected) setG("promised_date", selected.toISOString().slice(0, 10));
+                }}
+              />
+            )}
+
+            <HelperText type="error" visible={!!gestionError}>{gestionError}</HelperText>
+
+            <Button
+              mode="contained"
+              onPress={saveGestion}
+              loading={savingGestion}
+              disabled={savingGestion}
+              style={{ borderRadius: RADIUS.md }}
+              contentStyle={{ height: 46 }}
+              labelStyle={{ fontWeight: "700" }}
+            >
+              Registrar gestión
+            </Button>
+          </ScrollView>
+        </Modal>
+      </Portal>
     </SafeAreaView>
   );
 }

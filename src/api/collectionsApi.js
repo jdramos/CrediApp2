@@ -11,26 +11,33 @@ export const getAssignedLoans = (token, params = {}) => {
 };
 
 // Registra una gestión de cobranza (bitácora real, tabla
-// collection_actions) — permiso cobranza.gestionar. action_type "VISIT"
-// es el mismo valor que usa la bitácora web (CollectionsWorklist.jsx)
-// para que se vea consistente desde ambos lados.
+// collection_actions) — permiso cobranza.gestionar. Mismos campos y mismos
+// códigos (action_type/result/stage) que la bitácora web
+// (CollectionsWorklist.jsx), para que una gestión registrada desde el
+// celular se vea igual en los dos lados.
 // `action_date` es opcional (default: hoy) para poder fijarlo al momento
-// real de la visita cuando se encola sin conexión y se sincroniza horas
-// después — ver ClientPortfolioScreen.js::markVisited y
+// real de la gestión cuando se encola sin conexión y se sincroniza horas
+// después — ver ClientPortfolioScreen.js::saveGestion y
 // offline/syncManager.js.
 // `visit_lat`/`visit_lng` son opcionales (si el cobrador negó el permiso de
-// ubicación, el backend igual registra la visita sin coordenadas) — el
+// ubicación, el backend igual registra la gestión sin coordenadas) — el
 // backend las compara contra la casa/negocio guardados del cliente para
 // poder verificar si realmente estuvo ahí.
-export const logVisit = (token, { loan_id, notes, action_date, visit_lat, visit_lng } = {}) =>
+export const logVisit = (
+  token,
+  { loan_id, action_type, action_date, result, stage, notes, promised_amount, promised_date, visit_lat, visit_lng } = {},
+) =>
   credimasterPost(
     "/api/collections/actions",
     {
       loan_id,
-      action_type: "VISIT",
+      action_type: action_type || "VISIT",
       action_date: action_date || new Date().toISOString().slice(0, 10),
-      stage: "PREVENTIVE",
+      result: result || undefined,
+      stage: stage || "PREVENTIVE",
       notes: notes || undefined,
+      promised_amount: promised_amount || undefined,
+      promised_date: promised_date || undefined,
       visit_lat,
       visit_lng,
     },
