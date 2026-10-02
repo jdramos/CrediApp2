@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useMemo, useState } from "react";
-import { View, StyleSheet, ScrollView, RefreshControl } from "react-native";
+import { View, StyleSheet, ScrollView, RefreshControl, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, IconButton, Chip, ActivityIndicator, ProgressBar } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
@@ -214,12 +214,24 @@ export default function TeamProductivityScreen() {
         )}
 
         {ranked.map((r, i) => (
-          <View key={r.collector_id} style={styles.card}>
+          <Pressable
+            key={r.collector_id}
+            style={styles.card}
+            onPress={() =>
+              navigation.navigate("CollectorDetail", {
+                collectorId: r.collector_id,
+                collectorName: r.collector_name,
+                branchName: r.branch_name,
+                period,
+              })
+            }
+          >
             <View style={styles.cardTop}>
               <View style={styles.rank}>
                 <Text style={styles.rankText}>{i + 1}</Text>
               </View>
               <Text style={styles.name} numberOfLines={1}>{r.collector_name}</Text>
+              <IconButton icon="chevron-right" size={20} style={{ margin: 0 }} />
             </View>
             {!!r.branch_name && <Text style={styles.muted}>{r.branch_name}</Text>}
 
@@ -248,7 +260,8 @@ export default function TeamProductivityScreen() {
                 {r.visits.far} visita{r.visits.far === 1 ? "" : "s"} lejos del domicilio
               </Text>
             )}
-          </View>
+            <Text style={[styles.muted, { color: COLORS.primary, textAlign: "right" }]}>Ver detalle</Text>
+          </Pressable>
         ))}
       </ScrollView>
     </SafeAreaView>

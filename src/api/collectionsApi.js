@@ -54,6 +54,12 @@ export const getTeamProductivity = (token, { period, branch_id } = {}) => {
   return credimasterGet(`/api/collections/team-productivity${qs ? `?${qs}` : ""}`, token);
 };
 
+// Detalle de un cobrador (vista de supervisor): créditos en mora con su
+// categoría, visitas con verificación GPS y pagos del período — mismo
+// permiso y alcance de sucursales que getTeamProductivity.
+export const getTeamCollectorDetail = (token, collectorId, period) =>
+  credimasterGet(`/api/collections/team-productivity/${collectorId}${period ? `?period=${period}` : ""}`, token);
+
 // Cierre del día del cobrador (cobrado por forma de pago, efectivo a
 // entregar, custodia acumulada) — permiso pagos.ver. `date` YYYY-MM-DD,
 // opcional (default hoy).

@@ -8,6 +8,7 @@ import PendingSyncScreen from "../screens/PendingSyncScreen";
 import ProductivityScreen from "../screens/ProductivityScreen";
 import DayCloseScreen from "../screens/DayCloseScreen";
 import TeamProductivityScreen from "../screens/TeamProductivityScreen";
+import CollectorDetailScreen from "../screens/CollectorDetailScreen";
 import AppTabs from "./AppTabs";
 import { ActivityIndicator } from "react-native-paper";
 import { View } from "react-native";
@@ -47,6 +48,7 @@ export default function AppNavigator() {
             <Stack.Screen name="Productivity" component={ProductivityScreen} />
             <Stack.Screen name="DayClose" component={DayCloseScreen} />
             <Stack.Screen name="TeamProductivity" component={TeamProductivityScreen} />
+            <Stack.Screen name="CollectorDetail" component={CollectorDetailScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />
