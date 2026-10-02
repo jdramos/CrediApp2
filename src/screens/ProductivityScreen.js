@@ -252,7 +252,7 @@ export default function ProductivityScreen() {
                 <AgendaItem
                   key={`nofu-${r.loan_id}`}
                   title={r.customer_name || `Crédito #${r.credit_code}`}
-                  subtitle={`${r.days_overdue} días de mora · ${
+                  subtitle={`${r.classification ? `Cat. ${r.classification} · ` : ""}${r.days_overdue} días de mora · ${
                     r.last_action_date ? `última gestión ${shortDate(r.last_action_date)}` : "sin gestiones"
                   }`}
                   amount={r.overdue_amount}
@@ -300,13 +300,14 @@ export default function ProductivityScreen() {
             </View>
 
             <View style={styles.card}>
-              <Text variant="titleMedium" style={styles.cardTitle}>Antigüedad de la mora</Text>
+              <Text variant="titleMedium" style={styles.cardTitle}>Antigüedad de la mora (clasificación)</Text>
+              <Text style={styles.agendaSub}>Capital de los créditos en mora, por categoría de riesgo.</Text>
               {data.aging.map((a) => (
                 <Row
                   key={a.key}
-                  label={`${a.label} (${a.loans})`}
+                  label={`${a.label}${a.range_label ? ` · ${a.range_label}` : ""} (${a.loans})`}
                   value={money(a.principal)}
-                  color={a.loans > 0 && a.key === "90+" ? COLORS.danger : undefined}
+                  color={a.loans > 0 && (a.key === "D" || a.key === "E" || a.key === "90+") ? COLORS.danger : undefined}
                 />
               ))}
             </View>
