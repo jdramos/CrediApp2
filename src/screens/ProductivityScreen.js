@@ -91,7 +91,7 @@ function buildDaySummaryText({ tenantName, collectorName, data }) {
     `En mora: ${money(p.overdue_amount)} (${p.loans_overdue} de ${p.loans_count} créditos)`,
     `Cartera en riesgo: ${p.par_pct}%`,
     "",
-    `Cobrado en el mes: ${money(m.collected_amount)} de ${money(m.expected_amount)} esperados` +
+    `Cobrado en el mes: ${money(m.collected_amount)} de ${money(m.goal_amount)} de meta` +
       (m.effectiveness_pct != null ? ` (${m.effectiveness_pct}%)` : ""),
   ];
   const pending = data.agenda?.promises?.length || 0;
@@ -331,16 +331,30 @@ export default function ProductivityScreen() {
                 }
                 color={diffPct == null ? undefined : diffPct >= 0 ? COLORS.success : COLORS.danger}
               />
-              <Row label="Esperado (cuotas del mes)" value={money(m.expected_amount)} />
+              <Row label="Meta de cobro del mes" value={money(m.goal_amount)} />
               {effectiveness != null && (
                 <>
-                  <Row label="Efectividad de cobro" value={`${effectiveness}%`} />
+                  <Row label="Avance de la meta" value={`${effectiveness}%`} />
                   <ProgressBar
                     progress={Math.min(effectiveness, 100) / 100}
                     color={effectiveness >= 80 ? COLORS.success : effectiveness >= 50 ? COLORS.warning : COLORS.danger}
                     style={{ height: 8, borderRadius: 4 }}
                   />
                 </>
+              )}
+              {m.goal_remaining > 0 ? (
+                <>
+                  <Row label="Falta por cobrar" value={money(m.goal_remaining)} color={COLORS.danger} />
+                  <Row
+                    label={`Por día (${m.goal_days_left} días de cobro, lun a sáb)`}
+                    value={money(m.goal_per_day_needed)}
+                  />
+                </>
+              ) : (
+                <Row label="Meta" value="¡Cumplida!" color={COLORS.success} />
+              )}
+              {m.carried_overdue_amount > 0 && (
+                <Row label="Mora de meses anteriores (aparte de la meta)" value={money(m.carried_overdue_amount)} />
               )}
               <Row label="Pagos recibidos" value={String(m.payments_count)} />
               <Row label="Gestiones / visitas" value={`${m.actions} / ${m.visits}`} />
