@@ -111,7 +111,7 @@ export default function NewLoanRequestScreen() {
   // Catálogos
   const [branches, setBranches] = useState([]);
   const [branchId, setBranchId] = useState(null);
-  const businessDayStatus = useBusinessDayStatus(session.token, branchId);
+  const businessDayStatus = useBusinessDayStatus(session.token, branchId, session?.user?.branches);
   const [frecuencies, setFrecuencies] = useState([]);
   const [loanCatalogs, setLoanCatalogs] = useState({});
   const [promoters, setPromoters] = useState([]);

@@ -6,11 +6,19 @@ import { getBusinessDayStatus } from "../api/businessDayApi";
 // servidor) simplemente no se muestra el aviso -- el backend igual valida
 // al confirmar la operación real, esto es solo una mejora de UX para
 // avisar antes, no la fuente de verdad.
-export function useBusinessDayStatus(token, branchId) {
+//
+// Solo avisa por las sucursales ASIGNADAS al usuario (`assignedBranchIds`,
+// session.user.branches): un administrador puede operar sobre sucursales
+// ajenas (/api/branches/accessible le devuelve todas), pero el aviso es para
+// el día de SU sucursal -- igual que el aviso de la web (BusinessDayAlert) y
+// que useBusinessDayAlerts abajo. Si no se pasa la lista, no se filtra.
+export function useBusinessDayStatus(token, branchId, assignedBranchIds) {
   const [status, setStatus] = useState(null);
+  const isAssigned =
+    !Array.isArray(assignedBranchIds) || assignedBranchIds.map(Number).includes(Number(branchId));
 
   const load = useCallback(async () => {
-    if (!token || !branchId) {
+    if (!token || !branchId || !isAssigned) {
       setStatus(null);
       return;
     }
@@ -20,7 +28,7 @@ export function useBusinessDayStatus(token, branchId) {
     } catch {
       setStatus(null);
     }
-  }, [token, branchId]);
+  }, [token, branchId, isAssigned]);
 
   useEffect(() => {
     load();

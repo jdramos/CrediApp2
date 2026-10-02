@@ -128,7 +128,7 @@ export default function PaymentsScreen({ route }) {
   const [sharing, setSharing] = useState(false);
   const receiptShotRef = useRef(null);
 
-  const businessDayStatus = useBusinessDayStatus(session.token, loan?.branch_id);
+  const businessDayStatus = useBusinessDayStatus(session.token, loan?.branch_id, session?.user?.branches);
   const logoUrl = useTenantLogo(session.token);
 
   // Precarga el monto con la próxima cuota real (next_installment_amount,
