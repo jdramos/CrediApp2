@@ -1,5 +1,10 @@
-import { credimasterUpload } from "./credimasterClient";
+import { credimasterGet, credimasterUpload } from "./credimasterClient";
 import { buildImageFormData } from "../utils/imagePicker";
+
+// Foto y/o firma de un pago ya registrado, con URL temporal de descarga —
+// permiso pagos.ver.
+export const getPaymentEvidence = (token, paymentId) =>
+  credimasterGet(`/api/payments/${paymentId}/evidence`, token);
 
 // Evidencia de un cobro (foto del comprobante/cliente o firma del cliente) —
 // permiso pagos.insertar. Se identifica el pago por `payment_id` (pago ya

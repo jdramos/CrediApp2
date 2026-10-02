@@ -1,7 +1,8 @@
 import React, { useCallback, useContext, useRef, useState } from "react";
-import { View, StyleSheet, ScrollView, RefreshControl } from "react-native";
+import { View, StyleSheet, ScrollView, RefreshControl, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, IconButton, Button, ActivityIndicator } from "react-native-paper";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
@@ -11,6 +12,7 @@ import { getMyDayClose } from "../api/collectionsApi";
 import { useSync } from "../offline/SyncProvider";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import ShareCardHeader from "../components/ShareCardHeader";
+import PaymentEvidenceModal from "../components/PaymentEvidenceModal";
 import { money } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { COLORS, GRADIENTS } from "../theme/colors";
@@ -90,6 +92,7 @@ export default function DayCloseScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [sharing, setSharing] = useState(false);
+  const [evidenceFor, setEvidenceFor] = useState(null);
   const shotRef = useRef(null);
   const logoUrl = useTenantLogo(session?.token);
 
@@ -217,15 +220,21 @@ export default function DayCloseScreen() {
               <View style={styles.card}>
                 <Text variant="titleMedium" style={styles.cardTitle}>Pagos del día</Text>
                 {data.payments.map((p) => (
-                  <View key={p.id} style={styles.payRow}>
+                  <Pressable
+                    key={p.id}
+                    style={styles.payRow}
+                    onPress={p.has_photo || p.has_signature ? () => setEvidenceFor(p) : undefined}
+                  >
                     <View style={{ flex: 1 }}>
                       <Text style={styles.payName} numberOfLines={1}>{p.customer_name || `Crédito #${p.credit_code}`}</Text>
                       <Text style={styles.muted}>
                         {`Crédito #${p.credit_code} · ${p.forma_pago_name}${p.time ? ` · ${p.time}` : ""}`}
                       </Text>
                     </View>
+                    {p.has_photo && <MaterialCommunityIcons name="camera-outline" size={16} color={COLORS.primary} />}
+                    {p.has_signature && <MaterialCommunityIcons name="draw" size={16} color={COLORS.primary} />}
                     <Text style={styles.value}>{money(p.amount)}</Text>
-                  </View>
+                  </Pressable>
                 ))}
               </View>
             )}
@@ -244,6 +253,12 @@ export default function DayCloseScreen() {
           </>
         )}
       </ScrollView>
+
+      <PaymentEvidenceModal
+        paymentId={evidenceFor?.id}
+        subtitle={evidenceFor ? `${evidenceFor.customer_name || "Cliente"} — Crédito #${evidenceFor.credit_code}` : ""}
+        onDismiss={() => setEvidenceFor(null)}
+      />
     </SafeAreaView>
   );
 }
