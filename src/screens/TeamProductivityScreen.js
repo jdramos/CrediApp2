@@ -70,6 +70,24 @@ const styles = StyleSheet.create({
   empty: { textAlign: "center", color: COLORS.muted, marginTop: SPACING.xl, paddingHorizontal: SPACING.xl },
 });
 
+// Chip de selección con estado bien visible: el seleccionado va relleno en el
+// color primario con texto blanco y un check; los demás, solo con borde. (El
+// estilo "selected" por defecto de Paper apenas cambia el fondo y no se nota.)
+function SelectChip({ label, active, onPress }) {
+  return (
+    <Chip
+      mode={active ? "flat" : "outlined"}
+      icon={active ? "check" : undefined}
+      onPress={onPress}
+      style={{ backgroundColor: active ? COLORS.primary : COLORS.card, borderColor: active ? COLORS.primary : COLORS.border }}
+      textStyle={{ color: active ? COLORS.onGradient : COLORS.text, fontWeight: active ? "700" : "500" }}
+      theme={{ colors: { onSurfaceVariant: active ? COLORS.onGradient : COLORS.muted } }}
+    >
+      {label}
+    </Chip>
+  );
+}
+
 function Row({ label, value, color }) {
   return (
     <View style={styles.row}>
@@ -161,17 +179,13 @@ export default function TeamProductivityScreen() {
         <View style={styles.chipsRow}>
           <Text style={styles.chipsLabel}>Período</Text>
           {PERIODS.map(([k, label]) => (
-            <Chip key={k} selected={period === k} showSelectedCheck={false} onPress={() => setPeriod(k)}>
-              {label}
-            </Chip>
+            <SelectChip key={k} label={label} active={period === k} onPress={() => setPeriod(k)} />
           ))}
         </View>
         <View style={styles.chipsRow}>
           <Text style={styles.chipsLabel}>Ordenar por</Text>
           {SORTS.map(([k, label]) => (
-            <Chip key={k} selected={sort === k} showSelectedCheck={false} onPress={() => setSort(k)}>
-              {label}
-            </Chip>
+            <SelectChip key={k} label={label} active={sort === k} onPress={() => setSort(k)} />
           ))}
         </View>
 
