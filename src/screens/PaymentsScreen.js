@@ -28,6 +28,7 @@ import { enqueue } from "../offline/queue";
 import { persistLocalFile } from "../offline/filePersist";
 import { pickImage } from "../utils/imagePicker";
 import SignatureModal from "../components/SignatureModal";
+import AddressLines from "../components/AddressLines";
 import { useSync } from "../offline/SyncProvider";
 import { useBusinessDayStatus } from "../hooks/useBusinessDayStatus";
 import { useTenantLogo } from "../hooks/useTenantLogo";
@@ -497,6 +498,7 @@ export default function PaymentsScreen({ route }) {
                 <Card style={styles.row} onPress={() => pickCustomer(item)}>
                   <Text style={styles.name}>{item.customer_name}</Text>
                   <Text style={styles.muted}>Cédula: {item.identification}</Text>
+                  <AddressLines customer={item} />
                 </Card>
               )}
             />

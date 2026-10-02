@@ -26,6 +26,7 @@ import { money, toNumber } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { ACTION_TYPES, RESULTS, STAGES } from "../utils/collectionsCatalog";
 import { openDirections } from "../utils/maps";
+import AddressLines from "../components/AddressLines";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -264,6 +265,7 @@ export default function ClientPortfolioScreen() {
                   )}
                 </View>
                 <Text style={styles.muted}>Código: {item.customer_identification} · Crédito #{item.credit_code || item.loan_id}</Text>
+                <AddressLines customer={item} />
                 <View style={styles.balancesRow}>
                   <View>
                     <Text style={styles.balanceLabel}>Próxima cuota</Text>

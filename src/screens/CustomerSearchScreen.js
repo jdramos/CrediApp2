@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Card, ActivityIndicator, HelperText } from "react-native-paper";
 import { SessionContext } from "../auth/SessionContext";
 import { searchCustomers } from "../api/customerApi";
+import AddressLines from "../components/AddressLines";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -98,6 +99,7 @@ export default function CustomerSearchScreen({ navigation }) {
           >
             <Text style={styles.name}>{item.customer_name}</Text>
             <Text style={styles.id}>Cédula: {item.identification}</Text>
+            <AddressLines customer={item} />
           </Card>
         )}
       />
