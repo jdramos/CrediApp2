@@ -7,6 +7,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getMyProductivity } from "../api/collectionsApi";
 import { money } from "../utils/format";
+import { openDirections } from "../utils/maps";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -63,7 +64,7 @@ const WEEKDAY_SHORT = ["D", "L", "M", "M", "J", "V", "S"];
 const dayLetter = (iso) => WEEKDAY_SHORT[new Date(`${iso}T12:00:00`).getDay()];
 const shortDate = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "");
 
-function AgendaItem({ title, subtitle, amount, onPress }) {
+function AgendaItem({ title, subtitle, amount, onPress, onDirections }) {
   return (
     <Pressable onPress={onPress} style={styles.agendaItem}>
       <View style={{ flex: 1 }}>
@@ -71,6 +72,15 @@ function AgendaItem({ title, subtitle, amount, onPress }) {
         {!!subtitle && <Text style={styles.agendaSub} numberOfLines={1}>{subtitle}</Text>}
       </View>
       <Text style={styles.value}>{money(amount)}</Text>
+      {!!onDirections && (
+        <IconButton
+          icon="map-marker-path"
+          size={20}
+          iconColor={COLORS.primary}
+          onPress={onDirections}
+          style={{ margin: 0 }}
+        />
+      )}
     </Pressable>
   );
 }
@@ -227,6 +237,7 @@ export default function ProductivityScreen() {
                   subtitle={`Crédito #${r.credit_code}`}
                   amount={r.amount}
                   onPress={() => openLoan(r.loan_id)}
+                  onDirections={() => openDirections(r)}
                 />
               ))}
 
@@ -239,6 +250,7 @@ export default function ProductivityScreen() {
                   subtitle={`Promete para el ${shortDate(r.promised_date)}`}
                   amount={r.promised_amount}
                   onPress={() => openLoan(r.loan_id)}
+                  onDirections={() => openDirections(r)}
                 />
               ))}
 
@@ -257,6 +269,7 @@ export default function ProductivityScreen() {
                   }`}
                   amount={r.overdue_amount}
                   onPress={() => openLoan(r.loan_id)}
+                  onDirections={() => openDirections(r)}
                 />
               ))}
               {agenda.no_follow_up_total > agenda.no_follow_up.length && (
@@ -359,6 +372,24 @@ export default function ProductivityScreen() {
               )}
               <Row label="Pagos recibidos" value={String(m.payments_count)} />
               <Row label="Gestiones / visitas" value={`${m.actions} / ${m.visits}`} />
+              {m.visit_verification?.total > 0 && (
+                <>
+                  <Row
+                    label={`Visitas verificadas por GPS (≤ ${m.visit_verification.radius_meters} m)`}
+                    value={`${m.visit_verification.verified} de ${m.visit_verification.total}`}
+                    color={m.visit_verification.verified === m.visit_verification.total ? COLORS.success : undefined}
+                  />
+                  {m.visit_verification.far > 0 && (
+                    <Row label="Visitas lejos del domicilio" value={String(m.visit_verification.far)} color={COLORS.danger} />
+                  )}
+                  {m.visit_verification.no_gps > 0 && (
+                    <Row label="Visitas sin ubicación GPS" value={String(m.visit_verification.no_gps)} color={COLORS.warning} />
+                  )}
+                  {m.visit_verification.no_customer_location > 0 && (
+                    <Row label="Clientes sin ubicación guardada" value={String(m.visit_verification.no_customer_location)} />
+                  )}
+                </>
+              )}
               <Row
                 label="Promesas de pago"
                 value={`${m.promises.total} (${m.promises.kept} cumplidas, ${m.promises.broken} rotas, ${m.promises.pending} pendientes)`}

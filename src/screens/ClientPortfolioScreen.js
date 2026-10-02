@@ -24,35 +24,10 @@ import { enqueue } from "../offline/queue";
 import { useSync } from "../offline/SyncProvider";
 import { money, toNumber } from "../utils/format";
 import { todayISO } from "../utils/date";
+import { ACTION_TYPES, RESULTS, STAGES } from "../utils/collectionsCatalog";
+import { openDirections } from "../utils/maps";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
-
-// Mismas opciones y mismos códigos que CollectionsWorklist.jsx (web), para
-// que una gestión registrada desde el celular se vea igual en la bitácora
-// de los dos lados.
-const ACTION_TYPES = [
-  ["CALL", "Llamada"],
-  ["VISIT", "Visita"],
-  ["WHATSAPP", "WhatsApp"],
-  ["MESSAGE", "Mensaje/SMS"],
-  ["EMAIL", "Correo"],
-  ["LETTER", "Carta/Notificación"],
-  ["OTHER", "Otro"],
-];
-const RESULTS = [
-  ["CONTACTED", "Contactado"],
-  ["PROMISE", "Promesa de pago"],
-  ["PARTIAL_PAYMENT", "Pago parcial"],
-  ["NO_ANSWER", "No contesta"],
-  ["NOT_LOCATED", "No localizado"],
-  ["REFUSED", "Se niega a pagar"],
-  ["OTHER", "Otro"],
-];
-const STAGES = [
-  ["PREVENTIVE", "Preventiva"],
-  ["ADMINISTRATIVE", "Administrativa"],
-  ["LEGAL", "Judicial"],
-];
 
 const emptyGestionForm = {
   action_type: "VISIT",
@@ -319,6 +294,16 @@ export default function ClientPortfolioScreen() {
                     labelStyle={styles.actionBtnLabel}
                   >
                     Llamar
+                  </Button>
+                  <Button
+                    compact
+                    mode="outlined"
+                    icon="map-marker-path"
+                    onPress={() => openDirections(item)}
+                    style={styles.actionBtn}
+                    labelStyle={styles.actionBtnLabel}
+                  >
+                    Ir
                   </Button>
                   {canLogVisit && (
                     <Button

@@ -146,6 +146,7 @@ export default function AccountStatementScreen({ route }) {
       <View style={styles.headerRow}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
         <Text variant="titleLarge" style={styles.title}>Estado de cuenta</Text>
+        <IconButton icon="history" onPress={() => navigation.navigate("LoanActions", { loanId })} />
         <IconButton icon="share-variant" onPress={onShare} loading={sharing} disabled={sharing} />
       </View>
 

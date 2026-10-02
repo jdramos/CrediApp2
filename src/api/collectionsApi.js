@@ -44,6 +44,11 @@ export const logVisit = (
     token,
   );
 
+// Historial de gestiones de un crédito de MI cartera, con el estado de
+// verificación GPS de cada visita — permiso pagos.ver (no cobranza.ver).
+export const getMyLoanActions = (token, loanId) =>
+  credimasterGet(`/api/collections/my-loans/${loanId}/actions`, token);
+
 // "Mi productividad": resumen de la cartera del cobrador vinculado al usuario
 // logueado (saldo, mora, vencidos, PAR, cobrado del día/mes, gestiones) —
 // permiso pagos.ver, mismo alcance que getAssignedLoans. Si el usuario no
