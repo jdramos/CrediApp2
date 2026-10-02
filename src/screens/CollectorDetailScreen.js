@@ -41,6 +41,14 @@ const styles = StyleSheet.create({
   muted: { color: COLORS.muted, fontSize: 12 },
   value: { color: COLORS.text, fontWeight: "700", textAlign: "right" },
   empty: { color: COLORS.muted, fontSize: 12 },
+  alertBox: {
+    backgroundColor: COLORS.dangerSoft,
+    borderWidth: 1,
+    borderColor: COLORS.danger,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+  },
+  alertTitle: { color: COLORS.danger, fontWeight: "700" },
   error: { textAlign: "center", color: COLORS.danger, marginTop: SPACING.xl, paddingHorizontal: SPACING.xl },
 });
 
@@ -117,6 +125,29 @@ export default function CollectorDetailScreen() {
 
         {data && (
           <>
+            {data.visit_alert?.flagged && (
+              <View style={styles.alertBox}>
+                <Text style={styles.alertTitle}>
+                  Visitas sospechosas: {data.visit_alert.far_7d} de {data.visit_alert.total_7d} visitas de los últimos 7
+                  días quedaron lejos del domicilio del cliente.
+                </Text>
+              </View>
+            )}
+
+            {data.custody_pending != null && (
+              <View style={styles.card}>
+                <Text variant="titleMedium" style={styles.cardTitle}>Efectivo sin entregar</Text>
+                <Text style={[styles.value, { color: data.custody_pending > 0 ? COLORS.warning : COLORS.text, fontSize: 20 }]}>
+                  {money(data.custody_pending)}
+                </Text>
+                <Text style={styles.muted}>
+                  {data.last_settlement_date
+                    ? `Última liquidación (arqueo o depósito): ${data.last_settlement_date}`
+                    : "Todavía no ha liquidado (arqueo o depósito)."}
+                </Text>
+              </View>
+            )}
+
             <View style={styles.card}>
               <Text variant="titleMedium" style={styles.cardTitle}>
                 Créditos en mora ({data.overdue_loans_total})

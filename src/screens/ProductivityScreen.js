@@ -15,6 +15,8 @@ import ShareCardHeader from "../components/ShareCardHeader";
 import AddressLines from "../components/AddressLines";
 import OfflineNotice from "../components/OfflineNotice";
 import { cachedFetch } from "../offline/cache";
+import { usePendingPayments } from "../offline/pendingPayments";
+import { todayISO } from "../utils/date";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -130,6 +132,7 @@ export default function ProductivityScreen() {
   const [error, setError] = useState("");
   const [sharing, setSharing] = useState(false);
   const [cachedAt, setCachedAt] = useState(null);
+  const pending = usePendingPayments(todayISO());
   const summaryShotRef = useRef(null);
   const logoUrl = useTenantLogo(session?.token);
 
@@ -230,6 +233,13 @@ export default function ProductivityScreen() {
               />
               <View style={styles.card}>
                 <Row label="Cobrado hoy" value={`${money(t.collected_amount)} (${t.payments_count} pagos)`} color={COLORS.success} />
+                {pending.count > 0 && (
+                  <Row
+                    label="Pagos sin enviar (sin señal)"
+                    value={`${money(pending.amount)} (${pending.count})`}
+                    color={COLORS.warning}
+                  />
+                )}
                 <Row label="Gestiones / visitas hoy" value={`${t.actions} / ${t.visits}`} />
                 <Row label="Saldo de cartera" value={money(p.principal_balance)} />
                 <Row
@@ -367,6 +377,13 @@ export default function ProductivityScreen() {
             <View style={styles.card}>
               <Text variant="titleMedium" style={styles.cardTitle}>Hoy</Text>
               <Row label="Cobrado hoy" value={`${money(t.collected_amount)} (${t.payments_count} pagos)`} color={COLORS.success} />
+              {pending.count > 0 && (
+                <Row
+                  label="Pagos sin enviar (sin señal)"
+                  value={`${money(pending.amount)} (${pending.count})`}
+                  color={COLORS.warning}
+                />
+              )}
               <Row label="Vence hoy" value={`${money(p.due_today_amount)} (${p.due_today_installments} cuotas)`} />
               <Row label="Gestiones de cobro" value={String(t.actions)} />
               <Row label="Visitas" value={String(t.visits)} />

@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, RefreshControl, Pressable } from "react-n
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, IconButton, Chip, ActivityIndicator, ProgressBar } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getTeamProductivity } from "../api/collectionsApi";
@@ -22,6 +23,7 @@ const SORTS = [
   ["collected", "Cobrado"],
   ["effectiveness", "Meta %"],
   ["overdue", "Mora"],
+  ["custody", "Efectivo"],
 ];
 
 const styles = StyleSheet.create({
@@ -70,6 +72,18 @@ const styles = StyleSheet.create({
   label: { color: COLORS.muted, flexShrink: 1 },
   value: { color: COLORS.text, fontWeight: "700", flexShrink: 1, textAlign: "right" },
   empty: { textAlign: "center", color: COLORS.muted, marginTop: SPACING.xl, paddingHorizontal: SPACING.xl },
+  alertBox: {
+    backgroundColor: COLORS.dangerSoft,
+    borderWidth: 1,
+    borderColor: COLORS.danger,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    gap: SPACING.xs,
+  },
+  alertTitle: { color: COLORS.danger, fontWeight: "800", flex: 1 },
+  alertRow: { flexDirection: "row", alignItems: "center", gap: SPACING.sm, paddingVertical: SPACING.xs },
+  alertName: { color: COLORS.text, fontWeight: "700", flex: 1 },
+  alertCount: { color: COLORS.danger, fontWeight: "700" },
 });
 
 // Chip de selección con estado bien visible: el seleccionado va relleno en el
@@ -156,11 +170,13 @@ export default function TeamProductivityScreen() {
     const rows = [...(data?.data || [])];
     if (sort === "effectiveness") rows.sort((a, b) => (b.effectiveness_pct ?? -1) - (a.effectiveness_pct ?? -1));
     else if (sort === "overdue") rows.sort((a, b) => b.overdue_amount - a.overdue_amount);
+    else if (sort === "custody") rows.sort((a, b) => (b.custody_pending ?? -1) - (a.custody_pending ?? -1));
     else rows.sort((a, b) => b.collected_amount - a.collected_amount);
     return rows;
   }, [data, sort]);
 
   const s = data?.summary;
+  const flagged = (data?.data || []).filter((r) => r.visit_alert?.flagged);
   const periodLabel = PERIODS.find(([k]) => k === period)?.[1] || "";
 
   return (
@@ -198,8 +214,45 @@ export default function TeamProductivityScreen() {
         {loading && !data ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.xl }} /> : null}
         {!!error && <Text style={[styles.empty, { color: COLORS.danger }]}>{error}</Text>}
 
+        {flagged.length > 0 && (
+          <View style={styles.alertBox}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.xs }}>
+              <MaterialCommunityIcons name="map-marker-alert" size={18} color={COLORS.danger} />
+              <Text style={styles.alertTitle}>
+                {flagged.length} cobrador{flagged.length === 1 ? "" : "es"} con visitas sospechosas esta semana
+              </Text>
+            </View>
+            <Text style={styles.muted}>
+              Tres o más visitas registradas lejos del domicilio del cliente en los últimos 7 días.
+            </Text>
+            {flagged.map((r) => (
+              <Pressable
+                key={r.collector_id}
+                style={styles.alertRow}
+                onPress={() =>
+                  navigation.navigate("CollectorDetail", {
+                    collectorId: r.collector_id,
+                    collectorName: r.collector_name,
+                    branchName: r.branch_name,
+                    period: "week",
+                  })
+                }
+              >
+                <Text style={styles.alertName} numberOfLines={1}>{r.collector_name}</Text>
+                <Text style={styles.alertCount}>{r.visit_alert.far_7d} de {r.visit_alert.total_7d} lejos</Text>
+                <MaterialCommunityIcons name="chevron-right" size={18} color={COLORS.muted} />
+              </Pressable>
+            ))}
+          </View>
+        )}
+
         {data && s && (
           <>
+            {s.total_custody != null && (
+              <View style={styles.tiles}>
+                <Tile label="Efectivo sin entregar (todos)" value={money(s.total_custody)} tone="warning" />
+              </View>
+            )}
             <View style={styles.tiles}>
               <Tile
                 label="Meta del período"
@@ -256,6 +309,18 @@ export default function TeamProductivityScreen() {
             <Row label="Créditos / en mora" value={`${r.loans_count} / ${r.loans_overdue}`} />
             <Row label="Mora" value={money(r.overdue_amount)} color={r.overdue_amount > 0 ? COLORS.danger : undefined} />
             <Row label="Cartera en riesgo" value={`${r.par_pct}%`} color={r.par_pct > 10 ? COLORS.danger : undefined} />
+            {r.custody_pending != null && (
+              <>
+                <Row
+                  label="Efectivo sin entregar"
+                  value={money(r.custody_pending)}
+                  color={r.custody_pending > 0 ? COLORS.warning : undefined}
+                />
+                <Text style={styles.muted}>
+                  {r.last_settlement_date ? `Última liquidación: ${r.last_settlement_date}` : "Todavía no ha liquidado (arqueo o depósito)"}
+                </Text>
+              </>
+            )}
             <Row
               label="Visitas verificadas"
               value={r.visits.total > 0 ? `${r.visits.verified} de ${r.visits.total}` : "—"}

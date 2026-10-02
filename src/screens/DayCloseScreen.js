@@ -9,7 +9,7 @@ import * as Sharing from "expo-sharing";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getMyDayClose } from "../api/collectionsApi";
-import { useSync } from "../offline/SyncProvider";
+import { usePendingPayments } from "../offline/pendingPayments";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import ShareCardHeader from "../components/ShareCardHeader";
 import OfflineNotice from "../components/OfflineNotice";
@@ -87,7 +87,7 @@ function Row({ label, value, color }) {
 export default function DayCloseScreen() {
   const navigation = useNavigation();
   const { session } = useContext(SessionContext);
-  const { pendingCount } = useSync();
+  const pending = usePendingPayments(date);
   const [date, setDate] = useState(todayISO());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -162,7 +162,11 @@ export default function DayCloseScreen() {
         </View>
         <Text style={styles.heroLabel}>Total cobrado</Text>
         <Text variant="headlineMedium" style={styles.heroAmount}>{money(data?.total || 0)}</Text>
-        <Text style={styles.heroSub}>{data && linked ? `${data.payments_count} pagos` : " "}</Text>
+        <Text style={styles.heroSub}>
+          {data && linked
+            ? `${data.payments_count} pagos${pending.count > 0 ? ` · + ${money(pending.amount)} sin enviar` : ""}`
+            : " "}
+        </Text>
       </LinearGradient>
 
       <ScrollView
@@ -174,12 +178,22 @@ export default function DayCloseScreen() {
         {!!error && <Text style={[styles.empty, { color: COLORS.danger }]}>{error}</Text>}
         {data && !linked && <Text style={styles.empty}>{data.message}</Text>}
 
-        {isToday && pendingCount > 0 && (
+        {(pending.count > 0 || pending.failedCount > 0) && (
           <View style={styles.warn}>
-            <Text style={styles.warnText}>
-              Tenés {pendingCount} acción{pendingCount === 1 ? "" : "es"} sin sincronizar (pagos, visitas u otros).
-              Los pagos pendientes todavía no aparecen en este cierre — se suman cuando se envíen.
-            </Text>
+            {pending.count > 0 && (
+              <Text style={styles.warnText}>
+                Tenés {pending.count} pago{pending.count === 1 ? "" : "s"} sin enviar por {money(pending.amount)}
+                {pending.cashAmount > 0 ? ` (${money(pending.cashAmount)} en efectivo)` : ""}. Todavía no están en el
+                total de abajo — se suman solos cuando vuelva la señal.
+              </Text>
+            )}
+            {pending.failedCount > 0 && (
+              <Text style={[styles.warnText, { color: COLORS.danger }]}>
+                {pending.failedCount} pago{pending.failedCount === 1 ? "" : "s"} por {money(pending.failedAmount)} fue
+                {pending.failedCount === 1 ? "" : "ron"} rechazado{pending.failedCount === 1 ? "" : "s"} por el servidor y
+                no se va a enviar: revisalo en Pendientes de sincronizar.
+              </Text>
+            )}
           </View>
         )}
 
@@ -210,6 +224,16 @@ export default function DayCloseScreen() {
             <View style={styles.card}>
               <Text variant="titleMedium" style={styles.cardTitle}>Lo que debo entregar</Text>
               <Row label="Efectivo del día" value={money(data.cash_to_deliver)} color={COLORS.success} />
+              {pending.cashAmount > 0 && (
+                <>
+                  <Row label="Efectivo sin enviar (pagos sin señal)" value={money(pending.cashAmount)} color={COLORS.warning} />
+                  <Row
+                    label="Efectivo total del día"
+                    value={money(data.cash_to_deliver + pending.cashAmount)}
+                    color={COLORS.success}
+                  />
+                </>
+              )}
               <Row label="Transferencias, cheques y depósitos" value={money(data.non_cash_total)} />
               {data.custody_pending != null && (
                 <>
