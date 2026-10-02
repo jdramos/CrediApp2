@@ -71,6 +71,30 @@ const WEEKDAY_SHORT = ["D", "L", "M", "M", "J", "V", "S"];
 const dayLetter = (iso) => WEEKDAY_SHORT[new Date(`${iso}T12:00:00`).getDay()];
 const shortDate = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "");
 
+function Row({ label, value, color }) {
+  return (
+    <View style={styles.row}>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.value, color ? { color } : null]}>{value}</Text>
+    </View>
+  );
+}
+
+function Tile({ label, value, tone }) {
+  const palette = {
+    danger: { bg: COLORS.dangerSoft, fg: COLORS.danger },
+    success: { bg: COLORS.successSoft, fg: COLORS.success },
+    primary: { bg: COLORS.primarySoft, fg: COLORS.primary },
+    warning: { bg: COLORS.warningSoft, fg: COLORS.warning },
+  }[tone || "primary"];
+  return (
+    <View style={[styles.tile, { backgroundColor: palette.bg }]}>
+      <Text style={[styles.tileLabel, { color: palette.fg }]}>{label}</Text>
+      <Text variant="titleMedium" style={[styles.tileValue, { color: palette.fg }]}>{value}</Text>
+    </View>
+  );
+}
+
 function AgendaItem({ title, subtitle, amount, onPress, onDirections, customer }) {
   return (
     <Pressable onPress={onPress} style={styles.agendaItem}>
