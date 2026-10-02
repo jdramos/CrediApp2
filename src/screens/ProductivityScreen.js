@@ -12,6 +12,7 @@ import { money } from "../utils/format";
 import { openDirections } from "../utils/maps";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import ShareCardHeader from "../components/ShareCardHeader";
+import AddressLines from "../components/AddressLines";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -68,12 +69,13 @@ const WEEKDAY_SHORT = ["D", "L", "M", "M", "J", "V", "S"];
 const dayLetter = (iso) => WEEKDAY_SHORT[new Date(`${iso}T12:00:00`).getDay()];
 const shortDate = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "");
 
-function AgendaItem({ title, subtitle, amount, onPress, onDirections }) {
+function AgendaItem({ title, subtitle, amount, onPress, onDirections, customer }) {
   return (
     <Pressable onPress={onPress} style={styles.agendaItem}>
       <View style={{ flex: 1 }}>
         <Text style={styles.agendaName} numberOfLines={1}>{title}</Text>
         {!!subtitle && <Text style={styles.agendaSub} numberOfLines={1}>{subtitle}</Text>}
+        {!!customer && <AddressLines customer={customer} compact />}
       </View>
       <Text style={styles.value}>{money(amount)}</Text>
       {!!onDirections && (
@@ -242,6 +244,7 @@ export default function ProductivityScreen() {
                   amount={r.amount}
                   onPress={() => openLoan(r.loan_id)}
                   onDirections={() => openDirections(r)}
+                  customer={r}
                 />
               ))}
 
@@ -255,6 +258,7 @@ export default function ProductivityScreen() {
                   amount={r.promised_amount}
                   onPress={() => openLoan(r.loan_id)}
                   onDirections={() => openDirections(r)}
+                  customer={r}
                 />
               ))}
 
@@ -274,6 +278,7 @@ export default function ProductivityScreen() {
                   amount={r.overdue_amount}
                   onPress={() => openLoan(r.loan_id)}
                   onDirections={() => openDirections(r)}
+                  customer={r}
                 />
               ))}
               {agenda.no_follow_up_total > agenda.no_follow_up.length && (

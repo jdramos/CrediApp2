@@ -158,6 +158,8 @@ export default function PaymentsScreen({ route }) {
       id: prefill.customerId,
       customer_name: prefill.customerName,
       identification: prefill.customerIdentification,
+      home_address: prefill.homeAddress,
+      business_address: prefill.businessAddress,
     });
     setError("");
 
@@ -410,6 +412,8 @@ export default function PaymentsScreen({ route }) {
         tenantName: session?.tenant?.commercial_name || session?.tenant?.legal_name,
         customerName: customer?.customer_name,
         customerIdentification: customer?.identification,
+        customerHomeAddress: customer?.home_address,
+        customerBusinessAddress: customer?.business_address,
         loanLabel: loan?.credit_code || loan?.id || loan?.loan_id,
         date,
         collectorName: session?.user?.full_name || session?.user?.user_name,
@@ -697,6 +701,7 @@ export default function PaymentsScreen({ route }) {
                 {!!customer?.identification && (
                   <Text style={styles.muted}>Cédula: {customer.identification}</Text>
                 )}
+                <AddressLines customer={customer} showMissing={false} />
                 <Text style={styles.muted}>Crédito #{loan?.credit_code || loan?.id || loan?.loan_id}</Text>
                 <Text style={styles.muted}>Fecha: {date}</Text>
                 <Text style={styles.muted}>Cobrado por: {session?.user?.full_name || session?.user?.user_name}</Text>

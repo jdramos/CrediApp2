@@ -119,6 +119,8 @@ export default function ClientPortfolioScreen() {
         customerId: item.customer_id,
         customerName: item.customer_name,
         customerIdentification: item.customer_identification,
+        homeAddress: item.home_address,
+        businessAddress: item.business_address,
         loanId: item.loan_id,
       },
     });

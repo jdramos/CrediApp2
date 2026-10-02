@@ -105,6 +105,8 @@ export function buildPaymentReceiptLines({
   tenantName,
   customerName,
   customerIdentification,
+  customerHomeAddress,
+  customerBusinessAddress,
   loanLabel,
   date,
   collectorName,
@@ -121,6 +123,8 @@ export function buildPaymentReceiptLines({
     customerName || "",
   ];
   if (customerIdentification) lines.push(`Cedula: ${customerIdentification}`);
+  if (customerHomeAddress) lines.push(`Casa: ${customerHomeAddress}`);
+  if (customerBusinessAddress) lines.push(`Negocio: ${customerBusinessAddress}`);
   lines.push(`Credito #${loanLabel || "-"}`);
   lines.push(`Fecha: ${date || ""}`);
   if (collectorName) lines.push(`Cobrado por: ${collectorName}`);

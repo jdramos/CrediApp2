@@ -168,6 +168,7 @@ export default function AccountStatementScreen({ route }) {
                 home_address: statement.customer_home_address,
                 business_address: statement.customer_business_address,
               }}
+              showMissing={false}
             />
             <Text style={styles.muted}>Crédito #{statement.credit_code || statement.loan_id}</Text>
             <Text style={styles.muted}>Corte al {todayISO()}</Text>

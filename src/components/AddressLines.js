@@ -17,11 +17,32 @@ const clean = (v) => (typeof v === "string" ? v.trim() : "");
 // Dirección de la casa y del negocio del cliente (customers.home_address /
 // business_address). Si no hay ninguna, lo dice en vez de omitir la línea,
 // para que el cobrador sepa que falta el dato y no que la pantalla no lo trae.
-export default function AddressLines({ customer }) {
+// `showMissing={false}` en lo que se comparte con el cliente (comprobante,
+// estado de cuenta): ahí "sin dirección registrada" sobra.
+export default function AddressLines({ customer, compact = false, showMissing = true }) {
   const home = clean(customer?.home_address);
   const business = clean(customer?.business_address);
 
+  // Versión de una sola línea para listas densas (agenda): la casa y, si no
+  // hay, el negocio; sin mensaje cuando falta.
+  if (compact) {
+    const one = home || business;
+    if (!one) return null;
+    return (
+      <View style={styles.row}>
+        <MaterialCommunityIcons
+          name={home ? "home-outline" : "briefcase-outline"}
+          size={12}
+          color={COLORS.muted}
+          style={{ marginTop: 1 }}
+        />
+        <Text style={styles.text} numberOfLines={1}>{one}</Text>
+      </View>
+    );
+  }
+
   if (!home && !business) {
+    if (!showMissing) return null;
     return (
       <View style={styles.wrap}>
         <Text style={styles.missing}>Sin dirección registrada</Text>
