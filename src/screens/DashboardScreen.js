@@ -19,6 +19,7 @@ import { useBusinessDayAlerts } from "../hooks/useBusinessDayStatus";
 import BusinessDayBanner from "../components/BusinessDayBanner";
 import { syncReminders } from "../notifications/reminders";
 import { useTenantLogo } from "../hooks/useTenantLogo";
+import WorkdayCard from "../components/WorkdayCard";
 import { money } from "../utils/format";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
@@ -176,6 +177,7 @@ export default function DashboardScreen() {
             branchLabel={multiBranch ? `#${a.branchId}` : undefined}
           />
         ))}
+        {canPay && <WorkdayCard />}
         <Text style={styles.sectionTitle}>Accesos rápidos</Text>
         <View style={styles.actionsGrid}>
           {canViewCustomers && (

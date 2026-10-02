@@ -38,7 +38,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "CrediApp usa tu ubicación para registrar la casa y el negocio del cliente."
+          "locationWhenInUsePermission": "CrediApp usa tu ubicación para registrar la casa y el negocio del cliente, verificar tus visitas y, si iniciás la jornada, registrar tu ruta del día."
         }
       ],
       [

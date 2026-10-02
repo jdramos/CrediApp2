@@ -7,6 +7,7 @@ import { registerPushToken, unregisterPushToken } from "../api/pushApi";
 import { registerForPushNotificationsAsync } from "../notifications/pushNotifications";
 import { cancelReminders } from "../notifications/reminders";
 import { clearCache } from "../offline/cache";
+import { resetTracking, setTrackingSessionGetter } from "../tracking/tracker";
 import { queueCount } from "../offline/queue";
 import { discardQueue } from "../offline/syncManager";
 import { confirmAction } from "../utils/confirm";
@@ -42,6 +43,18 @@ export function SessionProvider({ children }) {
   // siempre invocar el signOut MÁS RECIENTE (con el `session` actual en su
   // closure) sin tener que re-registrar el handler en cada render.
   const signOutRef = useRef();
+
+  // El rastreo de ruta (tracking/tracker.js) vive fuera de React y necesita
+  // saber en cada envío quién es el usuario y su token ACTUALES.
+  const sessionRef = useRef(null);
+  sessionRef.current = session;
+  useEffect(() => {
+    setTrackingSessionGetter(() =>
+      sessionRef.current
+        ? { token: sessionRef.current.token, userId: sessionRef.current.user?.id ?? null }
+        : null,
+    );
+  }, []);
   useEffect(() => {
     setUnauthorizedHandler(() => {
       Alert.alert(
@@ -108,6 +121,10 @@ export function SessionProvider({ children }) {
         return;
       }
     }
+
+    // Antes de soltar la sesión: se envía lo pendiente del rastreo (todavía hay
+    // token) y se borra del teléfono.
+    await resetTracking();
 
     const token = session?.token;
     setSession(null);
