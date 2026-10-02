@@ -184,6 +184,15 @@ export default function DashboardScreen() {
               onPress={() => navigation.navigate("Pagos", { screen: "ClientPortfolio" })}
             />
           )}
+          {canPay && (
+            <ActionTile
+              icon="chart-line"
+              title="Mi productividad"
+              subtitle="Cartera, mora y cobros"
+              gradient={GRADIENTS.dark}
+              onPress={() => navigation.navigate("Productivity")}
+            />
+          )}
           {canCreateLoan && (
             <ActionTile
               icon="file-document-plus-outline"

@@ -43,3 +43,10 @@ export const logVisit = (
     },
     token,
   );
+
+// "Mi productividad": resumen de la cartera del cobrador vinculado al usuario
+// logueado (saldo, mora, vencidos, PAR, cobrado del día/mes, gestiones) —
+// permiso pagos.ver, mismo alcance que getAssignedLoans. Si el usuario no
+// está vinculado a un cobrador, la respuesta trae linked: false.
+export const getMyProductivity = (token) =>
+  credimasterGet("/api/collections/my-productivity", token);
