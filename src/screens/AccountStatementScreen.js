@@ -186,7 +186,7 @@ export default function AccountStatementScreen({ route }) {
             </View>
             <View style={styles.totalRow}>
               <Text style={{ color: COLORS.text, fontWeight: "800" }}>Total adeudado</Text>
-              <Text style={{ color: COLORS.primary, fontWeight: "800", fontSize: 18 }}>{money(statement.total_balance)}</Text>
+              <Text style={{ color: COLORS.primary, fontWeight: "800", fontSize: 18 }}>{money(summary.totalBalance)}</Text>
             </View>
             {!!summary.overdueSinceDate && (
               <Text style={{ color: COLORS.danger, marginTop: SPACING.sm, fontSize: 12 }}>

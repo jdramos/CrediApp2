@@ -39,25 +39,37 @@ const twoCol = (left, right) => {
   return l + " ".repeat(gap) + r;
 };
 
-// Misma agrupación que AccountStatementScreen.js (saldo atrasado/vigente +
-// fecha de inicio de mora, a partir de las cuotas) -- se exporta acá para
-// que la pantalla y el ticket impreso nunca queden desincronizados.
+// Resumen del estado de cuenta, calculado todo de las cuotas para que
+// atrasado + vigente = total adeudado SIEMPRE (antes el total venía del
+// snapshot de `balances` y los otros dos de las cuotas: bases distintas, y
+// las cuotas futuras traen el interés programado completo, que todavía no
+// se ha devengado -- por eso vigente + atrasado superaba al total).
+//   - Atrasado: lo pendiente de cuotas vencidas (capital+interés+cargos).
+//   - Vigente: capital que aún no vence, más lo pendiente de la cuota
+//     parcialmente pagada que sigue vigente. NO incluye el interés de
+//     cuotas futuras (no se debe todavía).
 export function summarizeMovements(movements) {
   let overdueBalance = 0;
   let currentBalance = 0;
   let overdueSinceDate = null;
   for (const m of Array.isArray(movements) ? movements : []) {
-    const pending = Number(m.pending_total || 0);
     if (m.status === "OVERDUE") {
-      overdueBalance += pending;
+      overdueBalance += Number(m.pending_total || 0);
       if (!overdueSinceDate || String(m.payment_date) < String(overdueSinceDate)) {
         overdueSinceDate = m.payment_date;
       }
-    } else if (m.status === "CURRENT" || m.status === "PARTIAL") {
-      currentBalance += pending;
+    } else if (m.status === "PARTIAL") {
+      currentBalance += Number(m.pending_total || 0);
+    } else if (m.status === "CURRENT") {
+      currentBalance += Number(m.pending_principal || 0);
     }
   }
-  return { overdueBalance, currentBalance, overdueSinceDate };
+  return {
+    overdueBalance,
+    currentBalance,
+    totalBalance: overdueBalance + currentBalance,
+    overdueSinceDate,
+  };
 }
 
 // Mismo contenido que AccountStatementScreen.js, en líneas de texto plano
@@ -65,7 +77,7 @@ export function summarizeMovements(movements) {
 // (no "CrediMaster", que es solo el nombre de la plataforma) -- ver
 // session.tenant en SessionContext.js.
 export function buildAccountStatementReceiptLines(statement, tenantName) {
-  const { overdueBalance, currentBalance, overdueSinceDate } = summarizeMovements(statement.movements);
+  const { overdueBalance, currentBalance, totalBalance, overdueSinceDate } = summarizeMovements(statement.movements);
   const lines = [
     center((tenantName || "CrediMaster").toUpperCase()),
     center(statement.customer_name || ""),
@@ -76,7 +88,7 @@ export function buildAccountStatementReceiptLines(statement, tenantName) {
     twoCol("Saldo atrasado", money(overdueBalance)),
     twoCol("Saldo vigente", money(currentBalance)),
     divider(),
-    twoCol("TOTAL ADEUDADO", money(statement.total_balance)),
+    twoCol("TOTAL ADEUDADO", money(totalBalance)),
   ];
   if (overdueSinceDate) {
     lines.push("");
