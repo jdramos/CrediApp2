@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useMemo, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Alert, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, Badge } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
@@ -18,6 +18,7 @@ import { useSync } from "../offline/SyncProvider";
 import { useBusinessDayAlerts } from "../hooks/useBusinessDayStatus";
 import BusinessDayBanner from "../components/BusinessDayBanner";
 import { syncReminders } from "../notifications/reminders";
+import { useTenantLogo } from "../hooks/useTenantLogo";
 import { money } from "../utils/format";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
@@ -91,6 +92,7 @@ export default function DashboardScreen() {
   const canSupervise = session?.permissions?.includes("creditos.productividad.ver");
   const canViewCustomers = session?.permissions?.includes("clientes.ver");
 
+  const logoUrl = useTenantLogo(session?.token);
   const fullName = session?.user?.full_name || session?.user?.user_name || "Usuario";
   const tenantName = session?.tenant?.commercial_name || session?.tenant?.legal_name || "";
 
@@ -154,7 +156,16 @@ export default function DashboardScreen() {
             <MaterialCommunityIcons name="logout" size={22} color={COLORS.onGradient} />
           </Pressable>
         </View>
-        {!!tenantName && <Text style={[styles.date, { marginTop: SPACING.sm }]}>{tenantName}</Text>}
+        {(!!tenantName || !!logoUrl) && (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.sm, marginTop: SPACING.sm }}>
+            {!!logoUrl && (
+              <View style={{ backgroundColor: COLORS.card, borderRadius: RADIUS.sm, padding: 3 }}>
+                <Image source={{ uri: logoUrl }} style={{ width: 30, height: 30 }} resizeMode="contain" />
+              </View>
+            )}
+            {!!tenantName && <Text style={[styles.date, { marginTop: 0 }]}>{tenantName}</Text>}
+          </View>
+        )}
       </LinearGradient>
 
       <ScrollView contentContainerStyle={styles.content}>

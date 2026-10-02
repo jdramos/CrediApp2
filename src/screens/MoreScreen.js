@@ -7,7 +7,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { SessionContext } from "../auth/SessionContext";
 import { changePassword } from "../api/userApi";
 import { confirmAction } from "../utils/confirm";
-import { remindersEnabled, setRemindersEnabled, syncReminders } from "../notifications/reminders";
+import { remindersEnabled, setRemindersEnabled, syncReminders, sendTestReminder } from "../notifications/reminders";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -68,6 +68,17 @@ export default function MoreScreen() {
   useEffect(() => {
     remindersEnabled().then(setRemindersOn);
   }, []);
+
+  const onTestReminder = async () => {
+    const res = await sendTestReminder();
+    setSnackbar(
+      res.ok
+        ? "Listo: en unos 10 segundos te llega un aviso de prueba (podés salir de la app para verlo)"
+        : res.reason === "no-permission"
+          ? "Activá las notificaciones de la app en los ajustes del teléfono"
+          : "No se pudo programar el aviso de prueba",
+    );
+  };
 
   const toggleReminders = async (value) => {
     setRemindersOn(value);
@@ -162,6 +173,13 @@ export default function MoreScreen() {
               descriptionNumberOfLines={3}
               left={(props) => <List.Icon {...props} icon="bell-ring-outline" color={COLORS.primary} />}
               right={() => <Switch value={remindersOn} onValueChange={toggleReminders} />}
+            />
+            <Divider />
+            <List.Item
+              title="Enviar aviso de prueba"
+              description="Llega en unos 10 segundos"
+              left={(props) => <List.Icon {...props} icon="bell-outline" color={COLORS.primary} />}
+              onPress={onTestReminder}
             />
           </Animated.View>
         )}

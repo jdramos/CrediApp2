@@ -137,3 +137,33 @@ export async function syncReminders(token, { force = false, requestPermission = 
     return { ok: false, scheduled: 0, reason: e?.message || "error" };
   }
 }
+
+// Programa un aviso de prueba que llega en ~10 segundos, para comprobar que
+// el teléfono muestra las notificaciones sin esperar a las 7:30. Pide el
+// permiso si hace falta. Devuelve { ok, reason }.
+export async function sendTestReminder() {
+  try {
+    if (!(await ensurePermission(true))) return { ok: false, reason: "no-permission" };
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
+        name: "Recordatorios de cobro",
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
+    }
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Cobros de hoy (prueba)",
+        body: "Así se verán tus recordatorios: cuotas que vencen y promesas de pago del día.",
+        data: { type: "REMINDER_DAY" },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 10,
+        channelId: CHANNEL_ID,
+      },
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: e?.message || "error" };
+  }
+}
