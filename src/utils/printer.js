@@ -82,6 +82,8 @@ export function buildAccountStatementReceiptLines(statement, tenantName) {
     center((tenantName || "CrediMaster").toUpperCase()),
     center(statement.customer_name || ""),
     `Cedula: ${statement.customer_identification || "-"}`,
+    ...(statement.customer_home_address ? [`Casa: ${statement.customer_home_address}`] : []),
+    ...(statement.customer_business_address ? [`Negocio: ${statement.customer_business_address}`] : []),
     `Credito #${statement.credit_code || statement.loan_id || "-"}`,
     `Corte: ${new Date().toISOString().slice(0, 10)}`,
     divider(),

@@ -8,6 +8,7 @@ import * as Sharing from "expo-sharing";
 import { SessionContext } from "../auth/SessionContext";
 import { getAccountStatement } from "../api/loanApi";
 import { useTenantLogo } from "../hooks/useTenantLogo";
+import AddressLines from "../components/AddressLines";
 import { money } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { printReceipt, buildAccountStatementReceiptLines, summarizeMovements } from "../utils/printer";
@@ -162,6 +163,12 @@ export default function AccountStatementScreen({ route }) {
             )}
             <Text variant="titleLarge" style={styles.name}>{statement.customer_name}</Text>
             <Text style={styles.muted}>Cédula: {statement.customer_identification}</Text>
+            <AddressLines
+              customer={{
+                home_address: statement.customer_home_address,
+                business_address: statement.customer_business_address,
+              }}
+            />
             <Text style={styles.muted}>Crédito #{statement.credit_code || statement.loan_id}</Text>
             <Text style={styles.muted}>Corte al {todayISO()}</Text>
             {inArrears && (
