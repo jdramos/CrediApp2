@@ -15,6 +15,8 @@ import { SessionContext } from "../auth/SessionContext";
 import { getApprovalInbox } from "../api/approvalApi";
 import { getAssignedLoans } from "../api/collectionsApi";
 import { useSync } from "../offline/SyncProvider";
+import { useBusinessDayAlerts } from "../hooks/useBusinessDayStatus";
+import BusinessDayBanner from "../components/BusinessDayBanner";
 import { money } from "../utils/format";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
@@ -79,6 +81,9 @@ export default function DashboardScreen() {
   const [pendingCount, setPendingCount] = useState(0);
   const [overdueLoans, setOverdueLoans] = useState({ count: 0, amount: 0 });
 
+  const businessDayAlerts = useBusinessDayAlerts(session?.token, session?.user?.branches);
+  const multiBranch = (session?.user?.branches || []).length > 1;
+
   const canApprove = session?.permissions?.includes("aprobaciones.ver");
   const canCreateLoan = session?.permissions?.includes("creditos.insertar");
   const canPay = session?.permissions?.includes("pagos.insertar") || session?.permissions?.includes("pagos.ver");
@@ -142,6 +147,13 @@ export default function DashboardScreen() {
       </LinearGradient>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {businessDayAlerts.map((a) => (
+          <BusinessDayBanner
+            key={a.branchId}
+            status={a.status}
+            branchLabel={multiBranch ? `#${a.branchId}` : undefined}
+          />
+        ))}
         <Text style={styles.sectionTitle}>Accesos rápidos</Text>
         <View style={styles.actionsGrid}>
           {canViewCustomers && (
