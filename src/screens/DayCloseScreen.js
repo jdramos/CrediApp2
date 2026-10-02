@@ -1,12 +1,16 @@
-import React, { useCallback, useContext, useState } from "react";
-import { View, StyleSheet, ScrollView, RefreshControl, Share } from "react-native";
+import React, { useCallback, useContext, useRef, useState } from "react";
+import { View, StyleSheet, ScrollView, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, IconButton, Button, ActivityIndicator } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
+import ViewShot, { captureRef } from "react-native-view-shot";
+import * as Sharing from "expo-sharing";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getMyDayClose } from "../api/collectionsApi";
 import { useSync } from "../offline/SyncProvider";
+import { useTenantLogo } from "../hooks/useTenantLogo";
+import ShareCardHeader from "../components/ShareCardHeader";
 import { money } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { COLORS, GRADIENTS } from "../theme/colors";
@@ -73,21 +77,6 @@ function Row({ label, value, color }) {
   );
 }
 
-function buildShareText({ tenantName, collectorName, data }) {
-  const lines = [
-    `*Cierre del día ${data.date}*`,
-    [tenantName, collectorName].filter(Boolean).join(" - "),
-    "",
-    `Total cobrado: ${money(data.total)} (${data.payments_count} pagos)`,
-    ...data.by_method.map((m) => `  ${m.name}: ${money(m.amount)} (${m.count})`),
-    "",
-    `Efectivo a entregar: ${money(data.cash_to_deliver)}`,
-  ];
-  if (data.custody_pending != null) lines.push(`Efectivo en mi poder (acumulado): ${money(data.custody_pending)}`);
-  if (data.voided_count > 0) lines.push(`Pagos anulados: ${data.voided_count}`);
-  return lines.join("\n");
-}
-
 // "Cierre del día" del cobrador: lo cobrado por forma de pago, el efectivo
 // que debe entregar y el acumulado en su poder (custodia) que todavía no se
 // le liquida en un arqueo o depósito bancario en la oficina.
@@ -100,6 +89,9 @@ export default function DayCloseScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [sharing, setSharing] = useState(false);
+  const shotRef = useRef(null);
+  const logoUrl = useTenantLogo(session?.token);
 
   const load = useCallback(
     async (isoDate, isRefresh = false) => {
@@ -125,11 +117,21 @@ export default function DayCloseScreen() {
   const tenantName = session?.tenant?.commercial_name || session?.tenant?.legal_name || "";
   const collectorName = session?.user?.full_name || session?.user?.user_name || "";
 
+  // Se comparte como IMAGEN (la hoja nativa de compartir ofrece WhatsApp,
+  // correo, etc.), igual que el estado de cuenta y el comprobante de pago.
   const onShare = async () => {
     try {
-      await Share.share({ message: buildShareText({ tenantName, collectorName, data }) });
-    } catch {
-      // se cerró la hoja de compartir
+      setSharing(true);
+      if (!(await Sharing.isAvailableAsync())) {
+        setError("Este dispositivo no permite compartir archivos.");
+        return;
+      }
+      const uri = await captureRef(shotRef, { format: "png", quality: 0.95 });
+      await Sharing.shareAsync(uri, { mimeType: "image/png", dialogTitle: "Cierre del día" });
+    } catch (e) {
+      setError(e?.message ?? "No se pudo generar la imagen para compartir");
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -174,6 +176,13 @@ export default function DayCloseScreen() {
 
         {data && linked && (
           <>
+            <ViewShot ref={shotRef} options={{ format: "png", quality: 0.95 }} style={{ gap: SPACING.md, backgroundColor: COLORS.bg }}>
+            <ShareCardHeader
+              logoUrl={logoUrl}
+              tenantName={tenantName}
+              title="Cierre del día"
+              lines={[`Fecha: ${data.date}`, collectorName ? `Cobrador: ${collectorName}` : ""]}
+            />
             <View style={styles.card}>
               <Text variant="titleMedium" style={styles.cardTitle}>Cobrado por forma de pago</Text>
               {data.by_method.length === 0 && <Text style={styles.muted}>No hay pagos registrados este día.</Text>}
@@ -220,9 +229,17 @@ export default function DayCloseScreen() {
                 ))}
               </View>
             )}
+            </ViewShot>
 
-            <Button mode="contained-tonal" icon="whatsapp" onPress={onShare} style={{ borderRadius: RADIUS.md }}>
-              Compartir cierre del día
+            <Button
+              mode="contained-tonal"
+              icon="whatsapp"
+              onPress={onShare}
+              loading={sharing}
+              disabled={sharing}
+              style={{ borderRadius: RADIUS.md }}
+            >
+              Compartir cierre del día (imagen)
             </Button>
           </>
         )}

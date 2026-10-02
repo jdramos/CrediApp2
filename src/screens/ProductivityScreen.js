@@ -1,13 +1,17 @@
-import React, { useCallback, useContext, useState } from "react";
-import { View, StyleSheet, ScrollView, RefreshControl, Share, Pressable } from "react-native";
+import React, { useCallback, useContext, useRef, useState } from "react";
+import { View, StyleSheet, ScrollView, RefreshControl, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, IconButton, Button, ActivityIndicator, ProgressBar } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
+import ViewShot, { captureRef } from "react-native-view-shot";
+import * as Sharing from "expo-sharing";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getMyProductivity } from "../api/collectionsApi";
 import { money } from "../utils/format";
 import { openDirections } from "../utils/maps";
+import { useTenantLogo } from "../hooks/useTenantLogo";
+import ShareCardHeader from "../components/ShareCardHeader";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -85,54 +89,6 @@ function AgendaItem({ title, subtitle, amount, onPress, onDirections }) {
   );
 }
 
-// Texto del resumen de cierre del día, pensado para pegarse en WhatsApp.
-function buildDaySummaryText({ tenantName, collectorName, data }) {
-  const p = data.portfolio;
-  const t = data.today;
-  const m = data.month;
-  const lines = [
-    `*Cierre del día ${data.as_of}*`,
-    [tenantName, collectorName].filter(Boolean).join(" - "),
-    "",
-    `Cobrado hoy: ${money(t.collected_amount)} (${t.payments_count} pagos)`,
-    `Gestiones: ${t.actions} | Visitas: ${t.visits}`,
-    "",
-    `Saldo de cartera: ${money(p.principal_balance)}`,
-    `En mora: ${money(p.overdue_amount)} (${p.loans_overdue} de ${p.loans_count} créditos)`,
-    `Cartera en riesgo: ${p.par_pct}%`,
-    "",
-    `Cobrado en el mes: ${money(m.collected_amount)} de ${money(m.goal_amount)} de meta` +
-      (m.effectiveness_pct != null ? ` (${m.effectiveness_pct}%)` : ""),
-  ];
-  const pending = data.agenda?.promises?.length || 0;
-  if (pending) lines.push(`Promesas de pago pendientes: ${pending}`);
-  return lines.filter((l) => l !== undefined).join("\n");
-}
-
-function Row({ label, value, color }) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={[styles.value, color ? { color } : null]}>{value}</Text>
-    </View>
-  );
-}
-
-function Tile({ label, value, tone }) {
-  const palette = {
-    danger: { bg: COLORS.dangerSoft, fg: COLORS.danger },
-    success: { bg: COLORS.successSoft, fg: COLORS.success },
-    primary: { bg: COLORS.primarySoft, fg: COLORS.primary },
-    warning: { bg: COLORS.warningSoft, fg: COLORS.warning },
-  }[tone || "primary"];
-  return (
-    <View style={[styles.tile, { backgroundColor: palette.bg }]}>
-      <Text style={[styles.tileLabel, { color: palette.fg }]}>{label}</Text>
-      <Text variant="titleMedium" style={[styles.tileValue, { color: palette.fg }]}>{value}</Text>
-    </View>
-  );
-}
-
 // "Mi productividad": cómo va la cartera del cobrador (saldo, mora,
 // vencidos, riesgo, cobrado, efectividad, gestiones). Todo viene calculado
 // del backend (GET /api/collections/my-productivity) a partir de las mismas
@@ -144,6 +100,9 @@ export default function ProductivityScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [sharing, setSharing] = useState(false);
+  const summaryShotRef = useRef(null);
+  const logoUrl = useTenantLogo(session?.token);
 
   const load = useCallback(
     async (isRefresh = false) => {
@@ -180,11 +139,21 @@ export default function ProductivityScreen() {
       params: { screen: "AccountStatement", params: { loanId } },
     });
 
+  // Se comparte como IMAGEN del resumen de arriba (la hoja nativa de compartir
+  // ofrece WhatsApp, correo, etc.), igual que el estado de cuenta.
   const onShareSummary = async () => {
     try {
-      await Share.share({ message: buildDaySummaryText({ tenantName, collectorName, data }) });
-    } catch {
-      // El usuario cerró la hoja de compartir o el dispositivo no puede: no es un error para mostrar.
+      setSharing(true);
+      if (!(await Sharing.isAvailableAsync())) {
+        setError("Este dispositivo no permite compartir archivos.");
+        return;
+      }
+      const uri = await captureRef(summaryShotRef, { format: "png", quality: 0.95 });
+      await Sharing.shareAsync(uri, { mimeType: "image/png", dialogTitle: "Resumen del día" });
+    } catch (e) {
+      setError(e?.message ?? "No se pudo generar la imagen para compartir");
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -216,8 +185,43 @@ export default function ProductivityScreen() {
 
         {data && linked && (
           <>
-            <Button mode="contained-tonal" icon="whatsapp" onPress={onShareSummary} style={{ borderRadius: RADIUS.md }}>
-              Compartir resumen del día
+            <ViewShot
+              ref={summaryShotRef}
+              options={{ format: "png", quality: 0.95 }}
+              style={{ gap: SPACING.md, backgroundColor: COLORS.bg }}
+            >
+              <ShareCardHeader
+                logoUrl={logoUrl}
+                tenantName={tenantName}
+                title="Resumen del día"
+                lines={[`Fecha: ${data.as_of}`, collectorName ? `Cobrador: ${collectorName}` : ""]}
+              />
+              <View style={styles.card}>
+                <Row label="Cobrado hoy" value={`${money(t.collected_amount)} (${t.payments_count} pagos)`} color={COLORS.success} />
+                <Row label="Gestiones / visitas hoy" value={`${t.actions} / ${t.visits}`} />
+                <Row label="Saldo de cartera" value={money(p.principal_balance)} />
+                <Row
+                  label="En mora"
+                  value={`${money(p.overdue_amount)} (${p.loans_overdue} de ${p.loans_count} créditos)`}
+                  color={COLORS.danger}
+                />
+                <Row label="Cartera en riesgo" value={`${p.par_pct}%`} color={p.par_pct > 10 ? COLORS.danger : undefined} />
+                <Row
+                  label="Meta del mes"
+                  value={`${money(m.collected_amount)} de ${money(m.goal_amount)}${m.effectiveness_pct != null ? ` (${m.effectiveness_pct}%)` : ""}`}
+                />
+                {agenda.promises.length > 0 && <Row label="Promesas de pago pendientes" value={String(agenda.promises.length)} />}
+              </View>
+            </ViewShot>
+            <Button
+              mode="contained-tonal"
+              icon="whatsapp"
+              onPress={onShareSummary}
+              loading={sharing}
+              disabled={sharing}
+              style={{ borderRadius: RADIUS.md }}
+            >
+              Compartir resumen del día (imagen)
             </Button>
 
             <View style={styles.tiles}>
