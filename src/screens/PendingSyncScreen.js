@@ -18,6 +18,7 @@ const TYPE_LABEL = {
   CUSTOMER_DOCUMENT: "Documento de cliente",
   CUSTOMER_LOCATION: "Ubicación de cliente",
   VISIT: "Visita de cobranza",
+  PAYMENT_EVIDENCE: "Foto o firma de un pago",
 };
 
 const styles = StyleSheet.create({

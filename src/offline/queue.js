@@ -15,7 +15,7 @@ async function writeAll(items) {
   await AsyncStorage.setItem(KEY, JSON.stringify(items));
 }
 
-// item: { type: 'PAYMENT'|'GUARANTEE_PHOTO'|'CUSTOMER_DOCUMENT'|'CUSTOMER_LOCATION'|'VISIT', payload, label }
+// item: { type: 'PAYMENT'|'GUARANTEE_PHOTO'|'CUSTOMER_DOCUMENT'|'CUSTOMER_LOCATION'|'VISIT'|'PAYMENT_EVIDENCE', payload, label }
 // `label` es un texto corto para mostrar en la lista de pendientes.
 export async function enqueue(item) {
   const items = await readAll();

@@ -22,8 +22,12 @@ import { SessionContext } from "../auth/SessionContext";
 import { searchCustomers } from "../api/customerApi";
 import { getCustomerActiveLoans, getLoanDetail } from "../api/loanApi";
 import { getPaymentMethods, simulatePayment, createPayment } from "../api/paymentApi";
+import { uploadPaymentEvidence } from "../api/paymentEvidenceApi";
 import { isNetworkError } from "../api/credimasterClient";
 import { enqueue } from "../offline/queue";
+import { persistLocalFile } from "../offline/filePersist";
+import { pickImage } from "../utils/imagePicker";
+import SignatureModal from "../components/SignatureModal";
 import { useSync } from "../offline/SyncProvider";
 import { useBusinessDayStatus } from "../hooks/useBusinessDayStatus";
 import { useTenantLogo } from "../hooks/useTenantLogo";
@@ -127,6 +131,9 @@ export default function PaymentsScreen({ route }) {
   const [result, setResult] = useState(null);
   const [sharing, setSharing] = useState(false);
   const receiptShotRef = useRef(null);
+  const [evidence, setEvidence] = useState({}); // { PHOTO: "sent"|"queued", SIGNATURE: ... }
+  const [evidenceBusy, setEvidenceBusy] = useState(null);
+  const [signatureVisible, setSignatureVisible] = useState(false);
 
   const businessDayStatus = useBusinessDayStatus(session.token, loan?.branch_id, session?.user?.branches);
   const logoUrl = useTenantLogo(session.token);
@@ -198,6 +205,9 @@ export default function PaymentsScreen({ route }) {
     setMethodId(null);
     setBreakdown(null);
     setResult(null);
+    setEvidence({});
+    setEvidenceBusy(null);
+    setSignatureVisible(false);
   };
 
   const onSearchChange = async (text) => {
@@ -309,7 +319,7 @@ export default function PaymentsScreen({ route }) {
               payload: { ...payload, client_reference_id: clientReferenceId },
             });
             refreshPendingCount();
-            setResult({ pendingOffline: true });
+            setResult({ pendingOffline: true, clientReferenceId });
             setStep(3);
           },
           { confirmText: "Guardar" },
@@ -320,6 +330,60 @@ export default function PaymentsScreen({ route }) {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Guarda la evidencia (foto o firma) del cobro recién hecho. Pago en línea:
+  // se sube con su payment_id y, si no hay señal, se encola. Pago encolado
+  // sin conexión: se encola con su client_reference_id (el servidor la
+  // asocia cuando el pago ya exista, ver paymentEvidenceController.js).
+  const attachEvidence = async (kind, file) => {
+    if (!file) return;
+    setError("");
+    setEvidenceBusy(kind);
+    const ids = result?.pendingOffline
+      ? { client_reference_id: result.clientReferenceId }
+      : { payment_id: result?.payment_id };
+    const queueIt = async () => {
+      const stableUri = await persistLocalFile(file.uri, file.name);
+      await enqueue({
+        type: "PAYMENT_EVIDENCE",
+        label: `${kind === "SIGNATURE" ? "Firma" : "Foto"} del pago — crédito #${loan?.id || loan?.loan_id}`,
+        payload: { ...ids, kind, file: { ...file, uri: stableUri } },
+      });
+      refreshPendingCount();
+      setEvidence((e) => ({ ...e, [kind]: "queued" }));
+    };
+    try {
+      if (result?.pendingOffline) {
+        await queueIt();
+      } else {
+        try {
+          await uploadPaymentEvidence(session.token, { file, kind, ...ids });
+          setEvidence((e) => ({ ...e, [kind]: "sent" }));
+        } catch (e) {
+          if (!isNetworkError(e)) throw e;
+          await queueIt();
+        }
+      }
+    } catch (e) {
+      setError(e?.message ?? "No se pudo guardar la evidencia");
+    } finally {
+      setEvidenceBusy(null);
+    }
+  };
+
+  const onAddPhoto = async () => {
+    try {
+      const file = await pickImage();
+      await attachEvidence("PHOTO", file);
+    } catch (e) {
+      setError(e?.message ?? "No se pudo obtener la foto");
+    }
+  };
+
+  const onSaveSignature = async (file) => {
+    setSignatureVisible(false);
+    await attachEvidence("SIGNATURE", file);
   };
 
   const onShareReceipt = async () => {
@@ -681,6 +745,33 @@ export default function PaymentsScreen({ route }) {
 
             <HelperText type="error" visible={!!error}>{error}</HelperText>
 
+            <View style={styles.card}>
+              <Text style={{ fontWeight: "800", color: COLORS.text }}>Respaldo del cobro</Text>
+              <Text style={styles.muted}>Opcional: una foto o la firma del cliente quedan guardadas junto al pago.</Text>
+              <View style={{ flexDirection: "row", gap: SPACING.xs, marginTop: SPACING.xs }}>
+                <Button
+                  mode={evidence.PHOTO ? "contained-tonal" : "outlined"}
+                  icon={evidence.PHOTO ? "check" : "camera-outline"}
+                  onPress={onAddPhoto}
+                  disabled={!!evidenceBusy || !!evidence.PHOTO}
+                  loading={evidenceBusy === "PHOTO"}
+                  style={{ flex: 1, borderRadius: RADIUS.md }}
+                >
+                  {evidence.PHOTO === "queued" ? "Foto (pendiente)" : evidence.PHOTO ? "Foto guardada" : "Foto"}
+                </Button>
+                <Button
+                  mode={evidence.SIGNATURE ? "contained-tonal" : "outlined"}
+                  icon={evidence.SIGNATURE ? "check" : "draw"}
+                  onPress={() => setSignatureVisible(true)}
+                  disabled={!!evidenceBusy || !!evidence.SIGNATURE}
+                  loading={evidenceBusy === "SIGNATURE"}
+                  style={{ flex: 1, borderRadius: RADIUS.md }}
+                >
+                  {evidence.SIGNATURE === "queued" ? "Firma (pendiente)" : evidence.SIGNATURE ? "Firma guardada" : "Firma"}
+                </Button>
+              </View>
+            </View>
+
             <Button
               mode="outlined"
               icon="share-variant"
@@ -711,6 +802,7 @@ export default function PaymentsScreen({ route }) {
 
         <Divider style={{ marginTop: SPACING.lg, opacity: 0 }} />
       </ScrollView>
+      <SignatureModal visible={signatureVisible} onDismiss={() => setSignatureVisible(false)} onSave={onSaveSignature} />
     </SafeAreaView>
   );
 }

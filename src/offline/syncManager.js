@@ -3,6 +3,7 @@ import { uploadGuaranteePhoto } from "../api/guaranteePhotoApi";
 import { uploadCustomerDocument } from "../api/customerDocumentApi";
 import { saveCustomerLocation } from "../api/customerApi";
 import { logVisit } from "../api/collectionsApi";
+import { uploadPaymentEvidence } from "../api/paymentEvidenceApi";
 import { isNetworkError } from "../api/credimasterClient";
 import { listQueue, removeFromQueue, updateQueueItem, clearQueue } from "./queue";
 import { deletePersistedFile } from "./filePersist";
@@ -21,6 +22,10 @@ function processItem(token, item) {
       return saveCustomerLocation(token, item.payload.customerId, item.payload.fullCustomer, item.payload.location);
     case "VISIT":
       return logVisit(token, item.payload);
+    case "PAYMENT_EVIDENCE":
+      // Se encola DESPUÉS del pago (misma cola, en orden), identificada por el
+      // client_reference_id del pago o por su payment_id si ya estaba registrado.
+      return uploadPaymentEvidence(token, item.payload);
     default:
       return Promise.reject(new Error(`Tipo de acción pendiente desconocido: ${item.type}`));
   }
