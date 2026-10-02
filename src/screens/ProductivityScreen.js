@@ -13,6 +13,8 @@ import { openDirections } from "../utils/maps";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import ShareCardHeader from "../components/ShareCardHeader";
 import AddressLines from "../components/AddressLines";
+import OfflineNotice from "../components/OfflineNotice";
+import { cachedFetch } from "../offline/cache";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -103,6 +105,7 @@ export default function ProductivityScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [sharing, setSharing] = useState(false);
+  const [cachedAt, setCachedAt] = useState(null);
   const summaryShotRef = useRef(null);
   const logoUrl = useTenantLogo(session?.token);
 
@@ -112,7 +115,9 @@ export default function ProductivityScreen() {
       else setLoading(true);
       setError("");
       try {
-        setData(await getMyProductivity(session.token));
+        const res = await cachedFetch(`${session.user.id}:productivity`, () => getMyProductivity(session.token));
+        setData(res.data);
+        setCachedAt(res.cachedAt);
       } catch (e) {
         setError(e?.message || "No se pudo cargar tu productividad. Revisá tu conexión.");
       } finally {
@@ -120,7 +125,7 @@ export default function ProductivityScreen() {
         setRefreshing(false);
       }
     },
-    [session.token],
+    [session.token, session.user.id],
   );
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -181,6 +186,7 @@ export default function ProductivityScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} />}
       >
+        <OfflineNotice cachedAt={cachedAt} />
         {loading && !data ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.xl }} /> : null}
         {!!error && <Text style={[styles.empty, { color: COLORS.danger }]}>{error}</Text>}
         {data && !linked && <Text style={styles.empty}>{data.message}</Text>}

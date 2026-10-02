@@ -6,6 +6,7 @@ import { setUnauthorizedHandler } from "../api/credimasterClient";
 import { registerPushToken, unregisterPushToken } from "../api/pushApi";
 import { registerForPushNotificationsAsync } from "../notifications/pushNotifications";
 import { cancelReminders } from "../notifications/reminders";
+import { clearCache } from "../offline/cache";
 import { queueCount } from "../offline/queue";
 import { discardQueue } from "../offline/syncManager";
 import { confirmAction } from "../utils/confirm";
@@ -113,6 +114,7 @@ export function SessionProvider({ children }) {
     await clearSession();
     await discardQueue();
     await cancelReminders();
+    await clearCache();
 
     if (token && !silent) {
       registerForPushNotificationsAsync()

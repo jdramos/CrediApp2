@@ -27,6 +27,8 @@ import { todayISO } from "../utils/date";
 import { ACTION_TYPES, RESULTS, STAGES } from "../utils/collectionsCatalog";
 import { openDirections } from "../utils/maps";
 import AddressLines from "../components/AddressLines";
+import OfflineNotice from "../components/OfflineNotice";
+import { cachedFetch, readCache } from "../offline/cache";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -85,6 +87,7 @@ export default function ClientPortfolioScreen() {
   const [savingGestion, setSavingGestion] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPromiseDatePicker, setShowPromiseDatePicker] = useState(false);
+  const [cachedAt, setCachedAt] = useState(null);
 
   const canLogVisit = session?.permissions?.includes("cobranza.gestionar");
 
@@ -92,15 +95,44 @@ export default function ClientPortfolioScreen() {
     try {
       setLoading(true);
       setError("");
-      const res = await getAssignedLoans(session.token, { search: search.trim() || undefined });
+      const q = search.trim();
+      const cacheKey = `${session.user.id}:portfolio`;
+      let res;
+      let stamp = null;
+      if (!q) {
+        // Cartera completa: se guarda para poder verla sin señal.
+        const r = await cachedFetch(cacheKey, () => getAssignedLoans(session.token));
+        res = r.data;
+        stamp = r.cachedAt;
+      } else {
+        try {
+          res = await getAssignedLoans(session.token, { search: q });
+        } catch (e) {
+          if (!isNetworkError(e)) throw e;
+          // Sin señal: se busca dentro de la última cartera guardada.
+          const cached = await readCache(cacheKey);
+          if (!cached) throw e;
+          const ql = q.toLowerCase();
+          res = {
+            ...cached.data,
+            data: (cached.data?.data || []).filter((l) =>
+              [l.customer_name, l.credit_code, l.customer_identification].some((v) =>
+                String(v || "").toLowerCase().includes(ql),
+              ),
+            ),
+          };
+          stamp = cached.cachedAt;
+        }
+      }
       setLoans(res?.data || []);
       setMessage(res?.message || "");
+      setCachedAt(stamp);
     } catch (e) {
       setError(e?.message ?? "Error cargando tu cartera");
     } finally {
       setLoading(false);
     }
-  }, [session.token, search]);
+  }, [session.token, session.user.id, search]);
 
   useFocusEffect(useCallback(() => { setManagedIds(new Set()); load(); }, [load]));
 
@@ -235,6 +267,9 @@ export default function ClientPortfolioScreen() {
         />
       </View>
 
+      <View style={{ marginHorizontal: SPACING.lg }}>
+        <OfflineNotice cachedAt={cachedAt} />
+      </View>
       <HelperText type="error" visible={!!error} style={{ marginHorizontal: SPACING.lg }}>{error}</HelperText>
       {loading && <ActivityIndicator style={{ marginTop: SPACING.lg }} />}
 

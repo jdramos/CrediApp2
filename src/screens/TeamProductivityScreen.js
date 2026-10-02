@@ -6,6 +6,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getTeamProductivity } from "../api/collectionsApi";
+import OfflineNotice from "../components/OfflineNotice";
+import { cachedFetch } from "../offline/cache";
 import { money } from "../utils/format";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
@@ -127,6 +129,7 @@ export default function TeamProductivityScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [cachedAt, setCachedAt] = useState(null);
 
   const load = useCallback(
     async (p, isRefresh = false) => {
@@ -134,7 +137,9 @@ export default function TeamProductivityScreen() {
       else setLoading(true);
       setError("");
       try {
-        setData(await getTeamProductivity(session.token, { period: p }));
+        const res = await cachedFetch(`${session.user.id}:team:${p}`, () => getTeamProductivity(session.token, { period: p }));
+        setData(res.data);
+        setCachedAt(res.cachedAt);
       } catch (e) {
         setError(e?.message || "No se pudo cargar el ranking. Revisá tu conexión.");
       } finally {
@@ -142,7 +147,7 @@ export default function TeamProductivityScreen() {
         setRefreshing(false);
       }
     },
-    [session.token],
+    [session.token, session.user.id],
   );
 
   useFocusEffect(useCallback(() => { load(period); }, [load, period]));
@@ -189,6 +194,7 @@ export default function TeamProductivityScreen() {
           ))}
         </View>
 
+        <OfflineNotice cachedAt={cachedAt} />
         {loading && !data ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.xl }} /> : null}
         {!!error && <Text style={[styles.empty, { color: COLORS.danger }]}>{error}</Text>}
 

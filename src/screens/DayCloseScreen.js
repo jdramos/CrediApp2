@@ -12,6 +12,8 @@ import { getMyDayClose } from "../api/collectionsApi";
 import { useSync } from "../offline/SyncProvider";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import ShareCardHeader from "../components/ShareCardHeader";
+import OfflineNotice from "../components/OfflineNotice";
+import { cachedFetch } from "../offline/cache";
 import PaymentEvidenceModal from "../components/PaymentEvidenceModal";
 import { money } from "../utils/format";
 import { todayISO } from "../utils/date";
@@ -93,6 +95,7 @@ export default function DayCloseScreen() {
   const [error, setError] = useState("");
   const [sharing, setSharing] = useState(false);
   const [evidenceFor, setEvidenceFor] = useState(null);
+  const [cachedAt, setCachedAt] = useState(null);
   const shotRef = useRef(null);
   const logoUrl = useTenantLogo(session?.token);
 
@@ -102,7 +105,9 @@ export default function DayCloseScreen() {
       else setLoading(true);
       setError("");
       try {
-        setData(await getMyDayClose(session.token, isoDate));
+        const res = await cachedFetch(`${session.user.id}:dayclose:${isoDate}`, () => getMyDayClose(session.token, isoDate));
+        setData(res.data);
+        setCachedAt(res.cachedAt);
       } catch (e) {
         setError(e?.message || "No se pudo cargar el cierre del día. Revisá tu conexión.");
       } finally {
@@ -110,7 +115,7 @@ export default function DayCloseScreen() {
         setRefreshing(false);
       }
     },
-    [session.token],
+    [session.token, session.user.id],
   );
 
   useFocusEffect(useCallback(() => { load(date); }, [load, date]));
@@ -164,6 +169,7 @@ export default function DayCloseScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(date, true)} />}
       >
+        <OfflineNotice cachedAt={cachedAt} />
         {loading && !data ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.xl }} /> : null}
         {!!error && <Text style={[styles.empty, { color: COLORS.danger }]}>{error}</Text>}
         {data && !linked && <Text style={styles.empty}>{data.message}</Text>}
