@@ -1,12 +1,13 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { View, StyleSheet, Alert, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Text, Avatar, List, Divider, Portal, Dialog, TextInput, Button, HelperText, Snackbar } from "react-native-paper";
+import { Text, Avatar, List, Divider, Portal, Dialog, TextInput, Button, HelperText, Snackbar, Switch } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { SessionContext } from "../auth/SessionContext";
 import { changePassword } from "../api/userApi";
 import { confirmAction } from "../utils/confirm";
+import { remindersEnabled, setRemindersEnabled, syncReminders } from "../notifications/reminders";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -61,6 +62,29 @@ export default function MoreScreen() {
   const [pwdError, setPwdError] = useState("");
   const [pwdSaving, setPwdSaving] = useState(false);
   const [snackbar, setSnackbar] = useState("");
+  const [remindersOn, setRemindersOn] = useState(true);
+  const canPay = session?.permissions?.includes("pagos.insertar") || session?.permissions?.includes("pagos.ver");
+
+  useEffect(() => {
+    remindersEnabled().then(setRemindersOn);
+  }, []);
+
+  const toggleReminders = async (value) => {
+    setRemindersOn(value);
+    await setRemindersEnabled(value);
+    if (!value) {
+      setSnackbar("Recordatorios desactivados");
+      return;
+    }
+    const res = await syncReminders(session.token, { force: true, requestPermission: true });
+    if (res.reason === "no-permission") {
+      setRemindersOn(false);
+      await setRemindersEnabled(false);
+      setSnackbar("Activá las notificaciones de la app en los ajustes del teléfono para recibir recordatorios");
+    } else {
+      setSnackbar(res.scheduled > 0 ? "Recordatorios activados" : "Recordatorios activados (no hay cobros próximos por avisar)");
+    }
+  };
 
   const onLogout = () => {
     Alert.alert("Cerrar sesión", "¿Seguro que deseas cerrar sesión?", [
@@ -129,6 +153,18 @@ export default function MoreScreen() {
             left={(props) => <List.Icon {...props} icon="office-building-outline" color={COLORS.primary} />}
           />
         </Animated.View>
+
+        {canPay && (
+          <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.card}>
+            <List.Item
+              title="Recordatorios de cobro"
+              description="Aviso a las 7:30 con lo que vence hoy y a las 6:00 pm con lo de mañana"
+              descriptionNumberOfLines={3}
+              left={(props) => <List.Icon {...props} icon="bell-ring-outline" color={COLORS.primary} />}
+              right={() => <Switch value={remindersOn} onValueChange={toggleReminders} />}
+            />
+          </Animated.View>
+        )}
 
         <Animated.View entering={FadeInDown.delay(120).springify()} style={styles.card}>
           <List.Item

@@ -17,6 +17,7 @@ import { getAssignedLoans } from "../api/collectionsApi";
 import { useSync } from "../offline/SyncProvider";
 import { useBusinessDayAlerts } from "../hooks/useBusinessDayStatus";
 import BusinessDayBanner from "../components/BusinessDayBanner";
+import { syncReminders } from "../notifications/reminders";
 import { money } from "../utils/format";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
@@ -123,6 +124,15 @@ export default function DashboardScreen() {
     }, [canPay, session.token]),
   );
 
+  // Recordatorios locales de cobro (mañana y tarde): se re-programan al abrir
+  // el inicio, con un límite de una vez cada 30 minutos (ver reminders.js).
+  useFocusEffect(
+    useCallback(() => {
+      if (!canPay) return;
+      syncReminders(session.token);
+    }, [canPay, session.token]),
+  );
+
   const onLogout = () => {
     Alert.alert("Cerrar sesión", "¿Seguro que deseas cerrar sesión?", [
       { text: "Cancelar", style: "cancel" },
@@ -191,6 +201,15 @@ export default function DashboardScreen() {
               subtitle="Cartera, mora y cobros"
               gradient={GRADIENTS.dark}
               onPress={() => navigation.navigate("Productivity")}
+            />
+          )}
+          {canPay && (
+            <ActionTile
+              icon="cash-register"
+              title="Cierre del día"
+              subtitle="Cobrado y efectivo a entregar"
+              gradient={GRADIENTS.success}
+              onPress={() => navigation.navigate("DayClose")}
             />
           )}
           {canCreateLoan && (

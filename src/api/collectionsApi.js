@@ -44,6 +44,17 @@ export const logVisit = (
     token,
   );
 
+// Cierre del día del cobrador (cobrado por forma de pago, efectivo a
+// entregar, custodia acumulada) — permiso pagos.ver. `date` YYYY-MM-DD,
+// opcional (default hoy).
+export const getMyDayClose = (token, date) =>
+  credimasterGet(`/api/collections/my-day-close${date ? `?date=${date}` : ""}`, token);
+
+// Cuotas que vencen y promesas por día, de hoy a hoy+N: alimenta los
+// recordatorios locales (notifications/reminders.js) — permiso pagos.ver.
+export const getMyReminders = (token, days = 7) =>
+  credimasterGet(`/api/collections/my-reminders?days=${days}`, token);
+
 // Historial de gestiones de un crédito de MI cartera, con el estado de
 // verificación GPS de cada visita — permiso pagos.ver (no cobranza.ver).
 export const getMyLoanActions = (token, loanId) =>

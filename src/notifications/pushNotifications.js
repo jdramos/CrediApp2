@@ -59,7 +59,10 @@ export async function registerForPushNotificationsAsync() {
 // listener vive fuera del árbol de React Navigation.
 export function handleNotificationResponse(response, navigationRef) {
   const data = response?.notification?.request?.content?.data;
-  if (data?.type === "APPROVAL_ASSIGNED" && navigationRef?.isReady()) {
+  if (!navigationRef?.isReady()) return;
+  if (data?.type === "APPROVAL_ASSIGNED") {
     navigationRef.navigate("App", { screen: "Creditos", params: { screen: "ApprovalInbox" } });
+  } else if (data?.type === "REMINDER_DAY") {
+    navigationRef.navigate("Productivity");
   }
 }

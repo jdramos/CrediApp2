@@ -1,0 +1,139 @@
+import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from "expo-notifications";
+import { getMyReminders } from "../api/collectionsApi";
+import { money } from "../utils/format";
+
+// Recordatorios de cobro LOCALES: la app programa en el propio dispositivo
+// (no hay servidor de push de por medio) una notificación por la mañana con
+// lo que vence/promete HOY y otra por la tarde con lo de MAÑANA. Se calculan
+// con GET /api/collections/my-reminders y se re-programan cada vez que la app
+// abre, así que reflejan los pagos recién hechos; entre aperturas funcionan
+// aunque no haya señal. También sirven en Expo Go (a diferencia del push
+// remoto en Android).
+
+const ENABLED_KEY = "reminders.enabled";
+const LAST_SYNC_KEY = "reminders.lastSyncAt";
+const CHANNEL_ID = "reminders";
+const MIN_RESYNC_MS = 30 * 60 * 1000;
+
+const MORNING = { hour: 7, minute: 30 };
+const EVENING = { hour: 18, minute: 0 };
+
+// Por defecto activados: es un recordatorio de trabajo, y el usuario los
+// puede apagar desde "Más".
+export async function remindersEnabled() {
+  try {
+    return (await AsyncStorage.getItem(ENABLED_KEY)) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export async function setRemindersEnabled(enabled) {
+  try {
+    await AsyncStorage.setItem(ENABLED_KEY, enabled ? "1" : "0");
+    if (!enabled) await AsyncStorage.removeItem(LAST_SYNC_KEY);
+  } catch {
+    // sin almacenamiento: el cambio vale solo por esta apertura
+  }
+  if (!enabled) await cancelReminders();
+}
+
+// Se llama al cerrar sesión: las notificaciones programadas traen datos de la
+// cartera de quien las programó y no deben sobrevivir a su sesión.
+export async function cancelReminders() {
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+  } catch {
+    // best-effort
+  }
+}
+
+async function ensurePermission(request) {
+  try {
+    let { status } = await Notifications.getPermissionsAsync();
+    if (status !== "granted" && request) {
+      ({ status } = await Notifications.requestPermissionsAsync());
+    }
+    return status === "granted";
+  } catch {
+    return false;
+  }
+}
+
+const atTime = (isoDay, { hour, minute }) => {
+  const [y, m, d] = isoDay.split("-").map(Number);
+  return new Date(y, m - 1, d, hour, minute, 0, 0);
+};
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+function buildBody(day) {
+  const parts = [];
+  if (day.due_loans > 0) parts.push(`${plural(day.due_loans, "cuota", "cuotas")} por ${money(day.due_amount)}`);
+  if (day.promises > 0) {
+    parts.push(`${plural(day.promises, "promesa de pago", "promesas de pago")} por ${money(day.promises_amount)}`);
+  }
+  return parts.join(" y ");
+}
+
+// Re-programa los recordatorios de los próximos días. `force` salta el
+// límite de una vez cada 30 minutos (al encender el interruptor en "Más").
+// `requestPermission` pide el permiso del sistema si todavía no se otorgó.
+// Devuelve { ok, scheduled, reason } -- nunca lanza.
+export async function syncReminders(token, { force = false, requestPermission = false } = {}) {
+  try {
+    if (!token) return { ok: false, scheduled: 0, reason: "no-session" };
+    if (!(await remindersEnabled())) return { ok: true, scheduled: 0, reason: "disabled" };
+
+    if (!force) {
+      const last = Number(await AsyncStorage.getItem(LAST_SYNC_KEY)) || 0;
+      if (Date.now() - last < MIN_RESYNC_MS) return { ok: true, scheduled: 0, reason: "recent" };
+    }
+
+    if (!(await ensurePermission(requestPermission))) return { ok: false, scheduled: 0, reason: "no-permission" };
+
+    const res = await getMyReminders(token);
+    if (!res?.linked) return { ok: true, scheduled: 0, reason: "not-linked" };
+    const days = res.days || [];
+
+    if (Platform.OS === "android") {
+      await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
+        name: "Recordatorios de cobro",
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
+    }
+
+    // Se parte de cero: lo programado antes quedó viejo respecto a los datos
+    // que acaban de llegar.
+    await Notifications.cancelAllScheduledNotificationsAsync();
+
+    const now = new Date();
+    let scheduled = 0;
+    const schedule = async (date, title, body) => {
+      if (date <= now) return;
+      await Notifications.scheduleNotificationAsync({
+        content: { title, body, data: { type: "REMINDER_DAY" } },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date, channelId: CHANNEL_ID },
+      });
+      scheduled += 1;
+    };
+
+    for (let i = 0; i < days.length; i += 1) {
+      const day = days[i];
+      const today = buildBody(day);
+      if (today) await schedule(atTime(day.date, MORNING), "Cobros de hoy", today);
+
+      const tomorrow = days[i + 1] ? buildBody(days[i + 1]) : "";
+      if (tomorrow) {
+        await schedule(atTime(day.date, EVENING), "Mañana en tu cartera", `${tomorrow}. Revisá también tu cierre del día.`);
+      }
+    }
+
+    await AsyncStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
+    return { ok: true, scheduled };
+  } catch (e) {
+    return { ok: false, scheduled: 0, reason: e?.message || "error" };
+  }
+}
