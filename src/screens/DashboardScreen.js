@@ -88,6 +88,7 @@ export default function DashboardScreen() {
   const canApprove = session?.permissions?.includes("aprobaciones.ver");
   const canCreateLoan = session?.permissions?.includes("creditos.insertar");
   const canPay = session?.permissions?.includes("pagos.insertar") || session?.permissions?.includes("pagos.ver");
+  const canSupervise = session?.permissions?.includes("creditos.productividad.ver");
   const canViewCustomers = session?.permissions?.includes("clientes.ver");
 
   const fullName = session?.user?.full_name || session?.user?.user_name || "Usuario";
@@ -210,6 +211,15 @@ export default function DashboardScreen() {
               subtitle="Cobrado y efectivo a entregar"
               gradient={GRADIENTS.success}
               onPress={() => navigation.navigate("DayClose")}
+            />
+          )}
+          {canSupervise && (
+            <ActionTile
+              icon="account-supervisor-outline"
+              title="Supervisión"
+              subtitle="Ranking de cobradores"
+              gradient={GRADIENTS.primary}
+              onPress={() => navigation.navigate("TeamProductivity")}
             />
           )}
           {canCreateLoan && (

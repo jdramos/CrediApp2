@@ -7,6 +7,7 @@ import LoginScreen from "../screens/LoginScreen";
 import PendingSyncScreen from "../screens/PendingSyncScreen";
 import ProductivityScreen from "../screens/ProductivityScreen";
 import DayCloseScreen from "../screens/DayCloseScreen";
+import TeamProductivityScreen from "../screens/TeamProductivityScreen";
 import AppTabs from "./AppTabs";
 import { ActivityIndicator } from "react-native-paper";
 import { View } from "react-native";
@@ -45,6 +46,7 @@ export default function AppNavigator() {
             <Stack.Screen name="PendingSync" component={PendingSyncScreen} options={{ presentation: "modal" }} />
             <Stack.Screen name="Productivity" component={ProductivityScreen} />
             <Stack.Screen name="DayClose" component={DayCloseScreen} />
+            <Stack.Screen name="TeamProductivity" component={TeamProductivityScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

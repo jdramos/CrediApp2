@@ -44,6 +44,16 @@ export const logVisit = (
     token,
   );
 
+// Vista de supervisor: ranking de cobradores de MIS sucursales (cobrado vs
+// meta, mora, riesgo, visitas) — permiso creditos.productividad.ver.
+// `period`: today | week | month (default month).
+export const getTeamProductivity = (token, { period, branch_id } = {}) => {
+  const qs = new URLSearchParams(
+    Object.entries({ period, branch_id }).filter(([, v]) => v !== undefined && v !== null && v !== ""),
+  ).toString();
+  return credimasterGet(`/api/collections/team-productivity${qs ? `?${qs}` : ""}`, token);
+};
+
 // Cierre del día del cobrador (cobrado por forma de pago, efectivo a
 // entregar, custodia acumulada) — permiso pagos.ver. `date` YYYY-MM-DD,
 // opcional (default hoy).
