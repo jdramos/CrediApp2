@@ -1,18 +1,25 @@
 import React, { useCallback, useContext, useState } from "react";
 import { View, StyleSheet, ScrollView, RefreshControl, Image, Linking, Alert, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Text, Button, Chip, ActivityIndicator, HelperText, Portal, Modal } from "react-native-paper";
+import { Text, TextInput, Button, Chip, ActivityIndicator, HelperText, Portal, Modal } from "react-native-paper";
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { isNetworkError } from "../api/credimasterClient";
-import { getCustomerChecklist, uploadCustomerDocument, getCustomerDocumentUrl } from "../api/customerDocumentApi";
+import {
+  getCustomerChecklist,
+  uploadCustomerDocument,
+  getCustomerDocumentUrl,
+  deleteCustomerDocument,
+} from "../api/customerDocumentApi";
+import { getCustomer, saveCustomerGuarantees } from "../api/customerApi";
 import { getCustomerGuarantees } from "../api/guaranteesApi";
-import { listGuaranteePhotos, uploadGuaranteePhoto } from "../api/guaranteePhotoApi";
+import { listGuaranteePhotos, uploadGuaranteePhoto, deleteGuaranteePhoto } from "../api/guaranteePhotoApi";
 import { enqueue } from "../offline/queue";
 import { persistLocalFile } from "../offline/filePersist";
 import { useSync } from "../offline/SyncProvider";
 import { pickImage } from "../utils/imagePicker";
-import { money } from "../utils/format";
+import { confirmAction } from "../utils/confirm";
+import { money, toNumber } from "../utils/format";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -60,6 +67,11 @@ export default function CustomerFileScreen() {
   const canSeeDocs = perms.includes("clientes.documentos.ver");
   const canSeeGuarantees = perms.includes("garantias.ver");
   const canPhotoGuarantee = perms.includes("garantias.insertar");
+  // Crear una garantía es, en el backend, un PUT del cliente (ver
+  // saveCustomerGuarantees), por eso pide clientes.editar y no garantias.insertar.
+  const canCreateGuarantee = perms.includes("clientes.editar");
+  const canDeleteDoc = perms.includes("clientes.documentos.eliminar");
+  const canDeletePhoto = perms.includes("garantias.eliminar");
 
   const [checklist, setChecklist] = useState([]);
   const [guarantees, setGuarantees] = useState([]);
@@ -68,7 +80,13 @@ export default function CustomerFileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(null); // clave de lo que se está subiendo
-  const [viewer, setViewer] = useState(null); // { title, url }
+  const [viewer, setViewer] = useState(null); // { title, url, photoId? }
+  const [showAddGuarantee, setShowAddGuarantee] = useState(false);
+  const [savingGuarantee, setSavingGuarantee] = useState(false);
+  const [newArticle, setNewArticle] = useState("");
+  const [newBrand, setNewBrand] = useState("");
+  const [newSeries, setNewSeries] = useState("");
+  const [newValue, setNewValue] = useState("");
 
   const load = useCallback(
     async (isRefresh = false) => {
@@ -194,6 +212,99 @@ export default function CustomerFileScreen() {
     }
   };
 
+  const onDeleteDocument = (item) => {
+    confirmAction(
+      "Eliminar documento",
+      `¿Eliminar "${item.document_name || item.title}" del expediente? ${
+        item.is_mandatory ? "Como es obligatorio, el ítem vuelve a quedar pendiente." : ""
+      }`,
+      async () => {
+        setBusy(`del-${item.code}`);
+        setError("");
+        try {
+          await deleteCustomerDocument(session.token, item.document_id);
+          await load(true);
+        } catch (e) {
+          setError(e?.message ?? "No se pudo eliminar el documento");
+        } finally {
+          setBusy(null);
+        }
+      },
+      { confirmText: "Eliminar", destructive: true },
+    );
+  };
+
+  const onDeletePhoto = () => {
+    const v = viewer;
+    if (!v?.photoId) return;
+    confirmAction(
+      "Eliminar foto",
+      "¿Eliminar esta foto de la garantía? No se puede deshacer.",
+      async () => {
+        setBusy(`delphoto-${v.photoId}`);
+        setError("");
+        try {
+          await deleteGuaranteePhoto(session.token, v.photoId);
+          setViewer(null);
+          await load(true);
+        } catch (e) {
+          setError(e?.message ?? "No se pudo eliminar la foto");
+        } finally {
+          setBusy(null);
+        }
+      },
+      { confirmText: "Eliminar", destructive: true },
+    );
+  };
+
+  // Mismo guardado que la pantalla de nueva solicitud: el backend espera la
+  // lista COMPLETA de garantías del cliente (existentes + la nueva) dentro de
+  // un PUT del cliente completo.
+  const saveGuarantee = async () => {
+    try {
+      setSavingGuarantee(true);
+      setError("");
+      const fullRes = await getCustomer(session.token, customerId);
+      const fullCustomer = fullRes?.data?.customer;
+      const existing = guarantees.map((g) => ({
+        id: g.id,
+        article: g.article,
+        series: g.series,
+        brand: g.brand,
+        value: g.value,
+      }));
+      const created = {
+        article: newArticle.trim() || null,
+        series: newSeries.trim() || null,
+        brand: newBrand.trim() || null,
+        value: toNumber(newValue) || null,
+      };
+      await saveCustomerGuarantees(session.token, customerId, fullCustomer, [...existing, created]);
+      setNewArticle("");
+      setNewBrand("");
+      setNewSeries("");
+      setNewValue("");
+      setShowAddGuarantee(false);
+      await load(true);
+    } catch (e) {
+      setError(e?.message ?? "No se pudo agregar la garantía");
+    } finally {
+      setSavingGuarantee(false);
+    }
+  };
+
+  const addGuarantee = () => {
+    if (!newArticle.trim() && !newBrand.trim() && !toNumber(newValue)) {
+      Alert.alert("Falta información", "Ingresá al menos el artículo o el valor de la garantía.");
+      return;
+    }
+    confirmAction(
+      "Agregar garantía",
+      `¿Guardar "${newArticle.trim() || newBrand.trim() || "esta garantía"}" en el expediente del cliente?`,
+      saveGuarantee,
+    );
+  };
+
   const onPhotoGuarantee = async (g) => {
     const file = await pick();
     if (!file) return;
@@ -269,6 +380,19 @@ export default function CustomerFileScreen() {
                       Ver
                     </Button>
                   )}
+                  {canDeleteDoc && !!item.document_id && (
+                    <Button
+                      compact
+                      mode="outlined"
+                      icon="delete-outline"
+                      textColor={COLORS.danger}
+                      onPress={() => onDeleteDocument(item)}
+                      loading={busy === `del-${item.code}`}
+                      disabled={busy !== null}
+                    >
+                      Eliminar
+                    </Button>
+                  )}
                 </View>
               </View>
             ))}
@@ -291,6 +415,17 @@ export default function CustomerFileScreen() {
           <>
             <Text style={styles.sectionTitle}>Garantías</Text>
             {guarantees.length === 0 && <Text style={styles.muted}>Este cliente no tiene garantías registradas.</Text>}
+            {canCreateGuarantee && (
+              <Button
+                mode="outlined"
+                icon="plus"
+                onPress={() => setShowAddGuarantee(true)}
+                disabled={busy !== null}
+                style={{ borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+              >
+                Agregar garantía
+              </Button>
+            )}
             {guarantees.map((g) => {
               const list = photos[g.id] || [];
               return (
@@ -303,7 +438,7 @@ export default function CustomerFileScreen() {
                   {list.length > 0 ? (
                     <View style={styles.thumbs}>
                       {list.map((p) => (
-                        <Pressable key={p.id} onPress={() => setViewer({ title: g.article, url: p.url })}>
+                        <Pressable key={p.id} onPress={() => setViewer({ title: g.article, url: p.url, photoId: p.id })}>
                           <Image source={{ uri: p.url }} style={styles.thumb} resizeMode="cover" />
                         </Pressable>
                       ))}
@@ -341,7 +476,71 @@ export default function CustomerFileScreen() {
         <Modal visible={!!viewer} onDismiss={() => setViewer(null)} contentContainerStyle={styles.modal}>
           <Text variant="titleMedium" style={styles.title}>{viewer?.title}</Text>
           {!!viewer && <Image source={{ uri: viewer.url }} style={styles.viewerImage} resizeMode="contain" />}
-          <Button onPress={() => setViewer(null)} style={{ marginTop: SPACING.sm }}>Cerrar</Button>
+          <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: SPACING.xs, marginTop: SPACING.sm }}>
+            {canDeletePhoto && !!viewer?.photoId && (
+              <Button
+                icon="delete-outline"
+                textColor={COLORS.danger}
+                onPress={onDeletePhoto}
+                loading={busy === `delphoto-${viewer.photoId}`}
+                disabled={busy !== null}
+              >
+                Eliminar foto
+              </Button>
+            )}
+            <Button onPress={() => setViewer(null)}>Cerrar</Button>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={showAddGuarantee}
+          onDismiss={() => setShowAddGuarantee(false)}
+          contentContainerStyle={styles.modal}
+        >
+          <Text variant="titleMedium" style={[styles.title, { marginBottom: SPACING.sm }]}>Nueva garantía</Text>
+          <TextInput
+            mode="outlined"
+            label="Artículo"
+            value={newArticle}
+            onChangeText={setNewArticle}
+            style={{ backgroundColor: COLORS.card, marginBottom: SPACING.sm }}
+            outlineStyle={{ borderRadius: RADIUS.md }}
+          />
+          <TextInput
+            mode="outlined"
+            label="Marca (opcional)"
+            value={newBrand}
+            onChangeText={setNewBrand}
+            style={{ backgroundColor: COLORS.card, marginBottom: SPACING.sm }}
+            outlineStyle={{ borderRadius: RADIUS.md }}
+          />
+          <TextInput
+            mode="outlined"
+            label="Serie (opcional)"
+            value={newSeries}
+            onChangeText={setNewSeries}
+            style={{ backgroundColor: COLORS.card, marginBottom: SPACING.sm }}
+            outlineStyle={{ borderRadius: RADIUS.md }}
+          />
+          <TextInput
+            mode="outlined"
+            label="Valor estimado"
+            value={newValue}
+            onChangeText={setNewValue}
+            keyboardType="decimal-pad"
+            style={{ backgroundColor: COLORS.card }}
+            outlineStyle={{ borderRadius: RADIUS.md }}
+            left={<TextInput.Icon icon="cash" />}
+          />
+          <Button
+            mode="contained"
+            onPress={addGuarantee}
+            loading={savingGuarantee}
+            disabled={savingGuarantee}
+            style={{ marginTop: SPACING.md, borderRadius: RADIUS.md }}
+          >
+            Guardar garantía
+          </Button>
         </Modal>
       </Portal>
     </SafeAreaView>
