@@ -1,4 +1,6 @@
-import * as FileSystem from "expo-file-system";
+// En SDK 54+ la API clásica (getInfoAsync, copyAsync, etc.) salió del import
+// principal y ahí LANZA un error en tiempo de ejecución; vive en /legacy.
+import * as FileSystem from "expo-file-system/legacy";
 
 // Las fotos que devuelve expo-image-picker viven en un caché que el
 // sistema operativo puede purgar en cualquier momento -- si se van a
