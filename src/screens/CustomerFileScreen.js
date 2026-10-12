@@ -13,6 +13,7 @@ import { enqueue } from "../offline/queue";
 import { persistLocalFile } from "../offline/filePersist";
 import { useSync } from "../offline/SyncProvider";
 import { pickImage } from "../utils/imagePicker";
+import { buildPdfFromPhotos } from "../utils/pdfFromPhotos";
 import { confirmAction } from "../utils/confirm";
 import { money, toNumber } from "../utils/format";
 import { COLORS } from "../theme/colors";
@@ -39,8 +40,8 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: SPACING.xs, marginTop: SPACING.xs, flexWrap: "wrap" },
   thumbs: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginTop: SPACING.xs },
   thumb: { width: 72, height: 72, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, backgroundColor: "#fff" },
-  modal: { backgroundColor: COLORS.card, margin: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.md, maxHeight: "88%" },
-  viewerImage: { width: "100%", height: 420, borderRadius: RADIUS.md, backgroundColor: "#fff" },
+  modal: { backgroundColor: COLORS.card, margin: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.md, maxHeight: "92%" },
+  viewerImage: { width: "100%", height: 320, borderRadius: RADIUS.md, backgroundColor: "#fff" },
 });
 
 const isOk = (status) => String(status || "").toUpperCase() === "OK";
@@ -77,7 +78,9 @@ export default function CustomerFileScreen() {
   // Foto elegida que todavía NO se guardó: se puede cambiar por otra antes de
   // guardarla "definitivamente". Una vez guardada ya no se puede reemplazar
   // ni eliminar desde la app.
-  const [draft, setDraft] = useState(null); // { title, file, save(file), itemCode? }
+  // `files` son las páginas (fotos); los documentos admiten varias y se juntan en
+  // un solo PDF al guardar (`multi`); las fotos de garantía son una sola.
+  const [draft, setDraft] = useState(null); // { title, files, multi, save(file), itemCode? }
   // Ítems del checklist cuyo documento quedó EN COLA (sin señal): ya no se
   // ofrece "Subir" de nuevo, para no encolar el mismo documento dos veces.
   const [queuedCodes, setQueuedCodes] = useState([]);
@@ -161,25 +164,46 @@ export default function CustomerFileScreen() {
     }
   };
 
-  // Paso 1: elegir la foto (cámara o galería) y mostrarla para revisarla.
-  const startDraft = async (title, save, itemCode) => {
+  // Paso 1: elegir la primera foto (cámara o galería) y mostrarla para revisarla.
+  const startDraft = async (title, save, itemCode, { multi = false } = {}) => {
     const file = await pick();
     if (!file) return;
     setError("");
-    setDraft({ title, file, save, itemCode });
+    setDraft({ title, files: [file], multi, save, itemCode });
   };
 
-  // "Tomar / elegir otra": reemplaza la foto elegida, siempre ANTES de guardar.
-  const retakeDraft = async () => {
+  // Páginas: agregar otra, reemplazar una o quitar una -- todo ANTES de guardar.
+  const addPage = async () => {
     const file = await pick();
-    if (file) setDraft((d) => (d ? { ...d, file } : d));
+    if (file) setDraft((d) => (d ? { ...d, files: [...d.files, file] } : d));
+  };
+  const replacePage = async (index) => {
+    const file = await pick();
+    if (file) setDraft((d) => (d ? { ...d, files: d.files.map((f, i) => (i === index ? file : f)) } : d));
+  };
+  const removePage = (index) => {
+    setDraft((d) => (d && d.files.length > 1 ? { ...d, files: d.files.filter((_, i) => i !== index) } : d));
   };
 
-  // Paso 2: guardar definitivamente (sube, o encola si no hay señal).
+  // Paso 2: guardar definitivamente. Con una sola foto se sube tal cual; con
+  // varias se arma un PDF de varias páginas y se sube ese.
   const confirmDraft = async () => {
     const d = draft;
-    if (!d) return;
-    const result = await d.save(d.file);
+    if (!d || !d.files.length) return;
+    let fileToSave = d.files[0];
+    if (d.files.length > 1) {
+      setBusy("draft");
+      setError("");
+      try {
+        fileToSave = await buildPdfFromPhotos(d.files, "documento");
+      } catch (e) {
+        setError(e?.message ?? "No se pudo armar el documento de varias páginas");
+        setBusy(null);
+        return;
+      }
+      setBusy(null);
+    }
+    const result = await d.save(fileToSave);
     if (result) {
       setDraft(null);
       if (result === "queued" && d.itemCode) setQueuedCodes((c) => [...c, d.itemCode]);
@@ -201,6 +225,7 @@ export default function CustomerFileScreen() {
         queuedMessage: "El documento se guardó en el equipo y se subirá solo cuando vuelva la señal.",
       }),
       item.code,
+      { multi: true },
     );
   };
 
@@ -217,6 +242,8 @@ export default function CustomerFileScreen() {
         },
         queuedMessage: "El documento se guardó en el equipo y se subirá solo cuando vuelva la señal.",
       }),
+      undefined,
+      { multi: true },
     );
   };
 
@@ -450,16 +477,43 @@ export default function CustomerFileScreen() {
         <Modal visible={!!draft} onDismiss={() => busy === null && setDraft(null)} contentContainerStyle={styles.modal}>
           <Text variant="titleMedium" style={styles.title}>Revisá antes de guardar</Text>
           <Text style={styles.muted}>{draft?.title}</Text>
-          {!!draft && <Image source={{ uri: draft.file.uri }} style={styles.viewerImage} resizeMode="contain" />}
+          <ScrollView style={{ maxHeight: 380 }}>
+            {(draft?.files || []).map((f, i) => (
+              <View key={`${f.uri}-${i}`} style={{ marginTop: SPACING.sm }}>
+                {draft.multi && <Text style={styles.muted}>Página {i + 1} de {draft.files.length}</Text>}
+                <Image source={{ uri: f.uri }} style={styles.viewerImage} resizeMode="contain" />
+                <View style={{ flexDirection: "row", gap: SPACING.xs, marginTop: SPACING.xs }}>
+                  <Button compact icon="camera-retake-outline" onPress={() => replacePage(i)} disabled={busy !== null}>
+                    Tomar / elegir otra
+                  </Button>
+                  {draft.files.length > 1 && (
+                    <Button compact icon="close" textColor={COLORS.danger} onPress={() => removePage(i)} disabled={busy !== null}>
+                      Quitar página
+                    </Button>
+                  )}
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+          {!!draft?.multi && (
+            <Button
+              mode="outlined"
+              icon="plus"
+              onPress={addPage}
+              disabled={busy !== null}
+              style={{ marginTop: SPACING.sm, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+            >
+              Agregar otra página
+            </Button>
+          )}
           <Text style={[styles.muted, { marginTop: SPACING.sm }]}>
-            Si no se ve bien, tomá o elegí otra. Una vez guardada queda definitiva: no se puede reemplazar ni eliminar
-            desde la app.
+            {draft?.multi && draft.files.length > 1
+              ? `Se guardará como un solo documento PDF de ${draft.files.length} páginas. `
+              : ""}
+            Una vez guardado queda definitivo: no se puede reemplazar ni eliminar desde la app.
           </Text>
           <HelperText type="error" visible={!!error}>{error}</HelperText>
           <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", gap: SPACING.xs }}>
-            <Button icon="camera-retake-outline" onPress={retakeDraft} disabled={busy !== null}>
-              Tomar / elegir otra
-            </Button>
             <Button onPress={() => setDraft(null)} disabled={busy !== null}>Cancelar</Button>
             <Button mode="contained" icon="content-save-outline" onPress={confirmDraft} loading={busy === "draft"} disabled={busy !== null}>
               Guardar definitivamente
