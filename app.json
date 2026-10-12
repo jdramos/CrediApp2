@@ -9,7 +9,7 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "CrediApp usa tu ubicación para registrar la casa y el negocio del cliente.",
+        "NSLocationWhenInUseUsageDescription": "CrediApp usa tu ubicación para registrar la casa y el negocio del cliente, verificar tus visitas y, si iniciás la jornada, registrar tu ruta del día.",
         "NSCameraUsageDescription": "CrediApp usa la cámara para fotografiar garantías y documentos del cliente.",
         "NSPhotoLibraryUsageDescription": "CrediApp accede a tus fotos para adjuntar imágenes de garantías y documentos del cliente.",
         "ITSAppUsesNonExemptEncryption": false
