@@ -74,6 +74,13 @@ export default function CustomerFileScreen() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(null); // clave de lo que se está subiendo
   const [viewer, setViewer] = useState(null); // { title, url }
+  // Foto elegida que todavía NO se guardó: se puede cambiar por otra antes de
+  // guardarla "definitivamente". Una vez guardada ya no se puede reemplazar
+  // ni eliminar desde la app.
+  const [draft, setDraft] = useState(null); // { title, file, save(file), itemCode? }
+  // Ítems del checklist cuyo documento quedó EN COLA (sin señal): ya no se
+  // ofrece "Subir" de nuevo, para no encolar el mismo documento dos veces.
+  const [queuedCodes, setQueuedCodes] = useState([]);
   const [showAddGuarantee, setShowAddGuarantee] = useState(false);
   const [savingGuarantee, setSavingGuarantee] = useState(false);
   const [newArticle, setNewArticle] = useState("");
@@ -154,38 +161,63 @@ export default function CustomerFileScreen() {
     }
   };
 
-  const onUploadDocument = async (item) => {
+  // Paso 1: elegir la foto (cámara o galería) y mostrarla para revisarla.
+  const startDraft = async (title, save, itemCode) => {
     const file = await pick();
     if (!file) return;
-    const options = { docType: "OTRO", docName: item.title, relatedItemCode: item.code };
-    const result = await uploadOrQueue({
-      key: `doc-${item.code}`,
-      run: () => uploadCustomerDocument(session.token, customerId, file, options),
-      queueItem: {
-        type: "CUSTOMER_DOCUMENT",
-        label: `Documento: ${item.title}`,
-        payload: { customerId, file, options },
-      },
-      queuedMessage: "El documento se guardó en el equipo y se subirá solo cuando vuelva la señal.",
-    });
-    if (result === "sent") load(true);
+    setError("");
+    setDraft({ title, file, save, itemCode });
   };
 
-  const onUploadOther = async () => {
+  // "Tomar / elegir otra": reemplaza la foto elegida, siempre ANTES de guardar.
+  const retakeDraft = async () => {
     const file = await pick();
-    if (!file) return;
+    if (file) setDraft((d) => (d ? { ...d, file } : d));
+  };
+
+  // Paso 2: guardar definitivamente (sube, o encola si no hay señal).
+  const confirmDraft = async () => {
+    const d = draft;
+    if (!d) return;
+    const result = await d.save(d.file);
+    if (result) {
+      setDraft(null);
+      if (result === "queued" && d.itemCode) setQueuedCodes((c) => [...c, d.itemCode]);
+      if (result === "sent") load(true);
+    }
+  };
+
+  const onUploadDocument = (item) => {
+    const options = { docType: "OTRO", docName: item.title, relatedItemCode: item.code };
+    startDraft(item.title, (file) =>
+      uploadOrQueue({
+        key: "draft",
+        run: () => uploadCustomerDocument(session.token, customerId, file, options),
+        queueItem: {
+          type: "CUSTOMER_DOCUMENT",
+          label: `Documento: ${item.title}`,
+          payload: { customerId, file, options },
+        },
+        queuedMessage: "El documento se guardó en el equipo y se subirá solo cuando vuelva la señal.",
+      }),
+      item.code,
+    );
+  };
+
+  const onUploadOther = () => {
     const options = { docType: "OTRO", docName: "Documento adicional", relatedItemCode: "OTHER_DOC" };
-    const result = await uploadOrQueue({
-      key: "doc-other",
-      run: () => uploadCustomerDocument(session.token, customerId, file, options),
-      queueItem: {
-        type: "CUSTOMER_DOCUMENT",
-        label: "Documento adicional del expediente",
-        payload: { customerId, file, options },
-      },
-      queuedMessage: "El documento se guardó en el equipo y se subirá solo cuando vuelva la señal.",
-    });
-    if (result === "sent") Alert.alert("Listo", "El documento se subió al expediente.");
+    startDraft("Documento adicional", (file) =>
+      uploadOrQueue({
+        key: "draft",
+        run: () => uploadCustomerDocument(session.token, customerId, file, options),
+        queueItem: {
+          type: "CUSTOMER_DOCUMENT",
+          label: "Documento adicional del expediente",
+          payload: { customerId, file, options },
+        },
+        queuedMessage: "El documento se guardó en el equipo y se subirá solo cuando vuelva la señal.",
+      }),
+    );
   };
 
   const onViewDocument = async (item) => {
@@ -253,20 +285,19 @@ export default function CustomerFileScreen() {
     );
   };
 
-  const onPhotoGuarantee = async (g) => {
-    const file = await pick();
-    if (!file) return;
-    const result = await uploadOrQueue({
-      key: `gar-${g.id}`,
-      run: () => uploadGuaranteePhoto(session.token, g.id, file),
-      queueItem: {
-        type: "GUARANTEE_PHOTO",
-        label: `Foto de garantía #${g.id}`,
-        payload: { guaranteeId: g.id, file },
-      },
-      queuedMessage: "La foto se guardó en el equipo y se subirá sola cuando vuelva la señal.",
-    });
-    if (result === "sent") load(true);
+  const onPhotoGuarantee = (g) => {
+    startDraft(`Foto de la garantía: ${g.article}`, (file) =>
+      uploadOrQueue({
+        key: "draft",
+        run: () => uploadGuaranteePhoto(session.token, g.id, file),
+        queueItem: {
+          type: "GUARANTEE_PHOTO",
+          label: `Foto de garantía #${g.id}`,
+          payload: { guaranteeId: g.id, file },
+        },
+        queuedMessage: "La foto se guardó en el equipo y se subirá sola cuando vuelva la señal.",
+      }),
+    );
   };
 
   return (
@@ -302,18 +333,20 @@ export default function CustomerFileScreen() {
                     {isOk(item.status) ? "Entregado" : "Pendiente"}
                   </Chip>
                   {!!item.document_name && <Text style={styles.muted} numberOfLines={1}>{item.document_name}</Text>}
+                  {queuedCodes.includes(item.code) && !item.document_id && (
+                    <Text style={styles.muted}>En cola: se enviará cuando haya señal</Text>
+                  )}
                 </View>
                 <View style={styles.actions}>
-                  {canUploadDoc && (
+                  {canUploadDoc && !item.document_id && !queuedCodes.includes(item.code) && (
                     <Button
                       compact
-                      mode={isOk(item.status) ? "outlined" : "contained"}
+                      mode="contained"
                       icon="camera-outline"
                       onPress={() => onUploadDocument(item)}
-                      loading={busy === `doc-${item.code}`}
                       disabled={busy !== null}
                     >
-                      {item.document_id ? "Reemplazar" : "Subir"}
+                      Subir
                     </Button>
                   )}
                   {canSeeDocs && !!item.document_id && (
@@ -336,7 +369,6 @@ export default function CustomerFileScreen() {
                 mode="outlined"
                 icon="file-plus-outline"
                 onPress={onUploadOther}
-                loading={busy === "doc-other"}
                 disabled={busy !== null}
                 style={{ borderRadius: RADIUS.md, alignSelf: "flex-start" }}
               >
@@ -388,7 +420,6 @@ export default function CustomerFileScreen() {
                         mode="contained"
                         icon="camera-plus-outline"
                         onPress={() => onPhotoGuarantee(g)}
-                        loading={busy === `gar-${g.id}`}
                         disabled={busy !== null}
                       >
                         Agregar foto
@@ -413,6 +444,26 @@ export default function CustomerFileScreen() {
           {!!viewer && <Image source={{ uri: viewer.url }} style={styles.viewerImage} resizeMode="contain" />}
           <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: SPACING.xs, marginTop: SPACING.sm }}>
             <Button onPress={() => setViewer(null)}>Cerrar</Button>
+          </View>
+        </Modal>
+
+        <Modal visible={!!draft} onDismiss={() => busy === null && setDraft(null)} contentContainerStyle={styles.modal}>
+          <Text variant="titleMedium" style={styles.title}>Revisá antes de guardar</Text>
+          <Text style={styles.muted}>{draft?.title}</Text>
+          {!!draft && <Image source={{ uri: draft.file.uri }} style={styles.viewerImage} resizeMode="contain" />}
+          <Text style={[styles.muted, { marginTop: SPACING.sm }]}>
+            Si no se ve bien, tomá o elegí otra. Una vez guardada queda definitiva: no se puede reemplazar ni eliminar
+            desde la app.
+          </Text>
+          <HelperText type="error" visible={!!error}>{error}</HelperText>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", gap: SPACING.xs }}>
+            <Button icon="camera-retake-outline" onPress={retakeDraft} disabled={busy !== null}>
+              Tomar / elegir otra
+            </Button>
+            <Button onPress={() => setDraft(null)} disabled={busy !== null}>Cancelar</Button>
+            <Button mode="contained" icon="content-save-outline" onPress={confirmDraft} loading={busy === "draft"} disabled={busy !== null}>
+              Guardar definitivamente
+            </Button>
           </View>
         </Modal>
 
