@@ -15,3 +15,8 @@ export const uploadCustomerDocument = (token, customerId, file, { docType, docNa
     buildImageFormData(file, { doc_type: docType, doc_name: docName, related_item_code: relatedItemCode }),
     token,
   );
+
+// URL temporal (2 min) para ver/descargar un documento ya subido, con su tipo
+// (mime_type) — permiso clientes.documentos.ver.
+export const getCustomerDocumentUrl = (token, documentId) =>
+  credimasterGet(`/api/customer-files/documents/${documentId}/download-url`, token);

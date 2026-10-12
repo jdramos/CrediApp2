@@ -64,6 +64,9 @@ export default function CustomerDetailScreen({ route, navigation }) {
   const { customerId } = route.params;
   const { session } = useContext(SessionContext);
   const canViewLoans = session?.permissions?.includes("creditos.ver");
+  const canOpenFile = ["clientes.checklist.ver", "clientes.documentos.subir", "garantias.ver", "garantias.insertar"].some(
+    (p) => session?.permissions?.includes(p),
+  );
 
   const [customer, setCustomer] = useState(null);
   const [loans, setLoans] = useState([]);
@@ -142,6 +145,16 @@ export default function CustomerDetailScreen({ route, navigation }) {
           >
             Ver / editar ubicación
           </Button>
+          {canOpenFile && (
+            <Button
+              mode="outlined"
+              icon="folder-image"
+              onPress={() => navigation.navigate("CustomerFile", { customerId, customerName: customer?.customer_name })}
+              style={{ marginTop: SPACING.sm, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+            >
+              Expediente y garantías (fotos)
+            </Button>
+          )}
         </View>
 
         {canViewLoans && (

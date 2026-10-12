@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import CustomerSearchScreen from "../screens/CustomerSearchScreen";
 import CustomerDetailScreen from "../screens/CustomerDetailScreen";
 import CustomerLocationScreen from "../screens/CustomerLocationScreen";
+import CustomerFileScreen from "../screens/CustomerFileScreen";
 import LoanDetailScreen from "../screens/LoanDetailScreen";
 
 const Stack = createNativeStackNavigator();
@@ -27,6 +28,11 @@ export default function CustomerStackNavigator() {
         name="CustomerLocation"
         component={CustomerLocationScreen}
         options={{ title: "Ubicación del cliente" }}
+      />
+      <Stack.Screen
+        name="CustomerFile"
+        component={CustomerFileScreen}
+        options={{ title: "Expediente y garantías" }}
       />
       <Stack.Screen
         name="LoanDetail"
