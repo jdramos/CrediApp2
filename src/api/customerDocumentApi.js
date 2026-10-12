@@ -1,4 +1,4 @@
-import { credimasterGet, credimasterUpload, credimasterDelete } from "./credimasterClient";
+import { credimasterGet, credimasterUpload } from "./credimasterClient";
 import { buildImageFormData } from "../utils/imagePicker";
 
 // Checklist de expediente documental del cliente — permiso
@@ -20,9 +20,3 @@ export const uploadCustomerDocument = (token, customerId, file, { docType, docNa
 // (mime_type) — permiso clientes.documentos.ver.
 export const getCustomerDocumentUrl = (token, documentId) =>
   credimasterGet(`/api/customer-files/documents/${documentId}/download-url`, token);
-
-// Elimina un documento del expediente (y lo borra del almacenamiento); si era
-// el único de su ítem del checklist, el ítem vuelve a pendiente — permiso
-// clientes.documentos.eliminar.
-export const deleteCustomerDocument = (token, documentId) =>
-  credimasterDelete(`/api/customer-files/documents/${documentId}`, token);

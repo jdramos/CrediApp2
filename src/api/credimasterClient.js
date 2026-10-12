@@ -63,7 +63,6 @@ export function isNetworkError(err) {
 export const credimasterGet = (path, token) => request("GET", path, { token });
 export const credimasterPost = (path, body, token) => request("POST", path, { body, token });
 export const credimasterPut = (path, body, token) => request("PUT", path, { body, token });
-export const credimasterDelete = (path, token) => request("DELETE", path, { token });
 
 // Subida de archivos (multipart/form-data) — NO fijar Content-Type a mano,
 // fetch de React Native arma el boundary solo si se lo dejamos.

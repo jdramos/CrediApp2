@@ -5,15 +5,10 @@ import { Text, TextInput, Button, Chip, ActivityIndicator, HelperText, Portal, M
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { isNetworkError } from "../api/credimasterClient";
-import {
-  getCustomerChecklist,
-  uploadCustomerDocument,
-  getCustomerDocumentUrl,
-  deleteCustomerDocument,
-} from "../api/customerDocumentApi";
+import { getCustomerChecklist, uploadCustomerDocument, getCustomerDocumentUrl } from "../api/customerDocumentApi";
 import { getCustomer, saveCustomerGuarantees } from "../api/customerApi";
 import { getCustomerGuarantees } from "../api/guaranteesApi";
-import { listGuaranteePhotos, uploadGuaranteePhoto, deleteGuaranteePhoto } from "../api/guaranteePhotoApi";
+import { listGuaranteePhotos, uploadGuaranteePhoto } from "../api/guaranteePhotoApi";
 import { enqueue } from "../offline/queue";
 import { persistLocalFile } from "../offline/filePersist";
 import { useSync } from "../offline/SyncProvider";
@@ -70,8 +65,6 @@ export default function CustomerFileScreen() {
   // Crear una garantía es, en el backend, un PUT del cliente (ver
   // saveCustomerGuarantees), por eso pide clientes.editar y no garantias.insertar.
   const canCreateGuarantee = perms.includes("clientes.editar");
-  const canDeleteDoc = perms.includes("clientes.documentos.eliminar");
-  const canDeletePhoto = perms.includes("garantias.eliminar");
 
   const [checklist, setChecklist] = useState([]);
   const [guarantees, setGuarantees] = useState([]);
@@ -80,7 +73,7 @@ export default function CustomerFileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(null); // clave de lo que se está subiendo
-  const [viewer, setViewer] = useState(null); // { title, url, photoId? }
+  const [viewer, setViewer] = useState(null); // { title, url }
   const [showAddGuarantee, setShowAddGuarantee] = useState(false);
   const [savingGuarantee, setSavingGuarantee] = useState(false);
   const [newArticle, setNewArticle] = useState("");
@@ -212,51 +205,6 @@ export default function CustomerFileScreen() {
     }
   };
 
-  const onDeleteDocument = (item) => {
-    confirmAction(
-      "Eliminar documento",
-      `¿Eliminar "${item.document_name || item.title}" del expediente? ${
-        item.is_mandatory ? "Como es obligatorio, el ítem vuelve a quedar pendiente." : ""
-      }`,
-      async () => {
-        setBusy(`del-${item.code}`);
-        setError("");
-        try {
-          await deleteCustomerDocument(session.token, item.document_id);
-          await load(true);
-        } catch (e) {
-          setError(e?.message ?? "No se pudo eliminar el documento");
-        } finally {
-          setBusy(null);
-        }
-      },
-      { confirmText: "Eliminar", destructive: true },
-    );
-  };
-
-  const onDeletePhoto = () => {
-    const v = viewer;
-    if (!v?.photoId) return;
-    confirmAction(
-      "Eliminar foto",
-      "¿Eliminar esta foto de la garantía? No se puede deshacer.",
-      async () => {
-        setBusy(`delphoto-${v.photoId}`);
-        setError("");
-        try {
-          await deleteGuaranteePhoto(session.token, v.photoId);
-          setViewer(null);
-          await load(true);
-        } catch (e) {
-          setError(e?.message ?? "No se pudo eliminar la foto");
-        } finally {
-          setBusy(null);
-        }
-      },
-      { confirmText: "Eliminar", destructive: true },
-    );
-  };
-
   // Mismo guardado que la pantalla de nueva solicitud: el backend espera la
   // lista COMPLETA de garantías del cliente (existentes + la nueva) dentro de
   // un PUT del cliente completo.
@@ -380,19 +328,6 @@ export default function CustomerFileScreen() {
                       Ver
                     </Button>
                   )}
-                  {canDeleteDoc && !!item.document_id && (
-                    <Button
-                      compact
-                      mode="outlined"
-                      icon="delete-outline"
-                      textColor={COLORS.danger}
-                      onPress={() => onDeleteDocument(item)}
-                      loading={busy === `del-${item.code}`}
-                      disabled={busy !== null}
-                    >
-                      Eliminar
-                    </Button>
-                  )}
                 </View>
               </View>
             ))}
@@ -438,7 +373,7 @@ export default function CustomerFileScreen() {
                   {list.length > 0 ? (
                     <View style={styles.thumbs}>
                       {list.map((p) => (
-                        <Pressable key={p.id} onPress={() => setViewer({ title: g.article, url: p.url, photoId: p.id })}>
+                        <Pressable key={p.id} onPress={() => setViewer({ title: g.article, url: p.url })}>
                           <Image source={{ uri: p.url }} style={styles.thumb} resizeMode="cover" />
                         </Pressable>
                       ))}
@@ -477,17 +412,6 @@ export default function CustomerFileScreen() {
           <Text variant="titleMedium" style={styles.title}>{viewer?.title}</Text>
           {!!viewer && <Image source={{ uri: viewer.url }} style={styles.viewerImage} resizeMode="contain" />}
           <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: SPACING.xs, marginTop: SPACING.sm }}>
-            {canDeletePhoto && !!viewer?.photoId && (
-              <Button
-                icon="delete-outline"
-                textColor={COLORS.danger}
-                onPress={onDeletePhoto}
-                loading={busy === `delphoto-${viewer.photoId}`}
-                disabled={busy !== null}
-              >
-                Eliminar foto
-              </Button>
-            )}
             <Button onPress={() => setViewer(null)}>Cerrar</Button>
           </View>
         </Modal>
