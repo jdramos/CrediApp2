@@ -7,6 +7,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getTeamProductivity } from "../api/collectionsApi";
+import { getMissingWorkdayToday } from "../api/trackingApi";
 import OfflineNotice from "../components/OfflineNotice";
 import { cachedFetch } from "../offline/cache";
 import { money } from "../utils/format";
@@ -81,6 +82,16 @@ const styles = StyleSheet.create({
     gap: SPACING.xs,
   },
   alertTitle: { color: COLORS.danger, fontWeight: "800", flex: 1 },
+  missingBox: {
+    backgroundColor: COLORS.warningSoft,
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    gap: SPACING.xs,
+  },
+  missingTitle: { color: COLORS.warning, fontWeight: "800", flex: 1 },
+  missingRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: SPACING.sm },
   alertRow: { flexDirection: "row", alignItems: "center", gap: SPACING.sm, paddingVertical: SPACING.xs },
   alertName: { color: COLORS.text, fontWeight: "700", flex: 1 },
   alertCount: { color: COLORS.danger, fontWeight: "700" },
@@ -144,6 +155,8 @@ export default function TeamProductivityScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [cachedAt, setCachedAt] = useState(null);
+  // Con actividad hoy y sin jornada iniciada (aviso "sin ruta"); vacío si no hay o no se pudo consultar
+  const [missingToday, setMissingToday] = useState([]);
 
   const load = useCallback(
     async (p, isRefresh = false) => {
@@ -154,6 +167,11 @@ export default function TeamProductivityScreen() {
         const res = await cachedFetch(`${session.user.id}:team:${p}`, () => getTeamProductivity(session.token, { period: p }));
         setData(res.data);
         setCachedAt(res.cachedAt);
+        // Best-effort: pide el permiso rastreo.ver (distinto de el de este ranking) y
+        // necesita señal; si falla, simplemente no se muestra el aviso.
+        getMissingWorkdayToday(session.token)
+          .then((r) => setMissingToday(r?.data || []))
+          .catch(() => setMissingToday([]));
       } catch (e) {
         setError(e?.message || "No se pudo cargar el ranking. Revisá tu conexión.");
       } finally {
@@ -213,6 +231,27 @@ export default function TeamProductivityScreen() {
         <OfflineNotice cachedAt={cachedAt} />
         {loading && !data ? <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.xl }} /> : null}
         {!!error && <Text style={[styles.empty, { color: COLORS.danger }]}>{error}</Text>}
+
+        {missingToday.length > 0 && (
+          <View style={styles.missingBox}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: SPACING.xs }}>
+              <MaterialCommunityIcons name="map-marker-off" size={18} color={COLORS.warning} />
+              <Text style={styles.missingTitle}>
+                {missingToday.length} cobrador{missingToday.length === 1 ? "" : "es"} con actividad hoy sin jornada iniciada
+              </Text>
+            </View>
+            <Text style={styles.muted}>Cobraron o registraron gestiones, pero no iniciaron su ruta del día.</Text>
+            {missingToday.map((u) => (
+              <View key={u.user_id} style={styles.missingRow}>
+                <Text style={styles.alertName} numberOfLines={1}>{u.user_name}</Text>
+                <Text style={styles.muted}>
+                  {u.payments_count} pago{u.payments_count === 1 ? "" : "s"} · {u.actions_count} gestion
+                  {u.actions_count === 1 ? "" : "es"}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {flagged.length > 0 && (
           <View style={styles.alertBox}>
