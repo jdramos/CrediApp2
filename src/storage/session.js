@@ -1,9 +1,17 @@
+import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 
 const TOKEN_KEY = "APP_SESSION_TOKEN_V1";
 const REST_KEY = "APP_SESSION_REST_V1";
 const LEGACY_KEY = "APP_SESSION_V1"; // esquema viejo: todo en un solo JSON sin cifrar
+
+// expo-secure-store no tiene implementación en web (no hay keystore/keychain
+// del navegador) -- ahí se usa AsyncStorage también para el token, igual que
+// el resto de la sesión. En iOS/Android el comportamiento no cambia.
+const TokenStore = Platform.OS === "web"
+  ? { setItemAsync: AsyncStorage.setItem, getItemAsync: AsyncStorage.getItem, deleteItemAsync: AsyncStorage.removeItem }
+  : SecureStore;
 
 // El JWT es la credencial real -- va cifrado en el keystore/keychain del
 // dispositivo vía SecureStore. El resto de la sesión (permisos, datos del
@@ -13,12 +21,12 @@ const LEGACY_KEY = "APP_SESSION_V1"; // esquema viejo: todo en un solo JSON sin 
 // AsyncStorage sin cifrar.
 export async function saveSession(session) {
   const { token, ...rest } = session;
-  await SecureStore.setItemAsync(TOKEN_KEY, token);
+  await TokenStore.setItemAsync(TOKEN_KEY, token);
   await AsyncStorage.setItem(REST_KEY, JSON.stringify(rest));
 }
 
 export async function loadSession() {
-  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  const token = await TokenStore.getItemAsync(TOKEN_KEY);
   if (token) {
     const raw = await AsyncStorage.getItem(REST_KEY);
     return { token, ...(raw ? JSON.parse(raw) : {}) };
@@ -36,7 +44,7 @@ export async function loadSession() {
 }
 
 export async function clearSession() {
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await TokenStore.deleteItemAsync(TOKEN_KEY);
   await AsyncStorage.removeItem(REST_KEY);
   await AsyncStorage.removeItem(LEGACY_KEY);
 }
