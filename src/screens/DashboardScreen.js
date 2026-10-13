@@ -103,6 +103,7 @@ export default function DashboardScreen() {
   const canCreateLoan = session?.permissions?.includes("creditos.insertar");
   const canPay = session?.permissions?.includes("pagos.insertar") || session?.permissions?.includes("pagos.ver");
   const canSupervise = session?.permissions?.includes("creditos.productividad.ver");
+  const canSeeRoutes = session?.permissions?.includes("rastreo.ver");
   const canViewCustomers = session?.permissions?.includes("clientes.ver");
 
   const logoUrl = useTenantLogo(session?.token);
@@ -256,6 +257,15 @@ export default function DashboardScreen() {
               subtitle="Ranking de cobradores"
               gradient={GRADIENTS.primary}
               onPress={() => navigation.navigate("TeamProductivity")}
+            />
+          )}
+          {canSeeRoutes && (
+            <ActionTile
+              icon="map-marker-path"
+              title="Rutas del día"
+              subtitle="Dónde estuvo cada cobrador"
+              gradient={GRADIENTS.dark}
+              onPress={() => navigation.navigate("RoutesDay")}
             />
           )}
           {canCreateLoan && (

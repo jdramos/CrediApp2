@@ -16,7 +16,7 @@ import OfflineNotice from "../components/OfflineNotice";
 import { cachedFetch } from "../offline/cache";
 import PaymentEvidenceModal from "../components/PaymentEvidenceModal";
 import { money } from "../utils/format";
-import { todayISO } from "../utils/date";
+import { todayISO, shiftDay } from "../utils/date";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -63,14 +63,6 @@ const styles = StyleSheet.create({
   warnText: { color: COLORS.warning, fontWeight: "600" },
   empty: { textAlign: "center", color: COLORS.muted, marginTop: SPACING.xl, paddingHorizontal: SPACING.xl },
 });
-
-// Mueve una fecha YYYY-MM-DD por días sin pasar por zonas horarias (mediodía
-// local evita que el cambio de horario o UTC corra el día).
-function shiftDay(iso, delta) {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(y, m - 1, d + delta, 12, 0, 0);
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
-}
 
 function Row({ label, value, color }) {
   return (
