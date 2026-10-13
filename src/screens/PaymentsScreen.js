@@ -29,6 +29,7 @@ import { persistLocalFile } from "../offline/filePersist";
 import { pickImage } from "../utils/imagePicker";
 import SignatureModal from "../components/SignatureModal";
 import AddressLines from "../components/AddressLines";
+import { ensureWorkday } from "../tracking/workday";
 import { useSync } from "../offline/SyncProvider";
 import { useBusinessDayStatus } from "../hooks/useBusinessDayStatus";
 import { useTenantLogo } from "../hooks/useTenantLogo";
@@ -426,7 +427,7 @@ export default function PaymentsScreen({ route }) {
     );
   };
 
-  const onConfirm = () => {
+  const onConfirm = async () => {
     setError("");
     const amt = toNumber(amount);
     if (!amt || amt <= 0) {
@@ -437,6 +438,9 @@ export default function PaymentsScreen({ route }) {
       setError("Seleccione una forma de pago");
       return;
     }
+    // Jornada obligatoria (ver tracking/workday.js): se pide DESPUÉS de validar
+    // los datos y ANTES de confirmar, para no interrumpir un formulario incompleto.
+    if (!(await ensureWorkday(session, "pagos"))) return;
     const methodName = methods.find((m) => m.id === methodId)?.name || "";
     confirmAction(
       "Confirmar pago",

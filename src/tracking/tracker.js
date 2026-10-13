@@ -124,6 +124,9 @@ export async function flushTracking() {
   if (!token) return;
   flushing = true;
   try {
+    // El aviso de inicio/fin de jornada pudo quedar pendiente por falta de señal:
+    // se reintenta aquí, porque ya hay un envío en marcha.
+    sendSessionMarkers().catch(() => {});
     const state = await readJson(STATE_KEY, null);
     // Los puntos son de quien inició la jornada: si hoy hay otro usuario en el
     // teléfono (la sesión anterior se cerró sin pasar por signOut), no se
@@ -282,6 +285,17 @@ export async function stopTracking() {
   emit();
   await flushTracking().catch(() => {});
   await sendSessionMarkers().catch(() => {});
+}
+
+// ¿Hay una jornada activa de ESTE usuario? Lee el estado guardado (no el
+// estado en memoria): sobrevive a que la app se cierre y reabra. Una jornada
+// de otro usuario o vencida (más de AUTO_STOP_MS) no cuenta.
+export async function isWorkdayActive() {
+  const state = await readJson(STATE_KEY, null);
+  if (!state?.active) return false;
+  const userId = sessionGetter()?.userId;
+  if (state.userId != null && userId != null && state.userId !== userId) return false;
+  return Date.now() - state.startedAt <= AUTO_STOP_MS;
 }
 
 // Al abrir la app: si la jornada seguía activa (la app se cerró), se retoma el

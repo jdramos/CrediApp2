@@ -82,6 +82,7 @@ export function SessionProvider({ children }) {
         full_name: res.full_name,
         role_id: res.role_id,
         department_id: res.department_id,
+        collector_id: res.collector_id ?? null,
         branches: res.branches || [],
       },
       tenant: res.tenant,

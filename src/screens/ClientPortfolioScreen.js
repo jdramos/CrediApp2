@@ -27,6 +27,7 @@ import { todayISO } from "../utils/date";
 import { ACTION_TYPES, RESULTS, STAGES } from "../utils/collectionsCatalog";
 import { openDirections } from "../utils/maps";
 import AddressLines from "../components/AddressLines";
+import { ensureWorkday } from "../tracking/workday";
 import OfflineNotice from "../components/OfflineNotice";
 import { cachedFetch, readCache } from "../offline/cache";
 import { COLORS } from "../theme/colors";
@@ -164,7 +165,9 @@ export default function ClientPortfolioScreen() {
     Linking.openURL(`tel:${phone}`).catch(() => {});
   };
 
-  const openGestion = (item) => {
+  const openGestion = async (item) => {
+    // Jornada obligatoria (ver tracking/workday.js).
+    if (!(await ensureWorkday(session, "gestiones y visitas"))) return;
     setGestionItem(item);
     setGestionForm(emptyGestionForm);
     setGestionError("");

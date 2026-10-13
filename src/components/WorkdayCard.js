@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useContext, useEffect, useState } from "react";
 import { View, StyleSheet, Alert } from "react-native";
 import { Text, Button } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { SessionContext } from "../auth/SessionContext";
+import { startWorkdayWithConsent, startFailureMessage, workdayRequired } from "../tracking/workday";
 import {
-  startTracking,
   stopTracking,
   flushTracking,
   resumeTrackingIfActive,
@@ -12,8 +12,6 @@ import {
 } from "../tracking/tracker";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
-
-const CONSENT_KEY = "TRACKING_CONSENT_V1";
 
 const styles = StyleSheet.create({
   card: {
@@ -37,16 +35,11 @@ const styles = StyleSheet.create({
 const formatTime = (ms) =>
   ms ? new Date(ms).toLocaleTimeString("es-NI", { hour: "numeric", minute: "2-digit" }) : "—";
 
-const CONSENT_TEXT =
-  "Mientras la jornada esté activa, la app registra tu ubicación cada medio minuto aproximadamente y la envía a la empresa.\n\n" +
-  "• Tus supervisores con permiso pueden ver tu ruta del día.\n" +
-  "• Solo se registra mientras la jornada está iniciada: la empezás y la terminás vos.\n" +
-  "• Los puntos se guardan 90 días.\n" +
-  "• La app debe estar abierta para registrar (con la pantalla encendida).";
-
 // Tarjeta "Mi jornada" del Inicio: inicia/termina el registro de la ruta del
 // día (ver tracking/tracker.js) y muestra cómo va.
 export default function WorkdayCard() {
+  const { session } = useContext(SessionContext);
+  const required = workdayRequired(session);
   const [st, setSt] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -58,48 +51,15 @@ export default function WorkdayCard() {
     return unsub;
   }, []);
 
-  const doStart = useCallback(async () => {
+  const onStart = async () => {
     setBusy(true);
     setError("");
     try {
-      const res = await startTracking();
-      if (!res.ok) {
-        setError(
-          res.reason === "no-permission"
-            ? "Necesito el permiso de ubicación para registrar tu ruta. Activalo en los ajustes del teléfono."
-            : "No se pudo iniciar el registro de la ruta.",
-        );
-      }
+      const res = await startWorkdayWithConsent();
+      if (!res.ok && res.reason !== "declined") setError(startFailureMessage(res.reason));
     } finally {
       setBusy(false);
     }
-  }, []);
-
-  const onStart = async () => {
-    let accepted = false;
-    try {
-      accepted = (await AsyncStorage.getItem(CONSENT_KEY)) === "1";
-    } catch {
-      // sin almacenamiento: se vuelve a preguntar
-    }
-    if (accepted) {
-      doStart();
-      return;
-    }
-    Alert.alert("Registrar tu ruta del día", CONSENT_TEXT, [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Entiendo, iniciar",
-        onPress: async () => {
-          try {
-            await AsyncStorage.setItem(CONSENT_KEY, "1");
-          } catch {
-            // se volverá a preguntar la próxima vez
-          }
-          doStart();
-        },
-      },
-    ]);
   };
 
   const onStop = () => {
@@ -183,7 +143,9 @@ export default function WorkdayCard() {
       ) : (
         <>
           <Text style={styles.muted}>
-            Iniciá tu jornada para que tu ruta del día quede registrada y tus supervisores puedan verla.
+            {required
+              ? "Tu jornada es obligatoria: sin iniciarla no podés registrar pagos ni gestiones. Funciona sin señal y se envía cuando vuelva la conexión."
+              : "Iniciá tu jornada para que tu ruta del día quede registrada y tus supervisores puedan verla."}
           </Text>
           <Button
             mode="contained"
