@@ -2,6 +2,8 @@ import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { getMyReminders } from "../api/collectionsApi";
+import { isWorkdayActive } from "../tracking/tracker";
+import { todayISO } from "../utils/date";
 import { money } from "../utils/format";
 
 // Recordatorios de cobro LOCALES: la app programa en el propio dispositivo
@@ -17,6 +19,7 @@ const LAST_SYNC_KEY = "reminders.lastSyncAt";
 const CHANNEL_ID = "reminders";
 const MIN_RESYNC_MS = 30 * 60 * 1000;
 
+const WORKDAY_MORNING = { hour: 7, minute: 15 };
 const MORNING = { hour: 7, minute: 30 };
 const EVENING = { hour: 18, minute: 0 };
 
@@ -78,11 +81,25 @@ function buildBody(day) {
   return parts.join(" y ");
 }
 
+const workdayReminderId = (isoDay) => `workday-${isoDay}`;
+
+// Cancela el aviso "Iniciá tu jornada" de HOY (se llama al iniciar la jornada,
+// para que no suene después de haberla iniciado). Nunca lanza.
+export async function cancelWorkdayReminderForToday() {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(workdayReminderId(todayISO()));
+  } catch {
+    // no estaba programado
+  }
+}
+
 // Re-programa los recordatorios de los próximos días. `force` salta el
 // límite de una vez cada 30 minutos (al encender el interruptor en "Más").
 // `requestPermission` pide el permiso del sistema si todavía no se otorgó.
+// `workday`: el usuario debe iniciar su jornada (ver tracking/workday.js), así que
+// además se programa un aviso a las 7:15, de lunes a sábado, para iniciarla.
 // Devuelve { ok, scheduled, reason } -- nunca lanza.
-export async function syncReminders(token, { force = false, requestPermission = false } = {}) {
+export async function syncReminders(token, { force = false, requestPermission = false, workday = false } = {}) {
   try {
     if (!token) return { ok: false, scheduled: 0, reason: "no-session" };
     if (!(await remindersEnabled())) return { ok: true, scheduled: 0, reason: "disabled" };
@@ -111,17 +128,36 @@ export async function syncReminders(token, { force = false, requestPermission = 
 
     const now = new Date();
     let scheduled = 0;
-    const schedule = async (date, title, body) => {
+    const schedule = async (date, title, body, { identifier, type = "REMINDER_DAY" } = {}) => {
       if (date <= now) return;
       await Notifications.scheduleNotificationAsync({
-        content: { title, body, data: { type: "REMINDER_DAY" } },
+        ...(identifier ? { identifier } : {}),
+        content: { title, body, data: { type } },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date, channelId: CHANNEL_ID },
       });
       scheduled += 1;
     };
 
+    // Si la jornada de hoy ya está iniciada, no se avisa para hoy.
+    const workdayActive = workday ? await isWorkdayActive() : false;
+
     for (let i = 0; i < days.length; i += 1) {
       const day = days[i];
+
+      if (workday) {
+        const [y, m, d] = day.date.split("-").map(Number);
+        const isSunday = new Date(y, m - 1, d).getDay() === 0;
+        const isToday = i === 0;
+        if (!isSunday && !(isToday && workdayActive)) {
+          await schedule(
+            atTime(day.date, WORKDAY_MORNING),
+            "Iniciá tu jornada",
+            "Para registrar pagos y gestiones tenés que iniciar tu jornada. Se registra tu ruta del día y funciona sin señal.",
+            { identifier: workdayReminderId(day.date), type: "WORKDAY_REMINDER" },
+          );
+        }
+      }
+
       const today = buildBody(day);
       if (today) await schedule(atTime(day.date, MORNING), "Cobros de hoy", today);
 

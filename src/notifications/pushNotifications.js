@@ -64,5 +64,8 @@ export function handleNotificationResponse(response, navigationRef) {
     navigationRef.navigate("App", { screen: "Creditos", params: { screen: "ApprovalInbox" } });
   } else if (data?.type === "REMINDER_DAY") {
     navigationRef.navigate("Productivity");
+  } else if (data?.type === "WORKDAY_REMINDER") {
+    // El botón "Iniciar jornada" está en el Inicio (tarjeta Mi jornada).
+    navigationRef.navigate("App", { screen: "Inicio" });
   }
 }

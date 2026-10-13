@@ -18,6 +18,7 @@ import { useSync } from "../offline/SyncProvider";
 import { useBusinessDayAlerts } from "../hooks/useBusinessDayStatus";
 import BusinessDayBanner from "../components/BusinessDayBanner";
 import { syncReminders } from "../notifications/reminders";
+import { workdayRequired } from "../tracking/workday";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import WorkdayCard from "../components/WorkdayCard";
 import { money } from "../utils/format";
@@ -38,6 +39,17 @@ const styles = StyleSheet.create({
   greeting: { color: COLORS.onGradientMuted, fontWeight: "600" },
   name: { color: COLORS.onGradient, fontWeight: "800", marginTop: 2 },
   date: { color: COLORS.onGradientMuted, marginTop: SPACING.xs, textTransform: "capitalize" },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 12,
+  },
+  searchText: { color: COLORS.muted, flex: 1 },
   content: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.md },
   sectionTitle: { fontWeight: "800", color: COLORS.text, marginTop: SPACING.sm },
   actionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm },
@@ -133,8 +145,8 @@ export default function DashboardScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!canPay) return;
-      syncReminders(session.token);
-    }, [canPay, session.token]),
+      syncReminders(session.token, { workday: workdayRequired(session) });
+    }, [canPay, session]),
   );
 
   const onLogout = () => {
@@ -167,6 +179,17 @@ export default function DashboardScreen() {
             {!!tenantName && <Text style={[styles.date, { marginTop: 0 }]}>{tenantName}</Text>}
           </View>
         )}
+        {/* Búsqueda general: abre GlobalSearchScreen (clientes, cédulas,
+            créditos y pagos). */}
+        <Pressable
+          style={styles.searchBar}
+          onPress={() => navigation.navigate("GlobalSearch")}
+          accessibilityRole="search"
+          accessibilityLabel="Buscar cliente, cédula, crédito o pago"
+        >
+          <MaterialCommunityIcons name="magnify" size={20} color={COLORS.muted} />
+          <Text style={styles.searchText}>Buscar cliente, cédula, crédito…</Text>
+        </Pressable>
       </LinearGradient>
 
       <ScrollView contentContainerStyle={styles.content}>

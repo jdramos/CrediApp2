@@ -8,6 +8,7 @@ import { SessionContext } from "../auth/SessionContext";
 import { changePassword } from "../api/userApi";
 import { confirmAction } from "../utils/confirm";
 import { remindersEnabled, setRemindersEnabled, syncReminders, sendTestReminder } from "../notifications/reminders";
+import { workdayRequired } from "../tracking/workday";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -87,7 +88,7 @@ export default function MoreScreen() {
       setSnackbar("Recordatorios desactivados");
       return;
     }
-    const res = await syncReminders(session.token, { force: true, requestPermission: true });
+    const res = await syncReminders(session.token, { force: true, requestPermission: true, workday: workdayRequired(session) });
     if (res.reason === "no-permission") {
       setRemindersOn(false);
       await setRemindersEnabled(false);
@@ -169,7 +170,7 @@ export default function MoreScreen() {
           <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.card}>
             <List.Item
               title="Recordatorios de cobro"
-              description="Aviso a las 7:30 con lo que vence hoy y a las 6:00 pm con lo de mañana"
+              description="Aviso a las 7:15 para iniciar tu jornada, a las 7:30 con lo que vence hoy y a las 6:00 pm con lo de mañana"
               descriptionNumberOfLines={3}
               left={(props) => <List.Icon {...props} icon="bell-ring-outline" color={COLORS.primary} />}
               right={() => <Switch value={remindersOn} onValueChange={toggleReminders} />}

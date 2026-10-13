@@ -1,6 +1,7 @@
 import { Alert } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { startTracking, isWorkdayActive, resumeTrackingIfActive } from "./tracker";
+import { cancelWorkdayReminderForToday } from "../notifications/reminders";
 
 // Política "jornada obligatoria": un usuario vinculado a un cobrador debe tener
 // su jornada iniciada (registro de la ruta del día, ver tracker.js) para
@@ -64,6 +65,7 @@ export async function startWorkdayWithConsent() {
   }
   try {
     const res = await startTracking();
+    if (res.ok) cancelWorkdayReminderForToday().catch(() => {});
     return res.ok ? { ok: true } : { ok: false, reason: res.reason };
   } catch {
     return { ok: false, reason: "error" };
