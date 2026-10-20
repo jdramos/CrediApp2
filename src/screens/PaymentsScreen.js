@@ -17,7 +17,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNavigation } from "@react-navigation/native";
 import ViewShot, { captureRef } from "react-native-view-shot";
-import * as Sharing from "expo-sharing";
+import { shareImage } from "../utils/shareImage";
 import { SessionContext } from "../auth/SessionContext";
 import { searchCustomers } from "../api/customerApi";
 import { getCustomerActiveLoans, getLoanDetail } from "../api/loanApi";
@@ -398,13 +398,8 @@ export default function PaymentsScreen({ route }) {
   const onShareReceipt = async () => {
     try {
       setSharing(true);
-      const available = await Sharing.isAvailableAsync();
-      if (!available) {
-        setError("Este dispositivo no permite compartir archivos.");
-        return;
-      }
       const uri = await captureRef(receiptShotRef, { format: "png", quality: 0.95 });
-      await Sharing.shareAsync(uri, { mimeType: "image/png", dialogTitle: "Comprobante de pago" });
+      await shareImage(uri, "Comprobante de pago");
     } catch (e) {
       setError(e?.message ?? "No se pudo generar el comprobante para compartir");
     } finally {

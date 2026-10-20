@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, Card, Button, ActivityIndicator, HelperText, Chip, IconButton, Divider } from "react-native-paper";
 import { useNavigation } from "@react-navigation/native";
 import ViewShot, { captureRef } from "react-native-view-shot";
-import * as Sharing from "expo-sharing";
+import { shareImage } from "../utils/shareImage";
 import { SessionContext } from "../auth/SessionContext";
 import { getAccountStatement } from "../api/loanApi";
 import { useTenantLogo } from "../hooks/useTenantLogo";
@@ -87,13 +87,8 @@ export default function AccountStatementScreen({ route }) {
   const onShare = async () => {
     try {
       setSharing(true);
-      const available = await Sharing.isAvailableAsync();
-      if (!available) {
-        setError("Este dispositivo no permite compartir archivos.");
-        return;
-      }
       const uri = await captureRef(shotRef, { format: "png", quality: 0.95 });
-      await Sharing.shareAsync(uri, { mimeType: "image/png", dialogTitle: "Estado de cuenta" });
+      await shareImage(uri, "Estado de cuenta");
     } catch (e) {
       setError(e?.message ?? "No se pudo generar la imagen para compartir");
     } finally {

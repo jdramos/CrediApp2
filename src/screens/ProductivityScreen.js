@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, IconButton, Button, ActivityIndicator, ProgressBar } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import ViewShot, { captureRef } from "react-native-view-shot";
-import * as Sharing from "expo-sharing";
+import { shareImage } from "../utils/shareImage";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getMyProductivity } from "../api/collectionsApi";
@@ -178,12 +178,8 @@ export default function ProductivityScreen() {
   const onShareSummary = async () => {
     try {
       setSharing(true);
-      if (!(await Sharing.isAvailableAsync())) {
-        setError("Este dispositivo no permite compartir archivos.");
-        return;
-      }
       const uri = await captureRef(summaryShotRef, { format: "png", quality: 0.95 });
-      await Sharing.shareAsync(uri, { mimeType: "image/png", dialogTitle: "Resumen del día" });
+      await shareImage(uri, "Resumen del día");
     } catch (e) {
       setError(e?.message ?? "No se pudo generar la imagen para compartir");
     } finally {

@@ -5,7 +5,7 @@ import { Text, IconButton, Button, ActivityIndicator } from "react-native-paper"
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import ViewShot, { captureRef } from "react-native-view-shot";
-import * as Sharing from "expo-sharing";
+import { shareImage } from "../utils/shareImage";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getMyDayClose } from "../api/collectionsApi";
@@ -122,12 +122,8 @@ export default function DayCloseScreen() {
   const onShare = async () => {
     try {
       setSharing(true);
-      if (!(await Sharing.isAvailableAsync())) {
-        setError("Este dispositivo no permite compartir archivos.");
-        return;
-      }
       const uri = await captureRef(shotRef, { format: "png", quality: 0.95 });
-      await Sharing.shareAsync(uri, { mimeType: "image/png", dialogTitle: "Cierre del día" });
+      await shareImage(uri, "Cierre del día");
     } catch (e) {
       setError(e?.message ?? "No se pudo generar la imagen para compartir");
     } finally {
