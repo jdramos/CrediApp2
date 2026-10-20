@@ -2,7 +2,7 @@ import React, { useCallback, useContext, useMemo, useRef, useState } from "react
 import { View, StyleSheet, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, IconButton, Chip, ActivityIndicator } from "react-native-paper";
-import MapView, { Polyline, Marker } from "react-native-maps";
+import RouteMapView from "../components/RouteMapView";
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getTrackingUserDay } from "../api/trackingApi";
@@ -135,22 +135,23 @@ export default function RouteMapScreen() {
     return list.sort((a, b) => a.t - b.t);
   }, [data]);
 
-  const fit = useCallback(() => {
-    const coords = [...path, ...events.filter((e) => e.lat != null).map((e) => ({ latitude: e.lat, longitude: e.lng }))];
-    if (coords.length && mapRef.current) {
-      mapRef.current.fitToCoordinates(coords, {
-        edgePadding: { top: 50, right: 40, bottom: 50, left: 40 },
-        animated: true,
-      });
-    }
-  }, [path, events]);
+  const markers = useMemo(
+    () =>
+      events
+        .filter((e) => e.lat != null)
+        .map((e) => ({
+          key: e.key,
+          lat: e.lat,
+          lng: e.lng,
+          color: KIND_COLOR[e.kind],
+          title: `${hhmm(e.t)} · ${e.title}`,
+          description: e.subtitle || undefined,
+        })),
+    [events],
+  );
 
   const focus = (e) => {
-    if (e.lat == null || !mapRef.current) return;
-    mapRef.current.animateToRegion(
-      { latitude: e.lat, longitude: e.lng, latitudeDelta: 0.004, longitudeDelta: 0.004 },
-      400,
-    );
+    if (e.lat != null) mapRef.current?.focus(e.lat, e.lng);
   };
 
   const isToday = date === todayISO();
@@ -179,27 +180,7 @@ export default function RouteMapScreen() {
 
       {data && path.length > 0 && (
         <>
-          <MapView
-            ref={mapRef}
-            style={styles.map}
-            initialRegion={{ latitude: path[0].latitude, longitude: path[0].longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 }}
-            onMapReady={fit}
-            onLayout={fit}
-            toolbarEnabled={false}
-          >
-            <Polyline coordinates={path} strokeColor="#1D4ED8" strokeWidth={4} />
-            {events
-              .filter((e) => e.lat != null)
-              .map((e) => (
-                <Marker
-                  key={e.key}
-                  coordinate={{ latitude: e.lat, longitude: e.lng }}
-                  pinColor={KIND_COLOR[e.kind]}
-                  title={`${hhmm(e.t)} · ${e.title}`}
-                  description={e.subtitle || undefined}
-                />
-              ))}
-          </MapView>
+          <RouteMapView ref={mapRef} style={styles.map} path={path} markers={markers} />
 
           <View style={styles.chips}>
             <Chip compact>{`${hhmm(s.first_ms)} – ${hhmm(s.last_ms)}`}</Chip>
