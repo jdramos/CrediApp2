@@ -21,6 +21,8 @@ import * as Location from "expo-location";
 import { SessionContext } from "../auth/SessionContext";
 import { getAssignedLoans, logVisit } from "../api/collectionsApi";
 import { isNetworkError } from "../api/credimasterClient";
+import { getCustomer, saveCustomerLocation } from "../api/customerApi";
+import { confirmAction } from "../utils/confirm";
 import { enqueue } from "../offline/queue";
 import { useSync } from "../offline/SyncProvider";
 import { money, toNumber } from "../utils/format";
@@ -60,7 +62,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     ...SHADOW.card,
   },
-  rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: SPACING.xs },
   name: { fontWeight: "700", color: COLORS.text, flex: 1 },
   muted: { color: COLORS.muted, marginTop: 2, fontSize: 12 },
   overdueRow: {
@@ -103,6 +105,14 @@ export default function ClientPortfolioScreen() {
   const [myPos, setMyPos] = useState(null);
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState("");
+
+  // Filtro rápido de la cartera (ver FILTERS).
+  const [filter, setFilter] = useState("all");
+
+  // Guardar la ubicación (casa o negocio) de un cliente que aún no la tiene.
+  const [placeItem, setPlaceItem] = useState(null);
+  const [placeBusy, setPlaceBusy] = useState(false);
+  const canEditCustomer = session?.permissions?.includes("clientes.editar");
 
   const [gestionItem, setGestionItem] = useState(null);
   const [gestionForm, setGestionForm] = useState(emptyGestionForm);
@@ -186,15 +196,84 @@ export default function ClientPortfolioScreen() {
     }
   };
 
+  // Guarda la ubicación ACTUAL del cobrador como la casa o el negocio del cliente.
+  // El backend pide el registro completo del cliente en cada PUT, así que se
+  // trae primero y solo cambian las coordenadas del lugar elegido.
+  const savePlace = async (item, target) => {
+    setPlaceBusy(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") throw new Error("Permití el acceso a la ubicación para guardarla.");
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const res = await getCustomer(session.token, item.customer_id);
+      const customer = res?.data?.customer;
+      if (!customer) throw new Error("No se pudo cargar la ficha del cliente.");
+      const location = {
+        home_lat: customer.home_lat ?? null,
+        home_lng: customer.home_lng ?? null,
+        business_lat: customer.business_lat ?? null,
+        business_lng: customer.business_lng ?? null,
+        [`${target}_lat`]: pos.coords.latitude,
+        [`${target}_lng`]: pos.coords.longitude,
+      };
+      await saveCustomerLocation(session.token, item.customer_id, customer, location);
+      // Se refleja en la lista al instante (todos los créditos de ese cliente).
+      setLoans((prev) =>
+        prev.map((l) =>
+          l.customer_id === item.customer_id
+            ? { ...l, [`${target}_lat`]: String(pos.coords.latitude), [`${target}_lng`]: String(pos.coords.longitude) }
+            : l,
+        ),
+      );
+      setPlaceItem(null);
+      Alert.alert("Ubicación guardada", `Quedó guardada la ${target === "home" ? "casa" : "negocio"} de ${item.customer_name || "el cliente"}.`);
+    } catch (e) {
+      Alert.alert(
+        "No se pudo guardar",
+        isNetworkError(e) ? "Se necesita conexión para guardar la ubicación de un cliente. Intentá de nuevo cuando tengas señal." : e?.message || "Error al guardar la ubicación",
+      );
+    } finally {
+      setPlaceBusy(false);
+    }
+  };
+
+  const askSavePlace = (item, target) =>
+    confirmAction(
+      "Guardar ubicación",
+      `¿Guardar tu ubicación actual como la ${target === "home" ? "casa" : "negocio"} de ${item.customer_name || "este cliente"}? Tenés que estar en ese lugar.`,
+      () => savePlace(item, target),
+    );
+
   const chooseSort = (mode) => {
     setSortMode(mode);
     if (mode === "near") locate();
   };
 
+  // Filtros rápidos. "Por visitar hoy" = lo que hoy pide una visita (en mora,
+  // cuota que vence hoy o promesa de pago ya cumplida en fecha) y todavía no se
+  // gestionó hoy (ni en el servidor ni en la cola sin conexión).
+  const today = todayISO();
+  const isManaged = (l) => Number(l.managed_today) === 1 || managedIds.has(l.loan_id);
+  const FILTERS = [
+    ["all", "Todos", () => true],
+    ["mora", "En mora", (l) => Number(l.days_overdue) > 0],
+    ["today", "Vencen hoy", (l) => Number(l.due_today) === 1],
+    ["promise", "Con promesa", (l) => !!l.promised_date],
+    [
+      "visit",
+      "Por visitar hoy",
+      (l) =>
+        !isManaged(l) &&
+        (Number(l.days_overdue) > 0 || Number(l.due_today) === 1 || (!!l.promised_date && String(l.promised_date).slice(0, 10) <= today)),
+    ],
+  ];
+  const filterFn = FILTERS.find(([k]) => k === filter)?.[2] || (() => true);
+  const filteredLoans = loans.filter(filterFn);
+
   // Lista a mostrar, con la distancia de cada cliente cuando se ordena por cercanía.
   const shownLoans = useMemo(() => {
-    if (sortMode !== "near" || !myPos) return loans;
-    const withDist = loans.map((l) => {
+    if (sortMode !== "near" || !myPos) return filteredLoans;
+    const withDist = filteredLoans.map((l) => {
       const dest = customerDestination(l);
       return { ...l, _dist: dest ? distanceMeters(myPos, dest) : null, _distLabel: dest?.label };
     });
@@ -204,7 +283,7 @@ export default function ClientPortfolioScreen() {
       if (b._dist == null) return -1;
       return a._dist - b._dist;
     });
-  }, [loans, sortMode, myPos]);
+  }, [loans, filter, managedIds, sortMode, myPos]);
 
   const overdueSummary = useMemo(() => {
     const overdue = loans.filter((l) => Number(l.days_overdue) > 0);
@@ -379,6 +458,20 @@ export default function ClientPortfolioScreen() {
           </Text>
         )}
         {!!locError && <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: SPACING.xs }}>{locError}</Text>}
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginTop: SPACING.sm }}>
+          {FILTERS.map(([key, label, fn]) => (
+            <Chip
+              key={key}
+              compact
+              selected={filter === key}
+              showSelectedCheck={false}
+              onPress={() => setFilter(key)}
+              style={{ backgroundColor: filter === key ? COLORS.primarySoft : COLORS.card }}
+            >
+              {`${label} (${loans.filter(fn).length})`}
+            </Chip>
+          ))}
+        </View>
       </View>
 
       <View style={{ marginHorizontal: SPACING.lg }}>
@@ -405,6 +498,11 @@ export default function ClientPortfolioScreen() {
               <Card style={styles.row} onPress={() => navigation.navigate("AccountStatement", { loanId: item.loan_id })}>
                 <View style={styles.rowTop}>
                   <Text style={styles.name}>{item.customer_name || "Cliente"}</Text>
+                  {Number(item.due_today) === 1 && (
+                    <Chip compact style={{ backgroundColor: COLORS.warningSoft }} textStyle={{ color: COLORS.warning, fontWeight: "700" }}>
+                      Vence hoy
+                    </Chip>
+                  )}
                   {inArrears ? (
                     <Chip compact style={{ backgroundColor: COLORS.dangerSoft }} textStyle={{ color: COLORS.danger, fontWeight: "700" }}>
                       Mora {item.days_overdue}d
@@ -424,6 +522,24 @@ export default function ClientPortfolioScreen() {
                       {item._dist != null ? `a ${formatDistance(item._dist)} (${item._distLabel})` : "Sin ubicación guardada"}
                     </Text>
                   </View>
+                )}
+                {!!item.promised_date && (
+                  <Text style={{ color: String(item.promised_date).slice(0, 10) < today ? COLORS.danger : COLORS.primary, fontSize: 12, fontWeight: "700", marginTop: 2 }}>
+                    Promesa: {item.promised_amount != null ? `${money(item.promised_amount)} ` : ""}para el {String(item.promised_date).slice(0, 10)}
+                    {String(item.promised_date).slice(0, 10) < today ? " (vencida)" : String(item.promised_date).slice(0, 10) === today ? " (hoy)" : ""}
+                  </Text>
+                )}
+                {canEditCustomer && !customerDestination(item) && (
+                  <Button
+                    compact
+                    mode="text"
+                    icon="map-marker-plus-outline"
+                    onPress={() => setPlaceItem(item)}
+                    style={{ alignSelf: "flex-start", marginLeft: -SPACING.sm }}
+                    labelStyle={{ fontSize: 12 }}
+                  >
+                    Guardar ubicación
+                  </Button>
                 )}
                 <View style={styles.balancesRow}>
                   <View>
@@ -494,6 +610,33 @@ export default function ClientPortfolioScreen() {
       )}
 
       <Portal>
+        <Modal
+          visible={!!placeItem}
+          onDismiss={() => !placeBusy && setPlaceItem(null)}
+          contentContainerStyle={{
+            backgroundColor: COLORS.card,
+            margin: SPACING.lg,
+            borderRadius: RADIUS.lg,
+            padding: SPACING.lg,
+            gap: SPACING.sm,
+          }}
+        >
+          {placeItem && (
+            <>
+              <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text }}>{placeItem.customer_name}</Text>
+              <Text style={{ color: COLORS.muted }}>
+                Pará en la puerta del lugar y elegí qué es. Se guarda tu ubicación actual para poder llegar y ordenar la ruta por cercanía.
+              </Text>
+              <Button mode="contained" icon="home-map-marker" loading={placeBusy} disabled={placeBusy} onPress={() => askSavePlace(placeItem, "home")} style={{ borderRadius: RADIUS.md }}>
+                Es su casa
+              </Button>
+              <Button mode="outlined" icon="store-marker" loading={placeBusy} disabled={placeBusy} onPress={() => askSavePlace(placeItem, "business")} style={{ borderRadius: RADIUS.md }}>
+                Es su negocio
+              </Button>
+              <Button disabled={placeBusy} onPress={() => setPlaceItem(null)}>Cancelar</Button>
+            </>
+          )}
+        </Modal>
         <Modal
           visible={!!contactItem}
           onDismiss={() => setContactItem(null)}
