@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { View, StyleSheet, FlatList, ScrollView, Image } from "react-native";
+import { View, StyleSheet, FlatList, ScrollView, Image, Linking, Platform, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Text,
@@ -19,7 +19,7 @@ import { useNavigation } from "@react-navigation/native";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import { shareImage } from "../utils/shareImage";
 import { SessionContext } from "../auth/SessionContext";
-import { searchCustomers } from "../api/customerApi";
+import { searchCustomers, getCustomer } from "../api/customerApi";
 import { getCustomerActiveLoans, getLoanDetail } from "../api/loanApi";
 import { getPaymentMethods, simulatePayment, createPayment } from "../api/paymentApi";
 import { uploadPaymentEvidence } from "../api/paymentEvidenceApi";
@@ -55,6 +55,25 @@ function buildBreakdownRows(applied) {
   return BREAKDOWN_MAP
     .filter(([key]) => applied[key] != null && Number(applied[key]) > 0)
     .map(([key, label]) => ({ label, value: applied[key] }));
+}
+
+// Comprobante: a diferencia del desglose previo, siempre muestra cuánto fue a
+// capital y a interés (aunque sea 0) para que el cliente vea la aplicación del
+// pago; el resto de conceptos solo si recibieron algo.
+const RECEIPT_MAP = [
+  ["principal", "Aplicado a capital", true],
+  ["interest", "Aplicado a interés", true],
+  ["default_interest", "Interés moratorio", false],
+  ["insurance", "Seguro", false],
+  ["fee", "Cargos", false],
+  ["other", "Otros", false],
+];
+
+function buildReceiptRows(applied) {
+  if (!applied) return [];
+  return RECEIPT_MAP
+    .filter(([key, , always]) => always || (applied[key] != null && Number(applied[key]) > 0))
+    .map(([key, label]) => ({ label, value: Number(applied[key]) || 0 }));
 }
 
 const styles = StyleSheet.create({
@@ -137,6 +156,7 @@ export default function PaymentsScreen({ route }) {
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
   const [sharing, setSharing] = useState(false);
+  const [smsBusy, setSmsBusy] = useState(false);
   const receiptShotRef = useRef(null);
   const [evidence, setEvidence] = useState({}); // { PHOTO: "sent"|"queued", SIGNATURE: ... }
   const [evidenceBusy, setEvidenceBusy] = useState(null);
@@ -166,6 +186,8 @@ export default function PaymentsScreen({ route }) {
       identification: prefill.customerIdentification,
       home_address: prefill.homeAddress,
       business_address: prefill.businessAddress,
+      cellphone: prefill.cellphone,
+      telephone: prefill.telephone,
     });
     setError("");
 
@@ -407,6 +429,45 @@ export default function PaymentsScreen({ route }) {
     }
   };
 
+  // Avisa del pago al cliente por SMS: abre la app de mensajes del teléfono con
+  // el texto listo (se envía con el plan del teléfono del cobrador, sin servicio externo).
+  // El teléfono sale del cliente seleccionado; si no vino en la búsqueda se
+  // consulta su ficha.
+  const onSendSms = async () => {
+    try {
+      setSmsBusy(true);
+      let phone = customer?.cellphone || customer?.telephone;
+      if (!phone && customer?.id) {
+        const res = await getCustomer(session.token, customer.id).catch(() => null);
+        const c = res?.data?.customer;
+        phone = c?.cellphone || c?.telephone;
+      }
+      phone = String(phone || "").replace(/[^\d+]/g, "");
+      if (!phone) {
+        Alert.alert("Sin teléfono", "Este cliente no tiene un número de teléfono registrado.");
+        return;
+      }
+      const tenantName = session?.tenant?.commercial_name || session?.tenant?.legal_name || "CrediMaster";
+      const applied = result?.applied;
+      const parts = [
+        `${tenantName}: recibimos su pago de ${money(toNumber(amount))} el ${date} al crédito #${loan?.credit_code || loan?.id || loan?.loan_id}.`,
+      ];
+      if (applied) {
+        parts.push(`Aplicado a capital ${money(Number(applied.principal) || 0)} y a interés ${money(Number(applied.interest) || 0)}.`);
+      }
+      if (result?.principal_balance_after != null) {
+        parts.push(`Saldo capital: ${money(result.principal_balance_after)}.`);
+      }
+      parts.push("¡Gracias!");
+      const body = encodeURIComponent(parts.join(" "));
+      await Linking.openURL(`sms:${phone}${Platform.OS === "ios" ? "&" : "?"}body=${body}`);
+    } catch (e) {
+      Alert.alert("No se pudo abrir los mensajes", "Este dispositivo no puede enviar SMS desde la app.");
+    } finally {
+      setSmsBusy(false);
+    }
+  };
+
   const onPrintReceipt = () => {
     printReceipt(
       buildPaymentReceiptLines({
@@ -450,7 +511,7 @@ export default function PaymentsScreen({ route }) {
   };
 
   const breakdownRows = useMemo(() => buildBreakdownRows(breakdown?.applied || breakdown), [breakdown]);
-  const receiptRows = useMemo(() => buildBreakdownRows(result?.applied), [result]);
+  const receiptRows = useMemo(() => buildReceiptRows(result?.applied), [result]);
 
   if (!canView && !canCreate) {
     return (
@@ -793,6 +854,18 @@ export default function PaymentsScreen({ route }) {
               contentStyle={{ height: 46 }}
             >
               Compartir comprobante (WhatsApp, correo, etc.)
+            </Button>
+
+            <Button
+              mode="outlined"
+              icon="message-text-outline"
+              onPress={onSendSms}
+              loading={smsBusy}
+              disabled={smsBusy}
+              style={{ borderRadius: RADIUS.md }}
+              contentStyle={{ height: 46 }}
+            >
+              Enviar SMS al cliente
             </Button>
 
             <Button
