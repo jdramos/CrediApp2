@@ -10,7 +10,7 @@ import PaymentEvidenceModal from "../components/PaymentEvidenceModal";
 import PaymentReceiptModal from "../components/PaymentReceiptModal";
 import { usePendingPayments } from "../offline/pendingPayments";
 import { money } from "../utils/format";
-import { todayISO, shiftDay } from "../utils/date";
+import { todayISO, periodRange } from "../utils/date";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -62,34 +62,6 @@ const styles = StyleSheet.create({
 
 const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const WEEKDAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
-
-// Períodos que se pueden elegir. Todos devuelven { from, to } en YYYY-MM-DD,
-// calculados con la fecha local del teléfono (igual que el resto de la app).
-function periodRange(key) {
-  const today = todayISO();
-  const [y, m, d] = today.split("-").map(Number);
-  switch (key) {
-    case "yesterday": {
-      const day = shiftDay(today, -1);
-      return { from: day, to: day };
-    }
-    case "week": {
-      // Semana de lunes a hoy.
-      const dow = new Date(y, m - 1, d, 12).getDay(); // 0 = domingo
-      return { from: shiftDay(today, -((dow + 6) % 7)), to: today };
-    }
-    case "month":
-      return { from: `${y}-${String(m).padStart(2, "0")}-01`, to: today };
-    case "prevMonth": {
-      const first = new Date(y, m - 2, 1, 12);
-      const last = new Date(y, m - 1, 0, 12);
-      const iso = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
-      return { from: iso(first), to: iso(last) };
-    }
-    default:
-      return { from: today, to: today };
-  }
-}
 
 const PERIODS = [
   ["today", "Hoy"],

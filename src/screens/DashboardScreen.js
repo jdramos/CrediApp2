@@ -101,6 +101,7 @@ export default function DashboardScreen() {
 
   const canApprove = session?.permissions?.includes("aprobaciones.ver");
   const canCreateLoan = session?.permissions?.includes("creditos.insertar");
+  const canViewLoans = session?.permissions?.includes("creditos.ver");
   const canPay = session?.permissions?.includes("pagos.insertar") || session?.permissions?.includes("pagos.ver");
   const canSupervise = session?.permissions?.includes("creditos.productividad.ver");
   const canSeeRoutes = session?.permissions?.includes("rastreo.ver");
@@ -284,6 +285,15 @@ export default function DashboardScreen() {
               subtitle="Registrar crédito"
               gradient={GRADIENTS.dark}
               onPress={() => navigation.navigate("Creditos", { screen: "NewLoanRequest" })}
+            />
+          )}
+          {canViewLoans && (
+            <ActionTile
+              icon="format-list-bulleted"
+              title="Mis solicitudes"
+              subtitle="Estado de cada solicitud"
+              gradient={GRADIENTS.dark}
+              onPress={() => navigation.navigate("Creditos", { screen: "MyLoanRequests" })}
             />
           )}
           {canApprove && (

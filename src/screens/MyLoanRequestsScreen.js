@@ -1,13 +1,14 @@
 import React, { useCallback, useContext, useEffect, useState } from "react";
 import { View, StyleSheet, FlatList } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Text, TextInput, Card, Chip, Button, ActivityIndicator, HelperText, IconButton } from "react-native-paper";
+import { Text, TextInput, Card, Chip, ActivityIndicator, HelperText, IconButton } from "react-native-paper";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { SessionContext } from "../auth/SessionContext";
 import { getAccessibleBranches } from "../api/branchApi";
 import { getLoans } from "../api/loanApi";
 import { money } from "../utils/format";
+import { periodRange } from "../utils/date";
+import { loanStage } from "../utils/loanStage";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -18,30 +19,14 @@ const STATUS_FILTERS = [
   { key: "RECHAZADO", label: "Rechazadas" },
 ];
 
-const STATUS_COLOR = {
-  PENDIENTE: COLORS.warning,
-  PENDING: COLORS.warning,
-  APROBADO: COLORS.success,
-  APPROVED: COLORS.success,
-  RECHAZADO: COLORS.danger,
-  REJECTED: COLORS.danger,
-  DISBURSED: COLORS.primary,
-  CANCELLED: COLORS.muted,
-  WRITTEN_OFF: COLORS.muted,
-  DRAFT: COLORS.muted,
-};
-const STATUS_LABEL = {
-  PENDIENTE: "Pendiente",
-  PENDING: "Pendiente",
-  APROBADO: "Aprobado",
-  APPROVED: "Aprobado",
-  RECHAZADO: "Rechazado",
-  REJECTED: "Rechazado",
-  DISBURSED: "Desembolsado",
-  CANCELLED: "Cancelado",
-  WRITTEN_OFF: "Castigado",
-  DRAFT: "Borrador",
-};
+// Por defecto se ven las solicitudes DE HOY; "Todas" quita el filtro de fecha.
+const PERIODS = [
+  { key: "today", label: "Hoy" },
+  { key: "yesterday", label: "Ayer" },
+  { key: "week", label: "Semana" },
+  { key: "month", label: "Mes" },
+  { key: "all", label: "Todas" },
+];
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -59,13 +44,19 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     ...SHADOW.card,
   },
-  rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: SPACING.sm },
   name: { fontWeight: "700", color: COLORS.text, flex: 1 },
   amount: { fontWeight: "800", color: COLORS.text, fontSize: 16 },
   muted: { color: COLORS.muted, marginTop: 2, fontSize: 12 },
-  empty: { textAlign: "center", color: COLORS.muted, marginTop: SPACING.xl },
+  stageRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: SPACING.xs, gap: SPACING.sm },
+  stageDetail: { color: COLORS.muted, fontSize: 12, flex: 1 },
+  empty: { textAlign: "center", color: COLORS.muted, marginTop: SPACING.xl, paddingHorizontal: SPACING.xl },
 });
 
+// "Mis solicitudes": las solicitudes de crédito que sometí, con su ESTADO
+// ACTUAL (borrador, en aprobación n de m, aprobada, rechazada, desembolsada,
+// entregada...). Por defecto salen las de hoy; se puede cambiar el período,
+// filtrar por resultado de aprobación, buscar y ver las de toda la sucursal.
 export default function MyLoanRequestsScreen() {
   const navigation = useNavigation();
   const { session } = useContext(SessionContext);
@@ -74,17 +65,16 @@ export default function MyLoanRequestsScreen() {
   const [allAccess, setAllAccess] = useState(false);
   const [branchId, setBranchId] = useState(undefined); // undefined = "Todas"
 
+  const [period, setPeriod] = useState("today");
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
-  const [startDate, setStartDate] = useState(null);
-  const [endDate, setEndDate] = useState(null);
-  const [showDate, setShowDate] = useState(null); // "start" | "end" | null
 
   const [mineOnly, setMineOnly] = useState(true);
   const [loans, setLoans] = useState([]);
   const [total, setTotal] = useState(0);
   const [pendingTotal, setPendingTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -96,30 +86,35 @@ export default function MyLoanRequestsScreen() {
       .catch(() => {});
   }, [session.token]);
 
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const params = {
-        status,
-        search: search.trim() || undefined,
-        branch_id: branchId,
-        mine: mineOnly ? "1" : undefined,
-        startDate: startDate && endDate ? startDate : undefined,
-        endDate: startDate && endDate ? endDate : undefined,
-        sortBy: "a.date",
-        sortOrder: "DESC",
-        limit: 100,
-      };
-      const res = await getLoans(session.token, params);
-      setLoans(res?.data || []);
-      setTotal(res?.total ?? (res?.data || []).length);
-    } catch (e) {
-      setError(e?.message ?? "Error cargando solicitudes");
-    } finally {
-      setLoading(false);
-    }
-  }, [session.token, status, search, branchId, mineOnly, startDate, endDate]);
+  const load = useCallback(
+    async (isRefresh = false) => {
+      try {
+        if (isRefresh) setRefreshing(true);
+        else setLoading(true);
+        setError("");
+        const range = period === "all" ? null : periodRange(period);
+        const res = await getLoans(session.token, {
+          status,
+          search: search.trim() || undefined,
+          branch_id: branchId,
+          mine: mineOnly ? "1" : undefined,
+          startDate: range?.from,
+          endDate: range?.to,
+          sortBy: "a.id",
+          sortOrder: "DESC",
+          limit: 100,
+        });
+        setLoans(res?.data || []);
+        setTotal(res?.total ?? (res?.data || []).length);
+      } catch (e) {
+        setError(e?.message ?? "Error cargando solicitudes");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [session.token, status, search, branchId, mineOnly, period],
+  );
 
   const loadPendingTotal = useCallback(() => {
     getLoans(session.token, { status: "PENDIENTE", branch_id: branchId, mine: mineOnly ? "1" : undefined, limit: 1 })
@@ -130,6 +125,16 @@ export default function MyLoanRequestsScreen() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useFocusEffect(useCallback(() => { loadPendingTotal(); }, [loadPendingTotal]));
 
+  // Resumen por estado de lo que se está viendo (ej.: "2 En aprobación").
+  const stageCounts = {};
+  loans.forEach((l) => {
+    const st = loanStage(l);
+    stageCounts[st.key] = stageCounts[st.key] || { ...st, count: 0 };
+    stageCounts[st.key].count += 1;
+  });
+
+  const periodLabel = PERIODS.find((p) => p.key === period)?.label?.toLowerCase();
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.headerRow}>
@@ -137,10 +142,25 @@ export default function MyLoanRequestsScreen() {
         <Text variant="headlineSmall" style={styles.title}>Mis solicitudes</Text>
       </View>
       <Text style={styles.sub}>
-        {total} solicitud{total === 1 ? "" : "es"} · {pendingTotal} pendiente{pendingTotal === 1 ? "" : "s"} de aprobación
+        {total} solicitud{total === 1 ? "" : "es"}{period === "all" ? "" : ` (${periodLabel})`} · {pendingTotal} pendiente
+        {pendingTotal === 1 ? "" : "s"} de aprobación en total
       </Text>
 
       <View style={styles.filtersWrap}>
+        <View style={styles.chipsRow}>
+          {PERIODS.map((p) => (
+            <Chip
+              key={p.key}
+              selected={period === p.key}
+              showSelectedCheck={false}
+              onPress={() => setPeriod(p.key)}
+              style={{ backgroundColor: period === p.key ? COLORS.primarySoft : COLORS.card }}
+            >
+              {p.label}
+            </Chip>
+          ))}
+        </View>
+
         <View style={styles.chipsRow}>
           <Chip
             selected={mineOnly}
@@ -165,7 +185,7 @@ export default function MyLoanRequestsScreen() {
           placeholder="Buscar por nombre o cédula"
           value={search}
           onChangeText={setSearch}
-          onSubmitEditing={load}
+          onSubmitEditing={() => load()}
           autoCapitalize="none"
           style={{ backgroundColor: COLORS.card }}
           outlineStyle={{ borderRadius: RADIUS.md }}
@@ -178,6 +198,7 @@ export default function MyLoanRequestsScreen() {
             <Chip
               key={f.key}
               selected={status === f.key}
+              showSelectedCheck={false}
               onPress={() => setStatus(f.key)}
               style={{ backgroundColor: status === f.key ? COLORS.primarySoft : COLORS.card }}
             >
@@ -208,41 +229,19 @@ export default function MyLoanRequestsScreen() {
           </View>
         )}
 
-        <View style={{ flexDirection: "row", gap: SPACING.sm }}>
-          <Button
-            mode="outlined"
-            icon="calendar"
-            onPress={() => setShowDate("start")}
-            style={{ borderRadius: RADIUS.md, flex: 1 }}
-          >
-            {startDate || "Desde"}
-          </Button>
-          <Button
-            mode="outlined"
-            icon="calendar"
-            onPress={() => setShowDate("end")}
-            style={{ borderRadius: RADIUS.md, flex: 1 }}
-          >
-            {endDate || "Hasta"}
-          </Button>
-          {(startDate || endDate) && (
-            <IconButton icon="close-circle-outline" onPress={() => { setStartDate(null); setEndDate(null); }} />
-          )}
-        </View>
-        {showDate && (
-          <DateTimePicker
-            value={new Date((showDate === "start" ? startDate : endDate) || Date.now())}
-            mode="date"
-            display="default"
-            onChange={(_, selected) => {
-              const target = showDate;
-              setShowDate(null);
-              if (!selected) return;
-              const iso = selected.toISOString().slice(0, 10);
-              if (target === "start") setStartDate(iso);
-              else setEndDate(iso);
-            }}
-          />
+        {Object.keys(stageCounts).length > 0 && loans.length >= total && (
+          <View style={styles.chipsRow}>
+            {Object.values(stageCounts).map((s) => (
+              <Chip
+                key={s.key}
+                compact
+                style={{ backgroundColor: COLORS.bg }}
+                textStyle={{ color: s.color, fontWeight: "700", fontSize: 11 }}
+              >
+                {`${s.count} ${s.label}`}
+              </Chip>
+            ))}
+          </View>
         )}
       </View>
 
@@ -254,29 +253,35 @@ export default function MyLoanRequestsScreen() {
           data={loans}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.listContent}
-          ListEmptyComponent={<Text style={styles.empty}>Sin solicitudes con estos filtros.</Text>}
+          refreshing={refreshing}
+          onRefresh={() => load(true)}
+          ListEmptyComponent={
+            <Text style={styles.empty}>
+              {period === "today" ? "Hoy no has sometido solicitudes. Tocá «Todas» para ver las anteriores." : "Sin solicitudes con estos filtros."}
+            </Text>
+          }
           renderItem={({ item }) => {
-            const st = item.approval_status || item.status;
+            const st = loanStage(item);
             return (
               <Card style={styles.row} onPress={() => navigation.navigate("LoanDetail", { loanId: item.id })}>
                 <View style={styles.rowTop}>
-                  <Text style={styles.name}>{item.customer_name || "Cliente"}</Text>
+                  <Text style={styles.name} numberOfLines={1}>{item.customer_name || "Cliente"}</Text>
                   <Text style={styles.amount}>{money(item.amount)}</Text>
                 </View>
-                <Text style={styles.muted}>Cédula: {item.customer_identification} · Crédito #{item.id}</Text>
+                <Text style={styles.muted}>Cédula: {item.customer_identification} · Solicitud #{item.id}</Text>
                 {!!item.created_by_name && (
                   <Text style={styles.muted}>
-                    Solicitado por {item.created_by_name}{item.source ? ` · ${item.source === "MOBILE" ? "App" : "Web"}` : ""}
+                    Solicitado por {item.created_by_name}{item.source ? ` · ${item.source === "MOBILE" ? "App" : "Web"}` : ""} · {item.date}
                   </Text>
                 )}
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: SPACING.xs }}>
-                  <Text style={styles.muted}>{item.date}</Text>
+                <View style={styles.stageRow}>
+                  <Text style={styles.stageDetail} numberOfLines={2}>{st.detail}</Text>
                   <Chip
                     compact
                     style={{ backgroundColor: COLORS.bg }}
-                    textStyle={{ color: STATUS_COLOR[st] || COLORS.muted, fontSize: 11, fontWeight: "700" }}
+                    textStyle={{ color: st.color, fontSize: 11, fontWeight: "700" }}
                   >
-                    {STATUS_LABEL[st] || st}
+                    {st.label}
                   </Chip>
                 </View>
               </Card>
