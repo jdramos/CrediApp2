@@ -61,6 +61,18 @@ const styles = StyleSheet.create({
   rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   name: { fontWeight: "700", color: COLORS.text, flex: 1 },
   muted: { color: COLORS.muted, marginTop: 2, fontSize: 12 },
+  overdueRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: COLORS.dangerSoft,
+    borderRadius: RADIUS.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 6,
+    marginTop: SPACING.xs,
+  },
+  overdueText: { color: COLORS.danger, fontWeight: "700", fontSize: 13 },
+  overdueAmount: { color: COLORS.danger, fontWeight: "800", fontSize: 15 },
   balancesRow: { flexDirection: "row", gap: SPACING.lg, marginTop: SPACING.sm },
   balanceLabel: { color: COLORS.muted, fontSize: 11 },
   balanceValue: { color: COLORS.text, fontWeight: "700" },
@@ -140,7 +152,7 @@ export default function ClientPortfolioScreen() {
   const overdueSummary = useMemo(() => {
     const overdue = loans.filter((l) => Number(l.days_overdue) > 0);
     const amount = overdue.reduce(
-      (sum, l) => sum + Number(l.principal_balance || 0) + Number(l.interest_balance || 0),
+      (sum, l) => sum + Number(l.overdue_amount || 0),
       0,
     );
     return { count: overdue.length, amount };
@@ -322,6 +334,14 @@ export default function ClientPortfolioScreen() {
                     <Text style={styles.balanceValue}>{money(item.interest_balance)}</Text>
                   </View>
                 </View>
+                {inArrears && Number(item.overdue_installments) > 0 && (
+                  <View style={styles.overdueRow}>
+                    <Text style={styles.overdueText}>
+                      {item.overdue_installments} cuota{Number(item.overdue_installments) === 1 ? "" : "s"} en mora
+                    </Text>
+                    <Text style={styles.overdueAmount}>{money(item.overdue_amount)}</Text>
+                  </View>
+                )}
                 <View style={styles.actionsRow}>
                   <Button compact mode="outlined" icon="cash-fast" onPress={() => goToPay(item)} style={styles.actionBtn} labelStyle={styles.actionBtnLabel}>
                     Pagar

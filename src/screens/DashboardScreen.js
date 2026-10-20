@@ -132,7 +132,7 @@ export default function DashboardScreen() {
           const loans = res?.data || [];
           const overdue = loans.filter((l) => Number(l.days_overdue) > 0);
           const amount = overdue.reduce(
-            (sum, l) => sum + Number(l.principal_balance || 0) + Number(l.interest_balance || 0),
+            (sum, l) => sum + Number(l.overdue_amount || 0),
             0,
           );
           setOverdueLoans({ count: overdue.length, amount });
