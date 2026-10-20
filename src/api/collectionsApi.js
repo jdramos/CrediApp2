@@ -82,3 +82,15 @@ export const getMyLoanActions = (token, loanId) =>
 // está vinculado a un cobrador, la respuesta trae linked: false.
 export const getMyProductivity = (token) =>
   credimasterGet("/api/collections/my-productivity", token);
+
+// "Mis cobros": los pagos que registró el cobrador vinculado al usuario en un
+// rango (from/to YYYY-MM-DD, default hoy), con resumen del rango completo
+// (total, capital/interés, por forma de pago) y paginación (page/pageSize) —
+// permiso pagos.ver.
+export const getMyPayments = (token, params = {}) => {
+  const qs = new URLSearchParams(
+    Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ""),
+  ).toString();
+  return credimasterGet(`/api/collections/my-payments${qs ? `?${qs}` : ""}`, token);
+};
+

@@ -224,6 +224,15 @@ export default function DashboardScreen() {
           )}
           {canPay && (
             <ActionTile
+              icon="format-list-checks"
+              title="Mis cobros"
+              subtitle="Listado de lo cobrado"
+              gradient={GRADIENTS.primary}
+              onPress={() => navigation.navigate("Pagos", { screen: "PaymentHistory" })}
+            />
+          )}
+          {canPay && (
+            <ActionTile
               icon="map-marker-radius-outline"
               title="Ruta de cobro"
               subtitle={overdueLoans.count > 0 ? `${money(overdueLoans.amount)} en mora` : "Mi cartera de hoy"}
