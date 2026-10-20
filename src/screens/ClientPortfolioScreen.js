@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useMemo, useState } from "react";
-import { View, StyleSheet, FlatList, Linking, Alert, ScrollView } from "react-native";
+import { View, StyleSheet, FlatList, Alert, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Text,
@@ -26,6 +26,7 @@ import { money, toNumber } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { ACTION_TYPES, RESULTS, STAGES } from "../utils/collectionsCatalog";
 import { openDirections } from "../utils/maps";
+import { buildReminderMessage, callPhone, openSms, openWhatsApp, phoneOf } from "../utils/contact";
 import AddressLines from "../components/AddressLines";
 import { ensureWorkday } from "../tracking/workday";
 import OfflineNotice from "../components/OfflineNotice";
@@ -173,10 +174,24 @@ export default function ClientPortfolioScreen() {
     });
   };
 
-  const callCustomer = (item) => {
-    const phone = item.cellphone || item.telephone;
-    if (!phone) return;
-    Linking.openURL(`tel:${phone}`).catch(() => {});
+  // "Contactar": llamar, o mandar un recordatorio de cobro por WhatsApp / SMS
+  // con el texto ya escrito (cuotas vencidas y su valor, o la próxima cuota).
+  const [contactItem, setContactItem] = useState(null);
+  const reminderText = (item) =>
+    buildReminderMessage({
+      tenantName: session?.tenant?.commercial_name || session?.tenant?.legal_name,
+      customerName: item.customer_name,
+      loanLabel: item.credit_code || item.loan_id,
+      overdueInstallments: item.overdue_installments,
+      overdueAmount: item.overdue_amount,
+      daysOverdue: item.days_overdue,
+      nextAmount: item.installment_amount,
+      nextDate: item.next_payment_date,
+    });
+  const contactAction = (fn) => {
+    const item = contactItem;
+    setContactItem(null);
+    if (item) fn(item);
   };
 
   const openGestion = async (item) => {
@@ -352,12 +367,12 @@ export default function ClientPortfolioScreen() {
                     compact
                     mode="outlined"
                     icon="phone-outline"
-                    onPress={() => callCustomer(item)}
+                    onPress={() => setContactItem(item)}
                     disabled={!phone}
                     style={styles.actionBtn}
                     labelStyle={styles.actionBtnLabel}
                   >
-                    Llamar
+                    Contactar
                   </Button>
                   <Button
                     compact
@@ -389,6 +404,35 @@ export default function ClientPortfolioScreen() {
       )}
 
       <Portal>
+        <Modal
+          visible={!!contactItem}
+          onDismiss={() => setContactItem(null)}
+          contentContainerStyle={{
+            backgroundColor: COLORS.card,
+            margin: SPACING.lg,
+            borderRadius: RADIUS.lg,
+            padding: SPACING.lg,
+            gap: SPACING.sm,
+          }}
+        >
+          {contactItem && (
+            <>
+              <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text }}>{contactItem.customer_name}</Text>
+              <Text style={{ color: COLORS.muted }}>{phoneOf(contactItem)}</Text>
+              <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: SPACING.xs }}>{reminderText(contactItem)}</Text>
+              <Button mode="contained" icon="phone" onPress={() => contactAction((i) => callPhone(phoneOf(i)))} style={{ borderRadius: RADIUS.md }}>
+                Llamar
+              </Button>
+              <Button mode="outlined" icon="whatsapp" onPress={() => contactAction((i) => openWhatsApp(phoneOf(i), reminderText(i)))} style={{ borderRadius: RADIUS.md }}>
+                Recordatorio por WhatsApp
+              </Button>
+              <Button mode="outlined" icon="message-text-outline" onPress={() => contactAction((i) => openSms(phoneOf(i), reminderText(i)))} style={{ borderRadius: RADIUS.md }}>
+                Recordatorio por SMS
+              </Button>
+              <Button onPress={() => setContactItem(null)}>Cancelar</Button>
+            </>
+          )}
+        </Modal>
         <Modal
           visible={!!gestionItem}
           onDismiss={closeGestion}

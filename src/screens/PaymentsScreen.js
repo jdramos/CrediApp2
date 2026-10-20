@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { View, StyleSheet, FlatList, ScrollView, Image, Linking, Platform, Alert } from "react-native";
+import { View, StyleSheet, FlatList, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Text,
@@ -36,6 +36,9 @@ import { useTenantLogo } from "../hooks/useTenantLogo";
 import BusinessDayBanner from "../components/BusinessDayBanner";
 import { confirmAction } from "../utils/confirm";
 import { money, toNumber, formatAmountInput } from "../utils/format";
+import { buildReceiptRows } from "../utils/receipt";
+import { buildPaymentMessage, openSms, openWhatsApp, phoneOf } from "../utils/contact";
+import PaymentReceiptCard from "../components/PaymentReceiptCard";
 import { todayISO } from "../utils/date";
 import { printReceipt, buildPaymentReceiptLines } from "../utils/printer";
 import { COLORS } from "../theme/colors";
@@ -55,25 +58,6 @@ function buildBreakdownRows(applied) {
   return BREAKDOWN_MAP
     .filter(([key]) => applied[key] != null && Number(applied[key]) > 0)
     .map(([key, label]) => ({ label, value: applied[key] }));
-}
-
-// Comprobante: a diferencia del desglose previo, siempre muestra cuánto fue a
-// capital y a interés (aunque sea 0) para que el cliente vea la aplicación del
-// pago; el resto de conceptos solo si recibieron algo.
-const RECEIPT_MAP = [
-  ["principal", "Aplicado a capital", true],
-  ["interest", "Aplicado a interés", true],
-  ["default_interest", "Interés moratorio", false],
-  ["insurance", "Seguro", false],
-  ["fee", "Cargos", false],
-  ["other", "Otros", false],
-];
-
-function buildReceiptRows(applied) {
-  if (!applied) return [];
-  return RECEIPT_MAP
-    .filter(([key, , always]) => always || (applied[key] != null && Number(applied[key]) > 0))
-    .map(([key, label]) => ({ label, value: Number(applied[key]) || 0 }));
 }
 
 const styles = StyleSheet.create({
@@ -429,44 +413,37 @@ export default function PaymentsScreen({ route }) {
     }
   };
 
-  // Avisa del pago al cliente por SMS: abre la app de mensajes del teléfono con
-  // el texto listo (se envía con el plan del teléfono del cobrador, sin servicio externo).
-  // El teléfono sale del cliente seleccionado; si no vino en la búsqueda se
+  // Avisa del pago al cliente por SMS o WhatsApp: abre la app con el texto listo
+  // (se envía desde el teléfono del cobrador, sin servicio externo). El
+  // teléfono sale del cliente seleccionado; si no vino en la búsqueda se
   // consulta su ficha.
-  const onSendSms = async () => {
+  const sendNotice = async (open) => {
     try {
       setSmsBusy(true);
-      let phone = customer?.cellphone || customer?.telephone;
+      let phone = phoneOf(customer);
       if (!phone && customer?.id) {
         const res = await getCustomer(session.token, customer.id).catch(() => null);
-        const c = res?.data?.customer;
-        phone = c?.cellphone || c?.telephone;
+        phone = phoneOf(res?.data?.customer);
       }
-      phone = String(phone || "").replace(/[^\d+]/g, "");
-      if (!phone) {
-        Alert.alert("Sin teléfono", "Este cliente no tiene un número de teléfono registrado.");
-        return;
-      }
-      const tenantName = session?.tenant?.commercial_name || session?.tenant?.legal_name || "CrediMaster";
       const applied = result?.applied;
-      const parts = [
-        `${tenantName}: recibimos su pago de ${money(toNumber(amount))} el ${date} al crédito #${loan?.credit_code || loan?.id || loan?.loan_id}.`,
-      ];
-      if (applied) {
-        parts.push(`Aplicado a capital ${money(Number(applied.principal) || 0)} y a interés ${money(Number(applied.interest) || 0)}.`);
-      }
-      if (result?.principal_balance_after != null) {
-        parts.push(`Saldo capital: ${money(result.principal_balance_after)}.`);
-      }
-      parts.push("¡Gracias!");
-      const body = encodeURIComponent(parts.join(" "));
-      await Linking.openURL(`sms:${phone}${Platform.OS === "ios" ? "&" : "?"}body=${body}`);
-    } catch (e) {
-      Alert.alert("No se pudo abrir los mensajes", "Este dispositivo no puede enviar SMS desde la app.");
+      await open(
+        phone,
+        buildPaymentMessage({
+          tenantName: session?.tenant?.commercial_name || session?.tenant?.legal_name,
+          amount: toNumber(amount),
+          date,
+          loanLabel: loan?.credit_code || loan?.id || loan?.loan_id,
+          principal: applied ? Number(applied.principal) || 0 : undefined,
+          interest: applied ? Number(applied.interest) || 0 : undefined,
+          principalAfter: result?.principal_balance_after,
+        }),
+      );
     } finally {
       setSmsBusy(false);
     }
   };
+  const onSendSms = () => sendNotice(openSms);
+  const onSendWhatsApp = () => sendNotice(openWhatsApp);
 
   const onPrintReceipt = () => {
     printReceipt(
@@ -752,67 +729,20 @@ export default function PaymentsScreen({ route }) {
             </View>
 
             <ViewShot ref={receiptShotRef} options={{ format: "png", quality: 0.95 }} style={{ gap: SPACING.md, backgroundColor: COLORS.bg }}>
-              <View style={styles.card}>
-                {!!logoUrl && (
-                  <Image source={{ uri: logoUrl }} style={{ width: 120, height: 40, alignSelf: "flex-start", marginBottom: SPACING.xs }} resizeMode="contain" />
-                )}
-                <Text style={{ fontWeight: "800", color: COLORS.primary, fontSize: 12, letterSpacing: 1 }}>
-                  {logoUrl ? "" : `${(session?.tenant?.commercial_name || session?.tenant?.legal_name || "CrediMaster").toUpperCase()} — `}
-                  {result?.pendingOffline ? "COMPROBANTE (PENDIENTE DE SINCRONIZAR)" : "COMPROBANTE DE PAGO"}
-                </Text>
-                <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text, marginTop: 2 }}>
-                  {customer?.customer_name}
-                </Text>
-                {!!customer?.identification && (
-                  <Text style={styles.muted}>Cédula: {customer.identification}</Text>
-                )}
-                <AddressLines customer={customer} showMissing={false} />
-                <Text style={styles.muted}>Crédito #{loan?.credit_code || loan?.id || loan?.loan_id}</Text>
-                <Text style={styles.muted}>Fecha: {date}</Text>
-                <Text style={styles.muted}>Cobrado por: {session?.user?.full_name || session?.user?.user_name}</Text>
-              </View>
-
-              <View style={styles.card}>
-                <View style={styles.breakdownRow}>
-                  <Text style={{ color: COLORS.text, fontWeight: "800" }}>Monto pagado</Text>
-                  <Text style={{ color: COLORS.primary, fontWeight: "800", fontSize: 18 }}>
-                    {money(toNumber(amount))}
-                  </Text>
-                </View>
-                {receiptRows.length > 0 && (
-                  <>
-                    <Divider style={{ marginVertical: SPACING.xs }} />
-                    {receiptRows.map((r) => (
-                      <View key={r.label} style={styles.breakdownRow}>
-                        <Text style={{ color: COLORS.muted }}>{r.label}</Text>
-                        <Text style={{ color: COLORS.text, fontWeight: "600" }}>{money(r.value)}</Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-                {result?.principal_balance_before != null && (
-                  <>
-                    <Divider style={{ marginVertical: SPACING.xs }} />
-                    <View style={styles.breakdownRow}>
-                      <Text style={{ color: COLORS.muted }}>Saldo capital anterior</Text>
-                      <Text style={{ color: COLORS.text, fontWeight: "600" }}>{money(result.principal_balance_before)}</Text>
-                    </View>
-                    <View style={styles.breakdownRow}>
-                      <Text style={{ color: COLORS.muted }}>Saldo capital nuevo</Text>
-                      <Text style={{ color: COLORS.text, fontWeight: "600" }}>{money(result.principal_balance_after)}</Text>
-                    </View>
-                  </>
-                )}
-                {result?.loan?.current_balance != null && (
-                  <>
-                    <Divider style={{ marginVertical: SPACING.xs }} />
-                    <View style={styles.breakdownRow}>
-                      <Text style={{ color: COLORS.muted }}>Nuevo saldo total</Text>
-                      <Text style={{ color: COLORS.text, fontWeight: "700" }}>{money(result.loan.current_balance)}</Text>
-                    </View>
-                  </>
-                )}
-              </View>
+              <PaymentReceiptCard
+                tenantName={session?.tenant?.commercial_name || session?.tenant?.legal_name}
+                logoUrl={logoUrl}
+                pendingOffline={!!result?.pendingOffline}
+                customer={customer}
+                loanLabel={loan?.credit_code || loan?.id || loan?.loan_id}
+                date={date}
+                collectorName={session?.user?.full_name || session?.user?.user_name}
+                amount={toNumber(amount)}
+                rows={receiptRows}
+                principalBefore={result?.principal_balance_before}
+                principalAfter={result?.principal_balance_after}
+                newBalance={result?.loan?.current_balance}
+              />
             </ViewShot>
 
             <HelperText type="error" visible={!!error}>{error}</HelperText>
@@ -856,17 +786,29 @@ export default function PaymentsScreen({ route }) {
               Compartir comprobante (WhatsApp, correo, etc.)
             </Button>
 
-            <Button
-              mode="outlined"
-              icon="message-text-outline"
-              onPress={onSendSms}
-              loading={smsBusy}
-              disabled={smsBusy}
-              style={{ borderRadius: RADIUS.md }}
-              contentStyle={{ height: 46 }}
-            >
-              Enviar SMS al cliente
-            </Button>
+            <View style={{ flexDirection: "row", gap: SPACING.xs }}>
+              <Button
+                mode="outlined"
+                icon="message-text-outline"
+                onPress={onSendSms}
+                loading={smsBusy}
+                disabled={smsBusy}
+                style={{ flex: 1, borderRadius: RADIUS.md }}
+                contentStyle={{ height: 46 }}
+              >
+                SMS al cliente
+              </Button>
+              <Button
+                mode="outlined"
+                icon="whatsapp"
+                onPress={onSendWhatsApp}
+                disabled={smsBusy}
+                style={{ flex: 1, borderRadius: RADIUS.md }}
+                contentStyle={{ height: 46 }}
+              >
+                WhatsApp
+              </Button>
+            </View>
 
             <Button
               mode="outlined"

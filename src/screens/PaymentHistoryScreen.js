@@ -7,6 +7,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getMyPayments } from "../api/collectionsApi";
 import PaymentEvidenceModal from "../components/PaymentEvidenceModal";
+import PaymentReceiptModal from "../components/PaymentReceiptModal";
 import { usePendingPayments } from "../offline/pendingPayments";
 import { money } from "../utils/format";
 import { todayISO, shiftDay } from "../utils/date";
@@ -122,6 +123,7 @@ export default function PaymentHistoryScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [evidenceFor, setEvidenceFor] = useState(null);
+  const [receiptFor, setReceiptFor] = useState(null);
   const requestId = useRef(0);
 
   const load = useCallback(
@@ -198,8 +200,12 @@ export default function PaymentHistoryScreen() {
         <Text style={styles.muted}>
           Capital {money(p.principal_payment)} · Interés {money(p.interest_payment)}
         </Text>
-        {hasEvidence && (
-          <View style={styles.chipsRow}>
+        <View style={styles.chipsRow}>
+          <Chip compact icon="receipt-text-outline" style={{ backgroundColor: COLORS.primarySoft }} onPress={() => setReceiptFor(p)}>
+            Comprobante
+          </Chip>
+          {hasEvidence && (
+            <>
             {p.evidence_photo > 0 && (
               <Chip compact icon="camera-outline" style={{ backgroundColor: COLORS.primarySoft }} onPress={() => setEvidenceFor(p)}>
                 Foto
@@ -210,8 +216,9 @@ export default function PaymentHistoryScreen() {
                 Firma
               </Chip>
             )}
-          </View>
-        )}
+            </>
+          )}
+        </View>
       </Pressable>
     );
   };
@@ -296,6 +303,7 @@ export default function PaymentHistoryScreen() {
         />
       )}
 
+      <PaymentReceiptModal payment={receiptFor} onDismiss={() => setReceiptFor(null)} />
       <PaymentEvidenceModal
         paymentId={evidenceFor?.id}
         subtitle={evidenceFor ? `${evidenceFor.customer_name || "Cliente"} — Crédito #${evidenceFor.credit_code || evidenceFor.loan_id}` : ""}
