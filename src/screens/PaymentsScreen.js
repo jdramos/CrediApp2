@@ -35,7 +35,7 @@ import { useBusinessDayStatus } from "../hooks/useBusinessDayStatus";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import BusinessDayBanner from "../components/BusinessDayBanner";
 import { confirmAction } from "../utils/confirm";
-import { money, toNumber } from "../utils/format";
+import { money, toNumber, formatAmountInput } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { printReceipt, buildPaymentReceiptLines } from "../utils/printer";
 import { COLORS } from "../theme/colors";
@@ -171,7 +171,7 @@ export default function PaymentsScreen({ route }) {
   // sigue siendo editable por si el pago es parcial o distinto.
   const defaultAmountFor = (loanData) => {
     const amt = Number(loanData?.next_installment_amount ?? loanData?.installment ?? 0);
-    return amt > 0 ? String(amt) : "";
+    return amt > 0 ? formatAmountInput(String(amt)) : "";
   };
 
   // Llegó desde "Estado de cuenta" con un cliente/crédito ya elegido —
@@ -646,7 +646,7 @@ export default function PaymentsScreen({ route }) {
               mode="outlined"
               label="Monto"
               value={amount}
-              onChangeText={(t) => { setAmount(t); setBreakdown(null); }}
+              onChangeText={(t) => { setAmount(formatAmountInput(t)); setBreakdown(null); }}
               keyboardType="decimal-pad"
               style={{ backgroundColor: COLORS.card, marginTop: SPACING.md }}
               outlineStyle={{ borderRadius: RADIUS.md, borderColor: COLORS.border }}
