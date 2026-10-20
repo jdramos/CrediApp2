@@ -100,7 +100,6 @@ export default function DashboardScreen() {
   const multiBranch = (session?.user?.branches || []).length > 1;
 
   const canApprove = session?.permissions?.includes("aprobaciones.ver");
-  const canCreateLoan = session?.permissions?.includes("creditos.insertar");
   const canViewLoans = session?.permissions?.includes("creditos.ver");
   const canPay = session?.permissions?.includes("pagos.insertar") || session?.permissions?.includes("pagos.ver");
   const canSupervise = session?.permissions?.includes("creditos.productividad.ver");
@@ -216,18 +215,9 @@ export default function DashboardScreen() {
           )}
           {canPay && (
             <ActionTile
-              icon="cash-fast"
-              title="Registrar pago"
-              subtitle="Capturar en segundos"
-              gradient={GRADIENTS.success}
-              onPress={() => navigation.navigate("Pagos")}
-            />
-          )}
-          {canPay && (
-            <ActionTile
               icon="format-list-checks"
               title="Mis cobros"
-              subtitle="Listado de lo cobrado"
+              subtitle="Cobros y registrar pago"
               gradient={GRADIENTS.primary}
               onPress={() => navigation.navigate("Pagos", { screen: "PaymentHistory" })}
             />
@@ -278,20 +268,11 @@ export default function DashboardScreen() {
               onPress={() => navigation.navigate("RoutesDay")}
             />
           )}
-          {canCreateLoan && (
-            <ActionTile
-              icon="file-document-plus-outline"
-              title="Nueva solicitud"
-              subtitle="Registrar crédito"
-              gradient={GRADIENTS.dark}
-              onPress={() => navigation.navigate("Creditos", { screen: "NewLoanRequest" })}
-            />
-          )}
           {canViewLoans && (
             <ActionTile
               icon="format-list-bulleted"
               title="Mis solicitudes"
-              subtitle="Estado de cada solicitud"
+              subtitle="Estado y nueva solicitud"
               gradient={GRADIENTS.dark}
               onPress={() => navigation.navigate("Creditos", { screen: "MyLoanRequests" })}
             />

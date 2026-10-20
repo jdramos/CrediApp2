@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useRef, useState } from "react";
 import { View, StyleSheet, FlatList, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Text, Button, ActivityIndicator, IconButton, Chip } from "react-native-paper";
+import { Text, Button, ActivityIndicator, IconButton, Chip, FAB } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
@@ -56,6 +56,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
   },
   noticeText: { color: COLORS.text, fontSize: 13 },
+  fab: { position: "absolute", right: SPACING.lg, bottom: 96, backgroundColor: COLORS.primary },
   empty: { textAlign: "center", color: COLORS.muted, marginTop: SPACING.xl, paddingHorizontal: SPACING.xl },
   error: { textAlign: "center", color: COLORS.danger, marginTop: SPACING.lg, paddingHorizontal: SPACING.xl },
 });
@@ -95,6 +96,7 @@ export default function PaymentHistoryScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [evidenceFor, setEvidenceFor] = useState(null);
+  const canCreate = session?.permissions?.includes("pagos.insertar");
   const [receiptFor, setReceiptFor] = useState(null);
   const requestId = useRef(0);
 
@@ -272,6 +274,16 @@ export default function PaymentHistoryScreen() {
               </Button>
             ) : null
           }
+        />
+      )}
+
+      {canCreate && (
+        <FAB
+          icon="plus"
+          label="Registrar pago"
+          color={COLORS.onGradient}
+          style={styles.fab}
+          onPress={() => navigation.push("PaymentsHome")}
         />
       )}
 

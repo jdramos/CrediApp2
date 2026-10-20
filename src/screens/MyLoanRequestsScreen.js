@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useEffect, useState } from "react";
 import { View, StyleSheet, FlatList } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Text, TextInput, Card, Chip, ActivityIndicator, HelperText, IconButton } from "react-native-paper";
+import { Text, TextInput, Card, Chip, ActivityIndicator, HelperText, IconButton, FAB } from "react-native-paper";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getAccessibleBranches } from "../api/branchApi";
@@ -50,6 +50,7 @@ const styles = StyleSheet.create({
   muted: { color: COLORS.muted, marginTop: 2, fontSize: 12 },
   stageRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: SPACING.xs, gap: SPACING.sm },
   stageDetail: { color: COLORS.muted, fontSize: 12, flex: 1 },
+  fab: { position: "absolute", right: SPACING.lg, bottom: 96, backgroundColor: COLORS.primary },
   empty: { textAlign: "center", color: COLORS.muted, marginTop: SPACING.xl, paddingHorizontal: SPACING.xl },
 });
 
@@ -70,6 +71,7 @@ export default function MyLoanRequestsScreen() {
   const [search, setSearch] = useState("");
 
   const [mineOnly, setMineOnly] = useState(true);
+  const canCreate = session?.permissions?.includes("creditos.insertar");
   const [loans, setLoans] = useState([]);
   const [total, setTotal] = useState(0);
   const [pendingTotal, setPendingTotal] = useState(0);
@@ -287,6 +289,16 @@ export default function MyLoanRequestsScreen() {
               </Card>
             );
           }}
+        />
+      )}
+
+      {canCreate && (
+        <FAB
+          icon="plus"
+          label="Nueva solicitud"
+          color={COLORS.onGradient}
+          style={styles.fab}
+          onPress={() => navigation.push("NewLoanRequest")}
         />
       )}
     </SafeAreaView>
