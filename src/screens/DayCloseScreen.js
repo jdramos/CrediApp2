@@ -79,8 +79,8 @@ function Row({ label, value, color }) {
 export default function DayCloseScreen() {
   const navigation = useNavigation();
   const { session } = useContext(SessionContext);
-  const pending = usePendingPayments(date);
   const [date, setDate] = useState(todayISO());
+  const pending = usePendingPayments(date);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
