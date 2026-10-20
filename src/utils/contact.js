@@ -20,8 +20,10 @@ export const phoneOf = (c) => c?.cellphone || c?.telephone || "";
 const firstName = (full) => String(full || "").trim().split(/\s+/)[0] || "";
 
 // Texto del SMS/WhatsApp con el pago que acaba de recibir el cliente.
-export function buildPaymentMessage({ tenantName, amount, date, loanLabel, principal, interest, principalAfter }) {
-  const parts = [`${tenantName || "CrediMaster"}: recibimos su pago de ${money(amount)} el ${date} al crédito #${loanLabel}.`];
+export function buildPaymentMessage({ tenantName, amount, date, loanLabel, principal, interest, principalAfter, receiptNumber }) {
+  const parts = [
+    `${tenantName || "CrediMaster"}: recibimos su pago de ${money(amount)} el ${date} al crédito #${loanLabel}${receiptNumber ? ` (recibo ${receiptNumber})` : ""}.`,
+  ];
   if (principal != null || interest != null) {
     parts.push(`Aplicado a capital ${money(Number(principal) || 0)} y a interés ${money(Number(interest) || 0)}.`);
   }

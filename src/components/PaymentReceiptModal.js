@@ -5,7 +5,7 @@ import ViewShot, { captureRef } from "react-native-view-shot";
 import { SessionContext } from "../auth/SessionContext";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import PaymentReceiptCard from "./PaymentReceiptCard";
-import { appliedFromPaymentRow, buildReceiptRows } from "../utils/receipt";
+import { appliedFromPaymentRow, buildReceiptRows, formatReceiptNumber } from "../utils/receipt";
 import { buildPaymentMessage, openSms, openWhatsApp, phoneOf } from "../utils/contact";
 import { printReceipt, buildPaymentReceiptLines } from "../utils/printer";
 import { shareImage } from "../utils/shareImage";
@@ -62,6 +62,7 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
         loanLabel: payment.credit_code || payment.loan_id,
         principal: payment.principal_payment,
         interest: payment.interest_payment,
+        receiptNumber: formatReceiptNumber(payment.id),
       })
     : "";
 
@@ -80,6 +81,7 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
         collectorName,
         amount: payment.amount,
         breakdownRows: rows,
+        receiptNumber: formatReceiptNumber(payment.id),
       }),
     );
   };
@@ -104,6 +106,7 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
                   loanLabel={payment.credit_code || payment.loan_id}
                   date={`${payment.payment_date}${payment.time ? ` ${payment.time}` : ""}`}
                   collectorName={collectorName}
+                  receiptNumber={formatReceiptNumber(payment.id)}
                   amount={payment.amount}
                   rows={rows}
                 />

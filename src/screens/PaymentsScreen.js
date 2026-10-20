@@ -36,7 +36,7 @@ import { useTenantLogo } from "../hooks/useTenantLogo";
 import BusinessDayBanner from "../components/BusinessDayBanner";
 import { confirmAction } from "../utils/confirm";
 import { money, toNumber, formatAmountInput } from "../utils/format";
-import { buildReceiptRows } from "../utils/receipt";
+import { buildReceiptRows, formatReceiptNumber } from "../utils/receipt";
 import { buildPaymentMessage, openSms, openWhatsApp, phoneOf } from "../utils/contact";
 import PaymentReceiptCard from "../components/PaymentReceiptCard";
 import { todayISO } from "../utils/date";
@@ -436,6 +436,7 @@ export default function PaymentsScreen({ route }) {
           principal: applied ? Number(applied.principal) || 0 : undefined,
           interest: applied ? Number(applied.interest) || 0 : undefined,
           principalAfter: result?.principal_balance_after,
+          receiptNumber: formatReceiptNumber(result?.payment_id),
         }),
       );
     } finally {
@@ -461,6 +462,7 @@ export default function PaymentsScreen({ route }) {
         principalBalanceBefore: result?.principal_balance_before,
         principalBalanceAfter: result?.principal_balance_after,
         newBalance: result?.loan?.current_balance,
+        receiptNumber: formatReceiptNumber(result?.payment_id),
       }),
     );
   };
@@ -737,6 +739,7 @@ export default function PaymentsScreen({ route }) {
                 loanLabel={loan?.credit_code || loan?.id || loan?.loan_id}
                 date={date}
                 collectorName={session?.user?.full_name || session?.user?.user_name}
+                receiptNumber={formatReceiptNumber(result?.payment_id)}
                 amount={toNumber(amount)}
                 rows={receiptRows}
                 principalBefore={result?.principal_balance_before}

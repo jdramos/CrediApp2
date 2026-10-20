@@ -29,3 +29,12 @@ export function appliedFromPaymentRow(p) {
     other: p.other_charges_payment,
   };
 }
+
+// Nº de recibo: es el id del pago (único y consecutivo en la empresa), con 6
+// cifras: 5366 -> "005366". Es el mismo número que el ID de la lista de pagos
+// de la plataforma web, así la oficina lo encuentra directo. Un pago guardado
+// sin conexión no lo tiene hasta que se sincroniza.
+export function formatReceiptNumber(id) {
+  const n = Number(id);
+  return Number.isFinite(n) && n > 0 ? String(Math.trunc(n)).padStart(6, "0") : "";
+}

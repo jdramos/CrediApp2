@@ -10,6 +10,7 @@ import PaymentEvidenceModal from "../components/PaymentEvidenceModal";
 import PaymentReceiptModal from "../components/PaymentReceiptModal";
 import { usePendingPayments } from "../offline/pendingPayments";
 import { money } from "../utils/format";
+import { formatReceiptNumber } from "../utils/receipt";
 import { todayISO, periodRange } from "../utils/date";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
@@ -168,7 +169,7 @@ export default function PaymentHistoryScreen() {
           <Text style={styles.amount}>{money(p.amount)}</Text>
         </View>
         <Text style={styles.muted}>
-          Crédito #{p.credit_code || p.loan_id} · {p.forma_pago_name || "-"}
+          Recibo {formatReceiptNumber(p.id)} · Crédito #{p.credit_code || p.loan_id} · {p.forma_pago_name || "-"}
           {p.time ? ` · ${p.time}` : ""}
         </Text>
         <Text style={styles.muted}>

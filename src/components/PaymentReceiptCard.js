@@ -33,6 +33,7 @@ export default function PaymentReceiptCard({
   loanLabel,
   date,
   collectorName,
+  receiptNumber,
   amount,
   rows = [],
   principalBefore,
@@ -55,6 +56,9 @@ export default function PaymentReceiptCard({
         </Text>
         {!!customer?.identification && <Text style={styles.muted}>Cédula: {customer.identification}</Text>}
         <AddressLines customer={customer} showMissing={false} />
+        <Text style={{ fontWeight: "800", color: COLORS.text, marginTop: 2 }}>
+          {receiptNumber ? `Recibo No. ${receiptNumber}` : "Recibo No.: se asigna al sincronizar"}
+        </Text>
         <Text style={styles.muted}>Crédito #{loanLabel}</Text>
         <Text style={styles.muted}>Fecha: {date}</Text>
         <Text style={styles.muted}>Cobrado por: {collectorName}</Text>

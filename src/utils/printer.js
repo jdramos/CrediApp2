@@ -115,10 +115,12 @@ export function buildPaymentReceiptLines({
   principalBalanceBefore,
   principalBalanceAfter,
   newBalance,
+  receiptNumber,
 }) {
   const lines = [
     center((tenantName || "CrediMaster").toUpperCase()),
     center("COMPROBANTE DE PAGO"),
+    ...(receiptNumber ? [center(`Recibo No. ${receiptNumber}`)] : []),
     divider(),
     customerName || "",
   ];

@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useMemo, useState } from "react";
-import { View, StyleSheet, FlatList, Alert, ScrollView } from "react-native";
+import { View, StyleSheet, FlatList, Alert, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Text,
@@ -19,7 +19,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Location from "expo-location";
 import { SessionContext } from "../auth/SessionContext";
-import { getAssignedLoans, logVisit } from "../api/collectionsApi";
+import { getAssignedLoans, logVisit, getMyLoanPayments } from "../api/collectionsApi";
 import { isNetworkError } from "../api/credimasterClient";
 import { getCustomer, saveCustomerLocation } from "../api/customerApi";
 import { confirmAction } from "../utils/confirm";
@@ -40,6 +40,8 @@ import {
 } from "../utils/maps";
 import { buildReminderMessage, callPhone, openSms, openWhatsApp, phoneOf } from "../utils/contact";
 import AddressLines from "../components/AddressLines";
+import PaymentReceiptModal from "../components/PaymentReceiptModal";
+import { formatReceiptNumber } from "../utils/receipt";
 import { ensureWorkday } from "../tracking/workday";
 import OfflineNotice from "../components/OfflineNotice";
 import { cachedFetch, readCache } from "../offline/cache";
@@ -118,6 +120,37 @@ export default function ClientPortfolioScreen() {
 
   // Filtro rápido de la cartera (ver FILTERS).
   const [filter, setFilter] = useState("all");
+
+  // Historial rápido de pagos por crédito (se pide al abrir, no con la lista).
+  const [historyOpen, setHistoryOpen] = useState(() => new Set());
+  const [history, setHistory] = useState({}); // loan_id -> { loading, rows, total, error }
+  const [receiptFor, setReceiptFor] = useState(null);
+
+  const toggleHistory = async (loanId) => {
+    const open = new Set(historyOpen);
+    if (open.has(loanId)) {
+      open.delete(loanId);
+      setHistoryOpen(open);
+      return;
+    }
+    open.add(loanId);
+    setHistoryOpen(open);
+    setHistory((h) => ({ ...h, [loanId]: { loading: true, rows: [], total: 0, error: "" } }));
+    try {
+      const res = await getMyLoanPayments(session.token, loanId, { limit: 5 });
+      setHistory((h) => ({ ...h, [loanId]: { loading: false, rows: res?.data || [], total: res?.total || 0, error: "" } }));
+    } catch (e) {
+      setHistory((h) => ({
+        ...h,
+        [loanId]: {
+          loading: false,
+          rows: [],
+          total: 0,
+          error: isNetworkError(e) ? "Sin conexión: el historial necesita señal." : e?.message || "No se pudo cargar el historial",
+        },
+      }));
+    }
+  };
 
   // Guardar la ubicación (casa o negocio) de un cliente que aún no la tiene.
   const [placeItem, setPlaceItem] = useState(null);
@@ -647,6 +680,59 @@ export default function ClientPortfolioScreen() {
                     <Text style={styles.overdueAmount}>{money(item.overdue_amount)}</Text>
                   </View>
                 )}
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: SPACING.xs }}>
+                  <Text style={{ color: COLORS.muted, fontSize: 12, flex: 1 }}>
+                    {item.last_payment_date
+                      ? `Último pago: ${item.last_payment_date} · ${money(item.last_payment_amount)}`
+                      : "Sin pagos registrados"}
+                  </Text>
+                  {!!item.last_payment_date && (
+                    <Button
+                      compact
+                      mode="text"
+                      icon={historyOpen.has(item.loan_id) ? "chevron-up" : "history"}
+                      onPress={() => toggleHistory(item.loan_id)}
+                      labelStyle={{ fontSize: 12 }}
+                    >
+                      {historyOpen.has(item.loan_id) ? "Ocultar" : "Ver pagos"}
+                    </Button>
+                  )}
+                </View>
+                {historyOpen.has(item.loan_id) && (
+                  <View style={{ marginTop: SPACING.xs, gap: 6 }}>
+                    {history[item.loan_id]?.loading && <ActivityIndicator size="small" />}
+                    {!!history[item.loan_id]?.error && (
+                      <Text style={{ color: COLORS.danger, fontSize: 12 }}>{history[item.loan_id].error}</Text>
+                    )}
+                    {(history[item.loan_id]?.rows || []).map((p) => (
+                      <Pressable
+                        key={p.id}
+                        onPress={() => setReceiptFor(p)}
+                        style={{
+                          backgroundColor: COLORS.bg,
+                          borderRadius: RADIUS.sm,
+                          padding: SPACING.sm,
+                          borderWidth: 1,
+                          borderColor: COLORS.border,
+                        }}
+                      >
+                        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                          <Text style={{ color: COLORS.text, fontWeight: "700", fontSize: 13 }}>{p.payment_date}</Text>
+                          <Text style={{ color: COLORS.success, fontWeight: "800", fontSize: 13 }}>{money(p.amount)}</Text>
+                        </View>
+                        <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                          Recibo {formatReceiptNumber(p.id)} · {p.forma_pago_name || "-"} · Capital {money(p.principal_payment)} · Interés{" "}
+                          {money(p.interest_payment)}
+                        </Text>
+                      </Pressable>
+                    ))}
+                    {history[item.loan_id]?.total > (history[item.loan_id]?.rows || []).length && (
+                      <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                        Mostrando {(history[item.loan_id]?.rows || []).length} de {history[item.loan_id].total} pagos. Tocá la tarjeta para ver el estado de cuenta completo.
+                      </Text>
+                    )}
+                  </View>
+                )}
                 <View style={styles.actionsRow}>
                   <Button compact mode="outlined" icon="cash-fast" onPress={() => goToPay(item)} style={styles.actionBtn} labelStyle={styles.actionBtnLabel}>
                     Pagar
@@ -914,6 +1000,7 @@ export default function ClientPortfolioScreen() {
           </ScrollView>
         </Modal>
       </Portal>
+      <PaymentReceiptModal payment={receiptFor} onDismiss={() => setReceiptFor(null)} />
     </SafeAreaView>
   );
 }

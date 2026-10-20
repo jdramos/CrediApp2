@@ -95,3 +95,8 @@ export const getMyPayments = (token, params = {}) => {
   return credimasterGet(`/api/collections/my-payments${qs ? `?${qs}` : ""}`, token);
 };
 
+// Últimos pagos de UN crédito de mi cartera (más recientes primero), con la
+// forma de "Mis cobros" para poder abrir el comprobante — permiso pagos.ver.
+// Responde { data, total }.
+export const getMyLoanPayments = (token, loanId, { limit = 5 } = {}) =>
+  credimasterGet(`/api/collections/my-loans/${loanId}/payments?limit=${limit}`, token);
