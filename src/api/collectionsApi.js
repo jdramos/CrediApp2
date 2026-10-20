@@ -25,7 +25,7 @@ export const getAssignedLoans = (token, params = {}) => {
 // poder verificar si realmente estuvo ahí.
 export const logVisit = (
   token,
-  { loan_id, action_type, action_date, result, stage, notes, promised_amount, promised_date, visit_lat, visit_lng } = {},
+  { loan_id, action_type, action_date, result, stage, notes, promised_amount, promised_date, next_action_date, visit_lat, visit_lng } = {},
 ) =>
   credimasterPost(
     "/api/collections/actions",
@@ -38,6 +38,7 @@ export const logVisit = (
       notes: notes || undefined,
       promised_amount: promised_amount || undefined,
       promised_date: promised_date || undefined,
+      next_action_date: next_action_date || undefined,
       visit_lat,
       visit_lng,
     },

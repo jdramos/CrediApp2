@@ -26,9 +26,18 @@ import { confirmAction } from "../utils/confirm";
 import { enqueue } from "../offline/queue";
 import { useSync } from "../offline/SyncProvider";
 import { money, toNumber } from "../utils/format";
-import { todayISO } from "../utils/date";
+import { todayISO, shiftDay } from "../utils/date";
 import { ACTION_TYPES, RESULTS, STAGES } from "../utils/collectionsCatalog";
-import { openDirections, customerDestination, distanceMeters, formatDistance } from "../utils/maps";
+import {
+  openDirections,
+  customerDestination,
+  distanceMeters,
+  formatDistance,
+  planRoute,
+  routeLength,
+  openRouteInMaps,
+  MAPS_MAX_STOPS,
+} from "../utils/maps";
 import { buildReminderMessage, callPhone, openSms, openWhatsApp, phoneOf } from "../utils/contact";
 import AddressLines from "../components/AddressLines";
 import { ensureWorkday } from "../tracking/workday";
@@ -45,6 +54,7 @@ const emptyGestionForm = {
   notes: "",
   promised_amount: "",
   promised_date: "",
+  next_action_date: "", // "volver a visitar": avisa ese día y entra a "Por visitar hoy"
 };
 
 const styles = StyleSheet.create({
@@ -246,11 +256,12 @@ export default function ClientPortfolioScreen() {
 
   const chooseSort = (mode) => {
     setSortMode(mode);
-    if (mode === "near") locate();
+    if (mode === "near" || mode === "route") locate();
   };
 
   // Filtros rápidos. "Por visitar hoy" = lo que hoy pide una visita (en mora,
-  // cuota que vence hoy o promesa de pago ya cumplida en fecha) y todavía no se
+  // cuota que vence hoy, promesa de pago ya cumplida en fecha o seguimiento
+  // agendado para hoy o antes) y todavía no se
   // gestionó hoy (ni en el servidor ni en la cola sin conexión).
   const today = todayISO();
   const isManaged = (l) => Number(l.managed_today) === 1 || managedIds.has(l.loan_id);
@@ -259,31 +270,57 @@ export default function ClientPortfolioScreen() {
     ["mora", "En mora", (l) => Number(l.days_overdue) > 0],
     ["today", "Vencen hoy", (l) => Number(l.due_today) === 1],
     ["promise", "Con promesa", (l) => !!l.promised_date],
+    ["follow", "Seguimiento", (l) => !!l.followup_date && l.followup_date <= today && !isManaged(l)],
     [
       "visit",
       "Por visitar hoy",
       (l) =>
         !isManaged(l) &&
-        (Number(l.days_overdue) > 0 || Number(l.due_today) === 1 || (!!l.promised_date && String(l.promised_date).slice(0, 10) <= today)),
+        (Number(l.days_overdue) > 0 ||
+          Number(l.due_today) === 1 ||
+          (!!l.promised_date && String(l.promised_date).slice(0, 10) <= today) ||
+          (!!l.followup_date && l.followup_date <= today)),
     ],
   ];
   const filterFn = FILTERS.find(([k]) => k === filter)?.[2] || (() => true);
   const filteredLoans = loans.filter(filterFn);
 
-  // Lista a mostrar, con la distancia de cada cliente cuando se ordena por cercanía.
-  const shownLoans = useMemo(() => {
-    if (sortMode !== "near" || !myPos) return filteredLoans;
-    const withDist = filteredLoans.map((l) => {
-      const dest = customerDestination(l);
-      return { ...l, _dist: dest ? distanceMeters(myPos, dest) : null, _distLabel: dest?.label };
+  // Lista a mostrar. "near": por distancia a tu ubicación. "route": en el orden de
+  // un recorrido sugerido (vecino más cercano afinado con 2-opt) con el tramo de
+  // cada parada. Los clientes sin ubicación guardada van al final.
+  const shown = useMemo(() => {
+    if ((sortMode !== "near" && sortMode !== "route") || !myPos) return { list: filteredLoans, stats: null };
+    const withDest = filteredLoans.map((l) => ({ l, dest: customerDestination(l) }));
+    const located = withDest.filter((x) => x.dest);
+    const missing = withDest.filter((x) => !x.dest).map((x) => x.l);
+
+    if (sortMode === "near") {
+      const list = located
+        .map(({ l, dest }) => ({ ...l, _dist: distanceMeters(myPos, dest), _distLabel: dest.label }))
+        .sort((a, b) => a._dist - b._dist);
+      return { list: [...list, ...missing], stats: null };
+    }
+
+    const points = located.map((x) => x.dest);
+    const order = planRoute(myPos, points);
+    let prev = myPos;
+    const list = order.map((idx, k) => {
+      const { l, dest } = located[idx];
+      const leg = distanceMeters(prev, dest);
+      prev = dest;
+      return { ...l, _stop: k + 1, _leg: leg, _distLabel: dest.label, _lat: dest.lat, _lng: dest.lng };
     });
-    return withDist.sort((a, b) => {
-      if (a._dist == null && b._dist == null) return 0; // sin ubicación: se conserva el orden por mora
-      if (a._dist == null) return 1;
-      if (b._dist == null) return -1;
-      return a._dist - b._dist;
-    });
+    return {
+      list: [...list, ...missing],
+      stats: { stops: list.length, meters: routeLength(myPos, points, order), missing: missing.length },
+    };
   }, [loans, filter, managedIds, sortMode, myPos]);
+  const shownLoans = shown.list;
+
+  const openRoute = async () => {
+    const stops = shownLoans.filter((l) => l._stop).map((l) => ({ lat: l._lat, lng: l._lng }));
+    await openRouteInMaps(myPos, stops);
+  };
 
   const overdueSummary = useMemo(() => {
     const overdue = loans.filter((l) => Number(l.days_overdue) > 0);
@@ -342,6 +379,9 @@ export default function ClientPortfolioScreen() {
     setGestionItem(null);
   };
 
+  const setFollowup = (loanId, date) =>
+    setLoans((prev) => prev.map((l) => (l.loan_id === loanId ? { ...l, followup_date: date || null } : l)));
+
   const setG = (field, value) => setGestionForm((prev) => ({ ...prev, [field]: value }));
 
   const saveGestion = async () => {
@@ -377,6 +417,7 @@ export default function ClientPortfolioScreen() {
       notes: gestionForm.notes || undefined,
       promised_amount: gestionForm.promised_amount ? toNumber(gestionForm.promised_amount) : undefined,
       promised_date: gestionForm.promised_date || undefined,
+      next_action_date: gestionForm.next_action_date || undefined,
       visit_lat: visitLat,
       visit_lng: visitLng,
     };
@@ -384,6 +425,7 @@ export default function ClientPortfolioScreen() {
     try {
       setSavingGestion(true);
       await logVisit(session.token, payload);
+      setFollowup(gestionItem.loan_id, payload.next_action_date);
       setManagedIds((prev) => new Set(prev).add(gestionItem.loan_id));
       setGestionItem(null);
     } catch (e) {
@@ -395,6 +437,7 @@ export default function ClientPortfolioScreen() {
             payload,
           });
           refreshPendingCount();
+          setFollowup(gestionItem.loan_id, payload.next_action_date);
           setManagedIds((prev) => new Set(prev).add(gestionItem.loan_id));
           setGestionItem(null);
           Alert.alert("Sin conexión", "La gestión se guardó en el equipo y se registrará sola cuando vuelva la señal.");
@@ -432,7 +475,7 @@ export default function ClientPortfolioScreen() {
           outlineStyle={{ borderRadius: RADIUS.md }}
           left={<TextInput.Icon icon="magnify" />}
         />
-        <View style={{ flexDirection: "row", gap: SPACING.xs, marginTop: SPACING.sm }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginTop: SPACING.sm }}>
           <Chip
             icon="alert-circle-outline"
             selected={sortMode === "mora"}
@@ -449,9 +492,34 @@ export default function ClientPortfolioScreen() {
             onPress={() => chooseSort("near")}
             style={{ backgroundColor: sortMode === "near" ? COLORS.primarySoft : COLORS.card }}
           >
-            {locating ? "Ubicándote…" : "Más cerca de mí"}
+            {locating && sortMode === "near" ? "Ubicándote…" : "Más cerca de mí"}
+          </Chip>
+          <Chip
+            icon="map-marker-path"
+            selected={sortMode === "route"}
+            showSelectedCheck={false}
+            onPress={() => chooseSort("route")}
+            style={{ backgroundColor: sortMode === "route" ? COLORS.primarySoft : COLORS.card }}
+          >
+            {locating && sortMode === "route" ? "Ubicándote…" : "Ruta sugerida"}
           </Chip>
         </View>
+        {sortMode === "route" && myPos && !locating && shown.stats && (
+          <View style={{ marginTop: SPACING.xs, gap: SPACING.xs }}>
+            <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+              {shown.stats.stops === 0
+                ? "Ningún cliente de este filtro tiene ubicación guardada."
+                : `${shown.stats.stops} parada${shown.stats.stops === 1 ? "" : "s"} · ≈ ${formatDistance(shown.stats.meters)} en línea recta${
+                    shown.stats.missing > 0 ? ` · ${shown.stats.missing} sin ubicación al final` : ""
+                  }`}
+            </Text>
+            {shown.stats.stops > 0 && (
+              <Button mode="contained" icon="google-maps" onPress={openRoute} style={{ borderRadius: RADIUS.md }}>
+                {shown.stats.stops > MAPS_MAX_STOPS ? `Abrir las primeras ${MAPS_MAX_STOPS} paradas en Maps` : "Abrir ruta en Google Maps"}
+              </Button>
+            )}
+          </View>
+        )}
         {sortMode === "near" && myPos && !locating && (
           <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: SPACING.xs }}>
             Distancia en línea recta desde tu ubicación. Tocá «Más cerca de mí» para actualizarla.
@@ -515,11 +583,19 @@ export default function ClientPortfolioScreen() {
                 </View>
                 <Text style={styles.muted}>Código: {item.customer_identification} · Crédito #{item.credit_code || item.loan_id}</Text>
                 <AddressLines customer={item} />
-                {sortMode === "near" && myPos && (
+                {(sortMode === "near" || sortMode === "route") && myPos && (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 }}>
-                    <MaterialCommunityIcons name="map-marker-distance" size={14} color={item._dist != null ? COLORS.primary : COLORS.muted} />
-                    <Text style={{ color: item._dist != null ? COLORS.primary : COLORS.muted, fontSize: 12, fontWeight: "700" }}>
-                      {item._dist != null ? `a ${formatDistance(item._dist)} (${item._distLabel})` : "Sin ubicación guardada"}
+                    <MaterialCommunityIcons
+                      name={item._stop && item._stop <= 9 ? `numeric-${item._stop}-circle-outline` : "map-marker-distance"}
+                      size={14}
+                      color={item._dist != null || item._stop ? COLORS.primary : COLORS.muted}
+                    />
+                    <Text style={{ color: item._dist != null || item._stop ? COLORS.primary : COLORS.muted, fontSize: 12, fontWeight: "700" }}>
+                      {item._stop
+                        ? `Parada ${item._stop} · a ${formatDistance(item._leg)} ${item._stop === 1 ? "de tu ubicación" : "de la parada anterior"} (${item._distLabel})`
+                        : item._dist != null
+                          ? `a ${formatDistance(item._dist)} (${item._distLabel})`
+                          : "Sin ubicación guardada"}
                     </Text>
                   </View>
                 )}
@@ -527,6 +603,12 @@ export default function ClientPortfolioScreen() {
                   <Text style={{ color: String(item.promised_date).slice(0, 10) < today ? COLORS.danger : COLORS.primary, fontSize: 12, fontWeight: "700", marginTop: 2 }}>
                     Promesa: {item.promised_amount != null ? `${money(item.promised_amount)} ` : ""}para el {String(item.promised_date).slice(0, 10)}
                     {String(item.promised_date).slice(0, 10) < today ? " (vencida)" : String(item.promised_date).slice(0, 10) === today ? " (hoy)" : ""}
+                  </Text>
+                )}
+                {!!item.followup_date && (
+                  <Text style={{ color: item.followup_date < today ? COLORS.danger : COLORS.primary, fontSize: 12, fontWeight: "700", marginTop: 2 }}>
+                    Volver a visitar: {item.followup_date}
+                    {item.followup_date < today ? " (vencida)" : item.followup_date === today ? " (hoy)" : ""}
                   </Text>
                 )}
                 {canEditCustomer && !customerDestination(item) && (
@@ -792,6 +874,29 @@ export default function ClientPortfolioScreen() {
                 }}
               />
             )}
+
+            <Text style={{ fontWeight: "700", color: COLORS.text, marginBottom: SPACING.xs }}>Volver a visitar</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginBottom: SPACING.xs }}>
+              {[["Mañana", 1], ["En 3 días", 3], ["En 1 semana", 7], ["En 2 semanas", 14]].map(([label, days]) => {
+                const date = shiftDay(todayISO(), days);
+                return (
+                  <Chip
+                    key={label}
+                    selected={gestionForm.next_action_date === date}
+                    showSelectedCheck={false}
+                    onPress={() => setG("next_action_date", gestionForm.next_action_date === date ? "" : date)}
+                    style={{ backgroundColor: gestionForm.next_action_date === date ? COLORS.primarySoft : COLORS.bg }}
+                  >
+                    {label}
+                  </Chip>
+                );
+              })}
+            </View>
+            <Text style={{ color: COLORS.muted, fontSize: 12, marginBottom: SPACING.md }}>
+              {gestionForm.next_action_date
+                ? `Te avisaremos el ${gestionForm.next_action_date}. Tocá la opción otra vez para quitarla.`
+                : "Opcional: la app te lo recuerda ese día y lo pone en «Por visitar hoy»."}
+            </Text>
 
             <HelperText type="error" visible={!!gestionError}>{gestionError}</HelperText>
 

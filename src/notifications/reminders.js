@@ -78,6 +78,7 @@ function buildBody(day) {
   if (day.promises > 0) {
     parts.push(`${plural(day.promises, "promesa de pago", "promesas de pago")} por ${money(day.promises_amount)}`);
   }
+  if (day.followups > 0) parts.push(plural(day.followups, "visita de seguimiento", "visitas de seguimiento"));
   return parts.join(" y ");
 }
 
