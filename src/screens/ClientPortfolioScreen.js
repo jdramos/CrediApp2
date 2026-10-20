@@ -14,6 +14,7 @@ import {
   Modal,
   Divider,
 } from "react-native-paper";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Location from "expo-location";
@@ -25,7 +26,7 @@ import { useSync } from "../offline/SyncProvider";
 import { money, toNumber } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { ACTION_TYPES, RESULTS, STAGES } from "../utils/collectionsCatalog";
-import { openDirections } from "../utils/maps";
+import { openDirections, customerDestination, distanceMeters, formatDistance } from "../utils/maps";
 import { buildReminderMessage, callPhone, openSms, openWhatsApp, phoneOf } from "../utils/contact";
 import AddressLines from "../components/AddressLines";
 import { ensureWorkday } from "../tracking/workday";
@@ -95,6 +96,14 @@ export default function ClientPortfolioScreen() {
   const [message, setMessage] = useState("");
   const [managedIds, setManagedIds] = useState(new Set());
 
+  // Orden de la lista: "mora" (como lo manda el servidor: más atrasados primero)
+  // o "near" (más cerca de la ubicación actual del cobrador, en línea recta,
+  // usando la casa o el negocio guardados del cliente).
+  const [sortMode, setSortMode] = useState("mora");
+  const [myPos, setMyPos] = useState(null);
+  const [locating, setLocating] = useState(false);
+  const [locError, setLocError] = useState("");
+
   const [gestionItem, setGestionItem] = useState(null);
   const [gestionForm, setGestionForm] = useState(emptyGestionForm);
   const [gestionError, setGestionError] = useState("");
@@ -149,6 +158,53 @@ export default function ClientPortfolioScreen() {
   }, [session.token, session.user.id, search]);
 
   useFocusEffect(useCallback(() => { setManagedIds(new Set()); load(); }, [load]));
+
+  // Toma la ubicación actual (con respaldo a la última conocida). Si no hay
+  // permiso o GPS, vuelve al orden por mora y avisa.
+  const locate = async () => {
+    setLocating(true);
+    setLocError("");
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") throw new Error("Permití el acceso a la ubicación para ordenar por cercanía.");
+      let pos = null;
+      try {
+        pos = await Promise.race([
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 12000)),
+        ]);
+      } catch {
+        pos = await Location.getLastKnownPositionAsync().catch(() => null);
+      }
+      if (!pos) throw new Error("No se pudo obtener tu ubicación. Revisá que el GPS esté encendido.");
+      setMyPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+    } catch (e) {
+      setLocError(e?.message || "No se pudo obtener tu ubicación.");
+      setSortMode("mora");
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const chooseSort = (mode) => {
+    setSortMode(mode);
+    if (mode === "near") locate();
+  };
+
+  // Lista a mostrar, con la distancia de cada cliente cuando se ordena por cercanía.
+  const shownLoans = useMemo(() => {
+    if (sortMode !== "near" || !myPos) return loans;
+    const withDist = loans.map((l) => {
+      const dest = customerDestination(l);
+      return { ...l, _dist: dest ? distanceMeters(myPos, dest) : null, _distLabel: dest?.label };
+    });
+    return withDist.sort((a, b) => {
+      if (a._dist == null && b._dist == null) return 0; // sin ubicación: se conserva el orden por mora
+      if (a._dist == null) return 1;
+      if (b._dist == null) return -1;
+      return a._dist - b._dist;
+    });
+  }, [loans, sortMode, myPos]);
 
   const overdueSummary = useMemo(() => {
     const overdue = loans.filter((l) => Number(l.days_overdue) > 0);
@@ -297,6 +353,32 @@ export default function ClientPortfolioScreen() {
           outlineStyle={{ borderRadius: RADIUS.md }}
           left={<TextInput.Icon icon="magnify" />}
         />
+        <View style={{ flexDirection: "row", gap: SPACING.xs, marginTop: SPACING.sm }}>
+          <Chip
+            icon="alert-circle-outline"
+            selected={sortMode === "mora"}
+            showSelectedCheck={false}
+            onPress={() => chooseSort("mora")}
+            style={{ backgroundColor: sortMode === "mora" ? COLORS.primarySoft : COLORS.card }}
+          >
+            Por mora
+          </Chip>
+          <Chip
+            icon={locating ? "crosshairs-gps" : "map-marker-radius-outline"}
+            selected={sortMode === "near"}
+            showSelectedCheck={false}
+            onPress={() => chooseSort("near")}
+            style={{ backgroundColor: sortMode === "near" ? COLORS.primarySoft : COLORS.card }}
+          >
+            {locating ? "Ubicándote…" : "Más cerca de mí"}
+          </Chip>
+        </View>
+        {sortMode === "near" && myPos && !locating && (
+          <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: SPACING.xs }}>
+            Distancia en línea recta desde tu ubicación. Tocá «Más cerca de mí» para actualizarla.
+          </Text>
+        )}
+        {!!locError && <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: SPACING.xs }}>{locError}</Text>}
       </View>
 
       <View style={{ marginHorizontal: SPACING.lg }}>
@@ -311,7 +393,7 @@ export default function ClientPortfolioScreen() {
 
       {!loading && (
         <FlatList
-          data={loans}
+          data={shownLoans}
           keyExtractor={(item) => String(item.loan_id)}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={!message ? <Text style={styles.empty}>No tenés clientes asignados con estos filtros.</Text> : null}
@@ -335,6 +417,14 @@ export default function ClientPortfolioScreen() {
                 </View>
                 <Text style={styles.muted}>Código: {item.customer_identification} · Crédito #{item.credit_code || item.loan_id}</Text>
                 <AddressLines customer={item} />
+                {sortMode === "near" && myPos && (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 }}>
+                    <MaterialCommunityIcons name="map-marker-distance" size={14} color={item._dist != null ? COLORS.primary : COLORS.muted} />
+                    <Text style={{ color: item._dist != null ? COLORS.primary : COLORS.muted, fontSize: 12, fontWeight: "700" }}>
+                      {item._dist != null ? `a ${formatDistance(item._dist)} (${item._distLabel})` : "Sin ubicación guardada"}
+                    </Text>
+                  </View>
+                )}
                 <View style={styles.balancesRow}>
                   <View>
                     <Text style={styles.balanceLabel}>Próxima cuota</Text>

@@ -38,3 +38,20 @@ export async function openDirections(customer) {
     Alert.alert("No se pudo abrir el mapa", "Revisá que tengas una app de mapas o un navegador instalado.");
   }
 }
+
+// Distancia en metros en línea recta entre dos puntos { lat, lng } (Haversine).
+export function distanceMeters(a, b) {
+  const rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+// 350 -> "350 m" · 1240 -> "1.2 km" · 15800 -> "16 km".
+export function formatDistance(m) {
+  if (m == null) return "";
+  if (m < 1000) return `${Math.round(m / 10) * 10} m`;
+  const km = m / 1000;
+  return km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`;
+}
