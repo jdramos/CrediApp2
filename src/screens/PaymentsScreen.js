@@ -100,6 +100,11 @@ function StepHeader({ step, onBack, title, right }) {
   );
 }
 
+// Forma de pago que se marca por defecto: siempre "Efectivo" (lo habitual en
+// campo); si el catálogo no la trae, la primera de la lista.
+const defaultMethod = (list) =>
+  list.find((m) => String(m.name || "").trim().toLowerCase() === "efectivo") || list[0];
+
 export default function PaymentsScreen({ route }) {
   const navigation = useNavigation();
   const { session } = useContext(SessionContext);
@@ -185,7 +190,7 @@ export default function PaymentsScreen({ route }) {
         ]);
         const list = methodsRes?.data || [];
         setMethods(list);
-        if (list[0]) setMethodId(list[0].id);
+        if (list.length) setMethodId(defaultMethod(list).id);
         if (loansRes) setLoans(loansRes?.loans || []);
       } catch (e) {
         setError(e?.message ?? "Error cargando el crédito");
@@ -261,7 +266,7 @@ export default function PaymentsScreen({ route }) {
       ]);
       const list = methodsRes?.data || [];
       setMethods(list);
-      if (list[0]) setMethodId(list[0].id);
+      if (list.length) setMethodId(defaultMethod(list).id);
 
       const loanData = detailRes?.data || detailRes;
       if (loanData) {
