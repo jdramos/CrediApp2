@@ -72,6 +72,13 @@ export async function credimasterUpload(path, formData, token, method = "POST") 
   const headers = {};
   if (token) headers.Authorization = `Bearer ${token}`;
 
+  // Web: convierte el archivo anotado por buildImageFormData en un Blob real.
+  if (formData?.__webFile) {
+    const { fieldName, file } = formData.__webFile;
+    const blob = await (await fetch(file.uri)).blob();
+    formData.append(fieldName, new Blob([blob], { type: file.type || blob.type }), file.name);
+  }
+
   const response = await fetch(`${BASE_URL}${path}`, {
     method,
     headers,

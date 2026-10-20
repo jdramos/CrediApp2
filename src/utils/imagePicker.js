@@ -1,4 +1,4 @@
-import { Alert } from "react-native";
+import { Alert, Platform } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 
 const buildFile = (asset) => {
@@ -47,7 +47,15 @@ export function pickImage() {
 // "image" en la entrega de desembolsos — por eso es configurable.
 export function buildImageFormData(file, extraFields = {}, fieldName = "file") {
   const form = new FormData();
-  form.append(fieldName, { uri: file.uri, name: file.name, type: file.type });
+  if (Platform.OS === "web") {
+    // En el navegador FormData no acepta el objeto { uri, name, type } (lo
+    // vuelve texto y el servidor responde "falta la imagen"); necesita un Blob
+    // real. Como armarlo es asíncrono, se deja anotado y credimasterUpload lo
+    // completa justo antes de enviar.
+    form.__webFile = { fieldName, file };
+  } else {
+    form.append(fieldName, { uri: file.uri, name: file.name, type: file.type });
+  }
   Object.entries(extraFields).forEach(([key, value]) => {
     if (value !== undefined && value !== null) form.append(key, String(value));
   });
