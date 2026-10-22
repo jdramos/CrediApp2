@@ -41,6 +41,7 @@ import {
 import { buildReminderMessage, callPhone, openSms, openWhatsApp, phoneOf } from "../utils/contact";
 import AddressLines from "../components/AddressLines";
 import PaymentReceiptModal from "../components/PaymentReceiptModal";
+import PayoffModal from "../components/PayoffModal";
 import { formatReceiptNumber } from "../utils/receipt";
 import { ensureWorkday } from "../tracking/workday";
 import OfflineNotice from "../components/OfflineNotice";
@@ -125,6 +126,7 @@ export default function ClientPortfolioScreen() {
   const [historyOpen, setHistoryOpen] = useState(() => new Set());
   const [history, setHistory] = useState({}); // loan_id -> { loading, rows, total, error }
   const [receiptFor, setReceiptFor] = useState(null);
+  const [payoffFor, setPayoffFor] = useState(null); // crédito del que se ve el saldo para cancelar
 
   const toggleHistory = async (loanId) => {
     const open = new Set(historyOpen);
@@ -698,6 +700,16 @@ export default function ClientPortfolioScreen() {
                     </Button>
                   )}
                 </View>
+                <Button
+                  compact
+                  mode="text"
+                  icon="cash-check"
+                  onPress={() => setPayoffFor(item)}
+                  style={{ alignSelf: "flex-start", marginLeft: -SPACING.sm }}
+                  labelStyle={{ fontSize: 12 }}
+                >
+                  Saldo para cancelar hoy
+                </Button>
                 {historyOpen.has(item.loan_id) && (
                   <View style={{ marginTop: SPACING.xs, gap: 6 }}>
                     {history[item.loan_id]?.loading && <ActivityIndicator size="small" />}
@@ -1001,6 +1013,7 @@ export default function ClientPortfolioScreen() {
         </Modal>
       </Portal>
       <PaymentReceiptModal payment={receiptFor} onDismiss={() => setReceiptFor(null)} />
+      <PayoffModal loan={payoffFor} onDismiss={() => setPayoffFor(null)} />
     </SafeAreaView>
   );
 }

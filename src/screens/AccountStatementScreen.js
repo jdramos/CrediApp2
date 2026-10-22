@@ -9,6 +9,7 @@ import { SessionContext } from "../auth/SessionContext";
 import { getAccountStatement } from "../api/loanApi";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import AddressLines from "../components/AddressLines";
+import PayoffModal from "../components/PayoffModal";
 import { money } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { printReceipt, buildAccountStatementReceiptLines, summarizeMovements } from "../utils/printer";
@@ -55,6 +56,7 @@ export default function AccountStatementScreen({ route }) {
   const [statement, setStatement] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sharing, setSharing] = useState(false);
+  const [showPayoff, setShowPayoff] = useState(false);
   const [error, setError] = useState("");
   const [showDetail, setShowDetail] = useState(false);
 
@@ -255,6 +257,17 @@ export default function AccountStatementScreen({ route }) {
         </Button>
 
         <Button
+          mode="outlined"
+          icon="cash-check"
+          onPress={() => setShowPayoff(true)}
+          style={{ borderRadius: RADIUS.md }}
+          contentStyle={{ height: 46 }}
+          labelStyle={{ fontWeight: "700" }}
+        >
+          Saldo para cancelar hoy
+        </Button>
+
+        <Button
           mode="contained"
           icon="cash-fast"
           onPress={goToPayment}
@@ -265,6 +278,14 @@ export default function AccountStatementScreen({ route }) {
           Registrar pago
         </Button>
       </ScrollView>
+      <PayoffModal
+        loan={
+          showPayoff
+            ? { loan_id: statement.loan_id ?? loanId, customer_name: statement.customer_name, credit_code: statement.credit_code }
+            : null
+        }
+        onDismiss={() => setShowPayoff(false)}
+      />
     </SafeAreaView>
   );
 }
