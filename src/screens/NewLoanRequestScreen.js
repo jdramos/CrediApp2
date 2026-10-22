@@ -27,7 +27,7 @@ import { useSync } from "../offline/SyncProvider";
 import { useBusinessDayStatus } from "../hooks/useBusinessDayStatus";
 import BusinessDayBanner from "../components/BusinessDayBanner";
 import { confirmAction } from "../utils/confirm";
-import { money, toNumber } from "../utils/format";
+import { money, toNumber, formatAmountInput } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
@@ -97,7 +97,9 @@ function StepHeader({ step, onBack, title }) {
 
 const money2 = (n) => (n ? money(n) : null);
 
-export default function NewLoanRequestScreen() {
+export default function NewLoanRequestScreen({ route }) {
+  // Datos que trae el simulador de crédito (opcional): precargan el paso del crédito.
+  const sim = route?.params?.sim;
   const { session } = useContext(SessionContext);
   const { refreshPendingCount } = useSync();
   const [step, setStep] = useState(0);
@@ -121,17 +123,17 @@ export default function NewLoanRequestScreen() {
   const [policies, setPolicies] = useState({});
 
   // Datos del crédito
-  const [amount, setAmount] = useState("");
-  const [term, setTerm] = useState("");
-  const [frequencyId, setFrequencyId] = useState(null);
+  const [amount, setAmount] = useState(sim?.amount ? formatAmountInput(String(sim.amount)) : "");
+  const [term, setTerm] = useState(sim?.term ? String(sim.term) : "");
+  const [frequencyId, setFrequencyId] = useState(sim?.frequencyId ?? null);
   const [requestDate, setRequestDate] = useState(todayISO());
   const [dueDate, setDueDate] = useState(todayISO());
   const [showDate, setShowDate] = useState(null); // "request" | "due" | null
-  const [interestRate, setInterestRate] = useState("");
+  const [interestRate, setInterestRate] = useState(sim?.interestRate ? String(sim.interestRate) : "");
   const [defaultedRate, setDefaultedRate] = useState("");
-  const [fee, setFee] = useState("");
-  const [insurance, setInsurance] = useState("");
-  const [otherCharges, setOtherCharges] = useState("");
+  const [fee, setFee] = useState(sim?.fee ? formatAmountInput(String(sim.fee)) : "");
+  const [insurance, setInsurance] = useState(sim?.insurance ? formatAmountInput(String(sim.insurance)) : "");
+  const [otherCharges, setOtherCharges] = useState(sim?.otherCharges ? formatAmountInput(String(sim.otherCharges)) : "");
   const [deduction, setDeduction] = useState("");
   const [promoterId, setPromoterId] = useState(null);
   const [vendorId, setVendorId] = useState(null);

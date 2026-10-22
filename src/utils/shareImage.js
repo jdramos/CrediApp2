@@ -16,7 +16,7 @@ export async function shareImage(uri, title) {
   }
 
   const blob = await (await fetch(uri)).blob();
-  const fileName = `${title.replace(/[^\w]+/g, "_")}.png`;
+  const fileName = `${title.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w]+/g, "_")}.png`;
   const file = new File([blob], fileName, { type: "image/png" });
 
   if (navigator.canShare?.({ files: [file] })) {

@@ -101,6 +101,7 @@ export default function DashboardScreen() {
 
   const canApprove = session?.permissions?.includes("aprobaciones.ver");
   const canViewLoans = session?.permissions?.includes("creditos.ver");
+  const canSimulate = session?.permissions?.includes("creditos.amortizacion.ver");
   const canPay = session?.permissions?.includes("pagos.insertar") || session?.permissions?.includes("pagos.ver");
   const canSupervise = session?.permissions?.includes("creditos.productividad.ver");
   const canSeeRoutes = session?.permissions?.includes("rastreo.ver");
@@ -266,6 +267,15 @@ export default function DashboardScreen() {
               subtitle="Dónde estuvo cada cobrador"
               gradient={GRADIENTS.dark}
               onPress={() => navigation.navigate("RoutesDay")}
+            />
+          )}
+          {canSimulate && (
+            <ActionTile
+              icon="calculator-variant-outline"
+              title="Simulador"
+              subtitle="Cuota y plan de pagos"
+              gradient={GRADIENTS.success}
+              onPress={() => navigation.navigate("Creditos", { screen: "LoanSimulator" })}
             />
           )}
           {canViewLoans && (

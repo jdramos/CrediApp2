@@ -5,6 +5,7 @@ import NewLoanRequestScreen from "../screens/NewLoanRequestScreen";
 import ApprovalInboxScreen from "../screens/ApprovalInboxScreen";
 import ApprovalDecisionScreen from "../screens/ApprovalDecisionScreen";
 import MyLoanRequestsScreen from "../screens/MyLoanRequestsScreen";
+import LoanSimulatorScreen from "../screens/LoanSimulatorScreen";
 import LoanDetailScreen from "../screens/LoanDetailScreen";
 import PendingDeliveriesScreen from "../screens/PendingDeliveriesScreen";
 
@@ -18,6 +19,7 @@ export default function CreditStackNavigator() {
       <Stack.Screen name="ApprovalInbox" component={ApprovalInboxScreen} />
       <Stack.Screen name="ApprovalDecision" component={ApprovalDecisionScreen} />
       <Stack.Screen name="MyLoanRequests" component={MyLoanRequestsScreen} />
+      <Stack.Screen name="LoanSimulator" component={LoanSimulatorScreen} />
       <Stack.Screen name="LoanDetail" component={LoanDetailScreen} />
       <Stack.Screen name="PendingDeliveries" component={PendingDeliveriesScreen} />
     </Stack.Navigator>

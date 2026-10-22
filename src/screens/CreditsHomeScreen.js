@@ -61,6 +61,7 @@ export default function CreditsHomeScreen() {
   const [pendingDeliveries, setPendingDeliveries] = useState(0);
 
   const canCreate = session?.permissions?.includes("creditos.insertar");
+  const canSimulate = session?.permissions?.includes("creditos.amortizacion.ver");
   const canApprove = session?.permissions?.includes("aprobaciones.ver");
   const canView = session?.permissions?.includes("creditos.ver");
   const canDeliver = session?.permissions?.includes("especial.creditos.entregar");
@@ -108,6 +109,16 @@ export default function CreditsHomeScreen() {
           />
         )}
 
+        {canSimulate && (
+          <ActionCard
+            icon="calculator-variant-outline"
+            title="Simulador de crédito"
+            subtitle="Calcular cuota y plan de pagos"
+            gradient={GRADIENTS.success}
+            onPress={() => navigation.navigate("LoanSimulator")}
+          />
+        )}
+
         {canApprove && (
           <ActionCard
             icon="clipboard-check-outline"
@@ -141,7 +152,7 @@ export default function CreditsHomeScreen() {
           />
         )}
 
-        {!canCreate && !canApprove && !canView && !canDeliver && (
+        {!canCreate && !canApprove && !canView && !canDeliver && !canSimulate && (
           <Text style={{ color: COLORS.muted, marginTop: SPACING.lg, textAlign: "center" }}>
             No tenés permisos de crédito asignados.
           </Text>

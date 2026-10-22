@@ -39,3 +39,16 @@ export const getLoans = (token, params = {}) => {
 // y el detalle de cada cuota) — permiso creditos.estado_cuenta.ver.
 export const getAccountStatement = (token, loanId, date) =>
   credimasterGet(`/api/loans/${loanId}/account-statement${date ? `?date=${date}` : ""}`, token);
+
+// Tabla de amortización de una simulación (no guarda nada) — permiso
+// creditos.amortizacion.ver. El tipo de interés lo define la empresa, no el
+// formulario. `term` va en MESES; la cantidad de cuotas sale de la frecuencia
+// (`frequency_id` es el tag: D, S, B, Q, M, BM, TM, CM, SM, A). Devuelve el
+// arreglo de cuotas con la fila 0 del desembolso.
+export const simulateLoan = (token, { amount, interest_rate, term, requestDate, fee, insurance, other_charges, frequency_id, branch_id }) =>
+  credimasterPost(
+    "/api/loans/amortization",
+    { amount, interest_rate, term, requestDate, fee: fee || 0, insurance: insurance || 0, other_charges: other_charges || 0, frequency_id, branch_id },
+    token,
+  );
+
