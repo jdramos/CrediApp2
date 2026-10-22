@@ -1,7 +1,7 @@
 import React, { createContext, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Platform } from "react-native";
-import { clearSession, loadSession, saveSession } from "../storage/session";
-import { credimasterLoginRequest } from "../api/credimasterAuthApi";
+import { clearSession, loadSession, saveSession, getTrustedDeviceToken, saveTrustedDeviceToken } from "../storage/session";
+import { credimasterLoginRequest, credimasterMfaVerify } from "../api/credimasterAuthApi";
 import { setUnauthorizedHandler } from "../api/credimasterClient";
 import { registerPushToken, unregisterPushToken } from "../api/pushApi";
 import { registerForPushNotificationsAsync } from "../notifications/pushNotifications";
@@ -66,13 +66,9 @@ export function SessionProvider({ children }) {
     return () => setUnauthorizedHandler(null);
   }, []);
 
-  const signIn = async ({ username, password, tenant_code }) => {
-    const res = await credimasterLoginRequest({
-      username: (username ?? "").trim(),
-      password: (password ?? "").trim(),
-      tenant_code,
-    });
-
+  // Cierra el login con la respuesta del servidor (primer paso sin 2FA, o el
+  // segundo paso ya verificado): arma y guarda la sesión.
+  const finishLogin = async (res) => {
     const newSession = {
       token: res.token,
       permissions: res.permissions || [],
@@ -101,6 +97,25 @@ export function SessionProvider({ children }) {
       .catch(() => {});
 
     return newSession;
+  };
+
+  // Si el usuario ya verificó este dispositivo, se manda su token y el servidor
+  // no pide el código. Si la empresa exige 2FA, esto lanza un error con
+  // `data.code === "MFA_REQUIRED"` y `data.mfa_token` (lo maneja LoginScreen).
+  const signIn = async ({ username, password, tenant_code }) => {
+    const res = await credimasterLoginRequest({
+      username: (username ?? "").trim(),
+      password: (password ?? "").trim(),
+      tenant_code,
+      trusted_device_token: (await getTrustedDeviceToken(username)) || undefined,
+    });
+    return finishLogin(res);
+  };
+
+  const signInWithMfa = async ({ username, mfa_token, code, remember_device }) => {
+    const res = await credimasterMfaVerify({ mfa_token, code: (code ?? "").trim(), remember_device });
+    if (res?.trusted_device_token) await saveTrustedDeviceToken(username, res.trusted_device_token);
+    return finishLogin(res);
   };
 
   // `force` salta la advertencia de pendientes (la usa el propio botón de
@@ -154,7 +169,7 @@ export function SessionProvider({ children }) {
   };
 
   const value = useMemo(
-    () => ({ loadingBoot, session, setSession, signIn, signOut, hasPerm }),
+    () => ({ loadingBoot, session, setSession, signIn, signInWithMfa, signOut, hasPerm }),
     [loadingBoot, session]
   );
 

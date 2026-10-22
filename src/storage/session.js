@@ -48,3 +48,35 @@ export async function clearSession() {
   await AsyncStorage.removeItem(REST_KEY);
   await AsyncStorage.removeItem(LEGACY_KEY);
 }
+
+// "Recordar este dispositivo" (2FA): tras verificar el código una vez, el
+// servidor entrega un token que, enviado en el login, evita pedir el código de
+// nuevo durante unos días. Es una credencial, así que va en el mismo almacén
+// del token de sesión y NO se borra al cerrar sesión (si no, no serviría).
+// Se guarda uno por usuario de este dispositivo.
+const TRUSTED_KEY = "APP_TRUSTED_DEVICES_V1";
+const userKey = (username) => String(username || "").trim().toLowerCase();
+
+async function readTrusted() {
+  try {
+    const raw = await TokenStore.getItemAsync(TRUSTED_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function getTrustedDeviceToken(username) {
+  return (await readTrusted())[userKey(username)] || null;
+}
+
+export async function saveTrustedDeviceToken(username, token) {
+  const map = await readTrusted();
+  if (token) map[userKey(username)] = token;
+  else delete map[userKey(username)];
+  try {
+    await TokenStore.setItemAsync(TRUSTED_KEY, JSON.stringify(map));
+  } catch {
+    // sin almacenamiento: simplemente se pedirá el código la próxima vez
+  }
+}
