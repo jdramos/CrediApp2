@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Button, Chip, IconButton, ActivityIndicator, HelperText } from "react-native-paper";
 import ViewShot, { captureRef } from "react-native-view-shot";
@@ -12,8 +12,15 @@ import { getAccessibleBranches } from "../api/branchApi";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import ShareCardHeader from "../components/ShareCardHeader";
 import { shareImage } from "../utils/shareImage";
-import { summarizeSchedule, policyWarnings, parseSimulationInput } from "../utils/loanSimulation";
-import { money, formatAmountInput } from "../utils/format";
+import {
+  summarizeSchedule,
+  policyWarnings,
+  parseSimulationInput,
+  maxInstallment,
+  amountForInstallment,
+  comparableTerms,
+} from "../utils/loanSimulation";
+import { money, toNumber, formatAmountInput } from "../utils/format";
 import { todayISO, shiftDay } from "../utils/date";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
@@ -131,6 +138,12 @@ export default function LoanSimulatorScreen() {
   const [result, setResult] = useState(null); // { summary, input, frequency }
   const [showTable, setShowTable] = useState(false);
 
+  // "fwd": del monto a la cuota. "rev": de la cuota que el cliente puede pagar
+  // al monto máximo que puede pedir.
+  const [mode, setMode] = useState("fwd");
+  const [target, setTarget] = useState("");
+  const [compare, setCompare] = useState(null); // { loading, rows, error }
+
   const canCreate = session?.permissions?.includes("creditos.insertar");
 
   useEffect(() => {
@@ -148,34 +161,100 @@ export default function LoanSimulatorScreen() {
   const visibleFrequencies = frecuencies.filter((f) => !HIDDEN_FREQUENCIES.includes(f.tag));
   const frequency = frecuencies.find((f) => f.tag === frequencyTag);
 
-  const simulate = async () => {
+  const inputs = (termOverride) =>
+    parseSimulationInput({
+      amount: mode === "rev" ? "" : amount,
+      term: termOverride ?? term,
+      rate,
+      // En "¿cuánto puedo pedir?" no hay cargos fijos: así la cuota es
+      // proporcional al monto y el cálculo es exacto.
+      fee: mode === "rev" ? "" : fee,
+      insurance: mode === "rev" ? "" : insurance,
+      otherCharges: mode === "rev" ? "" : otherCharges,
+    });
+
+  const runSim = (input, amountValue, termValue) =>
+    simulateLoan(session.token, {
+      amount: amountValue,
+      interest_rate: input.rate,
+      term: termValue,
+      requestDate: startDate,
+      fee: input.fee,
+      insurance: input.insurance,
+      other_charges: input.otherCharges,
+      frequency_id: frequencyTag,
+      branch_id: branchId,
+    });
+
+  const simulate = async (termOverride) => {
     setError("");
-    const input = parseSimulationInput({ amount, term, rate, fee, insurance, otherCharges });
-    if (!input.amount) return setError("Ingresá el monto del crédito.");
+    setCompare(null);
+    const input = inputs(termOverride);
+    const goal = toNumber(target);
+    if (mode === "rev" ? !goal : !input.amount) return setError(mode === "rev" ? "Ingresá la cuota que el cliente puede pagar." : "Ingresá el monto del crédito.");
     if (!input.term) return setError("Ingresá el plazo en meses.");
     if (!input.rate) return setError("Ingresá la tasa de interés mensual.");
     try {
       setLoading(true);
-      const table = await simulateLoan(session.token, {
-        amount: input.amount,
-        interest_rate: input.rate,
-        term: input.term,
-        requestDate: startDate,
-        fee: input.fee,
-        insurance: input.insurance,
-        other_charges: input.otherCharges,
-        frequency_id: frequencyTag,
-        branch_id: branchId,
-      });
-      const summary = summarizeSchedule(table);
+      let amountValue = input.amount;
+      let reverse = null;
+      let summary;
+      if (mode === "rev") {
+        // Se simula un monto de prueba y se escala a la cuota pedida; luego se
+        // verifica y, si por redondeo se pasa, se baja de a C$100.
+        const probe = summarizeSchedule(await runSim(input, 10000, input.term));
+        amountValue = amountForInstallment(goal, 10000, maxInstallment(probe));
+        if (amountValue <= 0) throw new Error("Esa cuota es muy baja para ese plazo y esa tasa.");
+        summary = summarizeSchedule(await runSim(input, amountValue, input.term));
+        for (let i = 0; i < 5 && summary && maxInstallment(summary) > goal && amountValue > 100; i += 1) {
+          amountValue -= 100;
+          summary = summarizeSchedule(await runSim(input, amountValue, input.term));
+        }
+        reverse = { target: goal };
+      } else {
+        summary = summarizeSchedule(await runSim(input, amountValue, input.term));
+      }
       if (!summary) throw new Error("No se pudo calcular el plan de pagos con esos datos.");
-      setResult({ summary, input, frequency, startDate });
+      setResult({ summary, input: { ...input, amount: amountValue }, frequency, startDate, reverse });
     } catch (e) {
       setResult(null);
       setError(e?.message || "No se pudo simular. Revisá los datos y tu conexión.");
     } finally {
       setLoading(false);
     }
+  };
+
+  // Compara varios plazos con los mismos datos: la cuota y el total de cada uno
+  // (modo normal) o el monto máximo de cada uno (modo "¿cuánto puedo pedir?").
+  const runCompare = async () => {
+    setError("");
+    const input = inputs();
+    const goal = toNumber(target);
+    if (mode === "rev" ? !goal : !input.amount) return setError(mode === "rev" ? "Ingresá la cuota que el cliente puede pagar." : "Ingresá el monto del crédito.");
+    if (!input.rate) return setError("Ingresá la tasa de interés mensual.");
+    setCompare({ loading: true, rows: [], error: "" });
+    const rows = await Promise.all(
+      comparableTerms(policies).map(async (termValue) => {
+        try {
+          if (mode === "rev") {
+            const probe = summarizeSchedule(await runSim(input, 10000, termValue));
+            const amountValue = amountForInstallment(goal, 10000, maxInstallment(probe));
+            return amountValue > 0 ? { term: termValue, amount: amountValue } : null;
+          }
+          const sum = summarizeSchedule(await runSim(input, input.amount, termValue));
+          return sum ? { term: termValue, installment: sum.installment, installments: sum.installments, total: sum.total } : null;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const ok = rows.filter(Boolean);
+    setCompare({ loading: false, rows: ok, error: ok.length ? "" : "No se pudo comparar con esos datos." });
+  };
+
+  const pickTerm = (termValue) => {
+    setTerm(String(termValue));
+    simulate(termValue);
   };
 
   const onShare = async () => {
@@ -218,11 +297,29 @@ export default function LoanSimulatorScreen() {
         </View>
 
         <View style={styles.card}>
+          <View style={styles.chips}>
+            {[["fwd", "Calcular cuota"], ["rev", "¿Cuánto puedo pedir?"]].map(([key, label]) => (
+              <Chip
+                key={key}
+                selected={mode === key}
+                showSelectedCheck={false}
+                onPress={() => {
+                  setMode(key);
+                  setResult(null);
+                  setCompare(null);
+                  setError("");
+                }}
+                style={{ backgroundColor: mode === key ? COLORS.primarySoft : COLORS.bg }}
+              >
+                {label}
+              </Chip>
+            ))}
+          </View>
           <TextInput
             mode="outlined"
-            label="Monto del crédito (C$)"
-            value={amount}
-            onChangeText={(t) => setAmount(formatAmountInput(t))}
+            label={mode === "rev" ? "Cuota que puede pagar (C$)" : "Monto del crédito (C$)"}
+            value={mode === "rev" ? target : amount}
+            onChangeText={(v) => (mode === "rev" ? setTarget(formatAmountInput(v)) : setAmount(formatAmountInput(v)))}
             keyboardType="decimal-pad"
             style={styles.input}
             outlineStyle={{ borderRadius: RADIUS.md }}
@@ -276,36 +373,78 @@ export default function LoanSimulatorScreen() {
             </View>
           </View>
 
+          {mode === "fwd" ? (
+            <>
           <Button mode="text" icon={showCharges ? "chevron-up" : "chevron-down"} onPress={() => setShowCharges(!showCharges)} style={{ alignSelf: "flex-start" }}>
-            Cargos adicionales (opcional)
-          </Button>
-          {showCharges && (
-            <View style={{ gap: SPACING.sm }}>
-              {[
-                ["Comisión (C$, total)", fee, setFee],
-                ["Seguro (C$, total)", insurance, setInsurance],
-                ["Otros cargos (C$, total)", otherCharges, setOtherCharges],
-              ].map(([label, value, setter]) => (
-                <TextInput
-                  key={label}
-                  mode="outlined"
-                  label={label}
-                  value={value}
-                  onChangeText={(t) => setter(formatAmountInput(t))}
-                  keyboardType="decimal-pad"
-                  style={styles.input}
-                  outlineStyle={{ borderRadius: RADIUS.md }}
-                />
-              ))}
-              <Text style={{ color: COLORS.muted, fontSize: 11 }}>Se reparten en partes iguales entre las cuotas.</Text>
-            </View>
+                Cargos adicionales (opcional)
+              </Button>
+              {showCharges && (
+                <View style={{ gap: SPACING.sm }}>
+                  {[
+                    ["Comisión (C$, total)", fee, setFee],
+                    ["Seguro (C$, total)", insurance, setInsurance],
+                    ["Otros cargos (C$, total)", otherCharges, setOtherCharges],
+                  ].map(([label, value, setter]) => (
+                    <TextInput
+                      key={label}
+                      mode="outlined"
+                      label={label}
+                      value={value}
+                      onChangeText={(t) => setter(formatAmountInput(t))}
+                      keyboardType="decimal-pad"
+                      style={styles.input}
+                      outlineStyle={{ borderRadius: RADIUS.md }}
+                    />
+                  ))}
+                  <Text style={{ color: COLORS.muted, fontSize: 11 }}>Se reparten en partes iguales entre las cuotas.</Text>
+                </View>
+              )}
+
+            </>
+          ) : (
+            <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+              El monto máximo se calcula sin comisión, seguro ni otros cargos.
+            </Text>
           )}
 
           <HelperText type="error" visible={!!error}>{error}</HelperText>
-          <Button mode="contained" icon="calculator-variant" onPress={simulate} loading={loading} disabled={loading} style={{ borderRadius: RADIUS.md }} contentStyle={{ height: 46 }}>
+          <Button mode="contained" icon="calculator-variant" onPress={() => simulate()} loading={loading} disabled={loading} style={{ borderRadius: RADIUS.md }} contentStyle={{ height: 46 }}>
             Simular
           </Button>
         </View>
+
+        <Button mode="outlined" icon="table-multiple" onPress={runCompare} disabled={compare?.loading} loading={compare?.loading} style={{ borderRadius: RADIUS.md }} contentStyle={{ height: 46 }}>
+          Comparar plazos
+        </Button>
+
+        {compare && !compare.loading && (
+          <View style={styles.card}>
+            <Text style={styles.label}>
+              {mode === "rev"
+                ? `Con una cuota de ${money(toNumber(target))} se puede pedir:`
+                : `Un crédito de ${money(toNumber(amount))} según el plazo:`}
+            </Text>
+            {!!compare.error && <Text style={{ color: COLORS.danger }}>{compare.error}</Text>}
+            {compare.rows.map((r) => (
+              <Pressable
+                key={r.term}
+                onPress={() => pickTerm(r.term)}
+                style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: COLORS.border }}
+              >
+                <Text style={{ color: COLORS.text, fontWeight: "700", width: 76 }}>{r.term} meses</Text>
+                {mode === "rev" ? (
+                  <Text style={{ color: COLORS.primary, fontWeight: "800", fontSize: 16 }}>hasta {money(r.amount)}</Text>
+                ) : (
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text style={{ color: COLORS.primary, fontWeight: "800" }}>{money(r.installment)} × {r.installments}</Text>
+                    <Text style={{ color: COLORS.muted, fontSize: 11 }}>Total {money(r.total)}</Text>
+                  </View>
+                )}
+              </Pressable>
+            ))}
+            <Text style={{ color: COLORS.muted, fontSize: 11 }}>Tocá un plazo para ver su plan de pagos completo.</Text>
+          </View>
+        )}
 
         {warnings.length > 0 && (
           <View style={styles.warn}>
@@ -327,8 +466,18 @@ export default function LoanSimulatorScreen() {
                   `Fecha: ${todayISO()} · Desembolso: ${result.startDate}`,
                   `Monto ${money(result.input.amount)} · ${result.input.term} meses · ${result.input.rate}% mensual`,
                   `Pago ${String(result.frequency?.name || "").toLowerCase()}`,
+                  result.reverse ? `Cuota que puede pagar: ${money(result.reverse.target)}` : "",
                 ]}
               />
+              {result.reverse && (
+                <View style={styles.card}>
+                  <Text style={styles.bigLabel}>Puede pedir hasta</Text>
+                  <Text style={styles.bigValue}>{money(result.input.amount)}</Text>
+                  <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                    pagando {money(result.reverse.target)} por cuota, a {result.input.term} meses y {result.input.rate}% mensual.
+                  </Text>
+                </View>
+              )}
               <View style={styles.card}>
                 <Text style={styles.bigLabel}>
                   Cuota {String(result.frequency?.name || "").toLowerCase()} ({s.installments} cuotas)

@@ -51,3 +51,27 @@ export function parseSimulationInput({ amount, term, rate, fee, insurance, other
     otherCharges: toNumber(otherCharges),
   };
 }
+
+// Cuota más alta del plan (la primera suele ser mayor por los días del primer
+// período): es la que hay que comparar contra lo que el cliente puede pagar.
+export function maxInstallment(summary) {
+  return summary ? Math.max(...summary.rows.map((r) => n(r.paymentAmount))) : 0;
+}
+
+// Monto que da una cuota objetivo. Sin cargos fijos, la cuota crece en
+// proporción exacta al monto, así que desde una simulación de prueba
+// (`probeAmount` -> `probeMax`) se estima el monto y se redondea HACIA ABAJO a
+// C$100 para no pasarse de la cuota.
+export function amountForInstallment(target, probeAmount, probeMax) {
+  if (!(target > 0) || !(probeMax > 0)) return 0;
+  return Math.floor((target * probeAmount) / probeMax / 100) * 100;
+}
+
+// Plazos (meses) que se comparan, filtrados por la política de la empresa.
+export const COMPARE_TERMS = [3, 6, 9, 12, 18, 24];
+export function comparableTerms(policies) {
+  const min = Number(policies?.min_term_months) || 0;
+  const max = Number(policies?.max_term_months) || Infinity;
+  return COMPARE_TERMS.filter((m) => m >= min && m <= max);
+}
+
