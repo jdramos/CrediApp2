@@ -1,4 +1,4 @@
-import { createPayment } from "../api/paymentApi";
+import { createPayment, recordUsdReceipt } from "../api/paymentApi";
 import { uploadGuaranteePhoto } from "../api/guaranteePhotoApi";
 import { uploadCustomerDocument } from "../api/customerDocumentApi";
 import { saveCustomerLocation } from "../api/customerApi";
@@ -12,8 +12,19 @@ let syncing = false;
 
 function processItem(token, item) {
   switch (item.type) {
-    case "PAYMENT":
-      return createPayment(token, item.payload);
+    case "PAYMENT": {
+      // Un cobro en dólares trae `usd` {foreign_amount, fx_rate}: primero se registra el
+      // pago (en C$) y luego se asientan los dólares. Si la segunda parte falla por
+      // red, el ítem sigue en la cola y al reintentar el pago no se duplica (se
+      // identifica por client_reference_id) y los dólares se asientan una sola vez.
+      const { usd, ...params } = item.payload;
+      return createPayment(token, params).then((res) =>
+        usd ? recordUsdReceipt(token, { client_reference_id: params.client_reference_id, ...usd }).then(() => res) : res,
+      );
+    }
+    case "PAYMENT_USD":
+      // Dólares de un pago que sí se registró en línea pero cuyo asiento no llegó.
+      return recordUsdReceipt(token, item.payload);
     case "GUARANTEE_PHOTO":
       return uploadGuaranteePhoto(token, item.payload.guaranteeId, item.payload.file);
     case "CUSTOMER_DOCUMENT":

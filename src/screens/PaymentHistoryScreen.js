@@ -175,6 +175,11 @@ export default function PaymentHistoryScreen() {
         <Text style={styles.muted}>
           Capital {money(p.principal_payment)} · Interés {money(p.interest_payment)}
         </Text>
+        {!!p.usd_amount && (
+          <Text style={[styles.muted, { color: COLORS.primary, fontWeight: "700" }]}>
+            Recibido en dólares: US$ {Number(p.usd_amount).toFixed(2)} · TC C$ {Number(p.fx_rate).toFixed(2)}
+          </Text>
+        )}
         <View style={styles.chipsRow}>
           <Chip compact icon="receipt-text-outline" style={{ backgroundColor: COLORS.primarySoft }} onPress={() => setReceiptFor(p)}>
             Comprobante

@@ -116,6 +116,7 @@ export function buildPaymentReceiptLines({
   principalBalanceAfter,
   newBalance,
   receiptNumber,
+  usd,
 }) {
   const lines = [
     center((tenantName || "CrediMaster").toUpperCase()),
@@ -132,6 +133,10 @@ export function buildPaymentReceiptLines({
   if (collectorName) lines.push(`Cobrado por: ${collectorName}`);
   lines.push(divider());
   lines.push(twoCol("Monto pagado", money(amount)));
+  if (usd) {
+    lines.push(`Recibido: US$ ${Number(usd.foreign_amount).toFixed(2)}`);
+    lines.push(`TC de compra: C$ ${Number(usd.fx_rate).toFixed(2)}`);
+  }
   (breakdownRows || []).forEach((r) => lines.push(twoCol(r.label, money(r.value))));
   if (principalBalanceBefore != null) {
     lines.push(divider());

@@ -21,7 +21,7 @@ import { shareImage } from "../utils/shareImage";
 import { SessionContext } from "../auth/SessionContext";
 import { searchCustomers, getCustomer } from "../api/customerApi";
 import { getCustomerActiveLoans, getLoanDetail } from "../api/loanApi";
-import { getPaymentMethods, simulatePayment, createPayment } from "../api/paymentApi";
+import { getPaymentMethods, simulatePayment, createPayment, recordUsdReceipt } from "../api/paymentApi";
 import { uploadPaymentEvidence } from "../api/paymentEvidenceApi";
 import { isNetworkError } from "../api/credimasterClient";
 import { enqueue } from "../offline/queue";
@@ -35,7 +35,8 @@ import { useBusinessDayStatus } from "../hooks/useBusinessDayStatus";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import BusinessDayBanner from "../components/BusinessDayBanner";
 import { confirmAction } from "../utils/confirm";
-import { money, toNumber, formatAmountInput } from "../utils/format";
+import { money, toNumber, formatAmountInput, usd as usdMoney, fxRate } from "../utils/format";
+import { loadUsdRate } from "../utils/usdRate";
 import { buildReceiptRows, formatReceiptNumber } from "../utils/receipt";
 import { buildPaymentMessage, openSms, openWhatsApp, phoneOf } from "../utils/contact";
 import PaymentReceiptCard from "../components/PaymentReceiptCard";
@@ -131,10 +132,28 @@ export default function PaymentsScreen({ route }) {
 
   // Paso 3: monto
   const [amount, setAmount] = useState("");
+  // Cobro en dólares: el cliente entrega US$ en efectivo y se aplican a su crédito en
+  // córdobas al tipo de cambio de COMPRA de la institución de hoy (lo fija el
+  // supervisor). `amount` es lo que se teclea (C$ o US$ según `currency`).
+  const [currency, setCurrency] = useState("NIO");
+  const [usdRate, setUsdRate] = useState(null); // { enabled, available, buy_rate, message }
   const [date, setDate] = useState(todayISO());
   const [showDate, setShowDate] = useState(false);
   const [methods, setMethods] = useState([]);
   const [methodId, setMethodId] = useState(null);
+
+  const isCash = String(methods.find((m) => m.id === methodId)?.name || "").trim().toLowerCase() === "efectivo";
+  const usdMode = currency === "USD" && isCash && !!usdRate?.available;
+  const typedAmount = toNumber(amount);
+  // Monto aplicado al crédito, siempre en córdobas.
+  const amountNio = usdMode ? Math.round(typedAmount * usdRate.buy_rate * 100) / 100 : typedAmount;
+  const usdInfo = usdMode ? { foreign_amount: typedAmount, fx_rate: usdRate.buy_rate } : null;
+
+  const switchCurrency = (next) => {
+    setCurrency(next);
+    setAmount("");
+    setBreakdown(null);
+  };
   const [breakdown, setBreakdown] = useState(null);
   const [simulating, setSimulating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -153,6 +172,17 @@ export default function PaymentsScreen({ route }) {
   // de LoanController.js::getOne) para que el cobrador no tenga que
   // escribirlo a mano en el caso normal de "vengo a cobrar la cuota" —
   // sigue siendo editable por si el pago es parcial o distinto.
+  useEffect(() => {
+    if (!canCreate || step < 2) return undefined;
+    let cancelled = false;
+    loadUsdRate(session.token)
+      .then((r) => !cancelled && setUsdRate(r))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [session.token, canCreate, step]);
+
   const defaultAmountFor = (loanData) => {
     const amt = Number(loanData?.next_installment_amount ?? loanData?.installment ?? 0);
     return amt > 0 ? formatAmountInput(String(amt)) : "";
@@ -215,6 +245,7 @@ export default function PaymentsScreen({ route }) {
     setLoans([]);
     setLoan(null);
     setAmount("");
+    setCurrency("NIO");
     setDate(todayISO());
     setMethods([]);
     setMethodId(null);
@@ -286,7 +317,7 @@ export default function PaymentsScreen({ route }) {
 
   const onSimulate = async () => {
     setError("");
-    const amt = toNumber(amount);
+    const amt = amountNio;
     if (!amt || amt <= 0) {
       setError("Ingrese un monto válido");
       return;
@@ -308,7 +339,7 @@ export default function PaymentsScreen({ route }) {
 
   const submitPayment = async () => {
     setError("");
-    const amt = toNumber(amount);
+    const amt = amountNio;
     const payload = {
       loan_id: loan.id || loan.loan_id,
       branch_id: loan.branch_id,
@@ -319,7 +350,26 @@ export default function PaymentsScreen({ route }) {
     try {
       setSaving(true);
       const res = await createPayment(session.token, payload);
-      setResult(res?.data || res);
+      const created = res?.data || res;
+      // Cobro en dólares: el pago ya quedó en C$; ahora se asientan los US$ recibidos.
+      // Sin señal en este momento, el asiento queda en la cola y se envía solo.
+      if (usdInfo) {
+        try {
+          await recordUsdReceipt(session.token, { payment_id: created.payment_id, ...usdInfo });
+        } catch (usdErr) {
+          if (isNetworkError(usdErr)) {
+            await enqueue({
+              type: "PAYMENT_USD",
+              label: `Dólares del pago — crédito #${loan?.id || loan?.loan_id}`,
+              payload: { payment_id: created.payment_id, ...usdInfo },
+            });
+            refreshPendingCount();
+          } else {
+            setError(`El pago se registró, pero no se pudieron asentar los dólares: ${usdErr?.message}. Avisá a tu supervisor.`);
+          }
+        }
+      }
+      setResult({ ...created, usd: usdInfo });
       setStep(3);
     } catch (e) {
       if (isNetworkError(e)) {
@@ -330,11 +380,11 @@ export default function PaymentsScreen({ route }) {
             const clientReferenceId = `pay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
             await enqueue({
               type: "PAYMENT",
-              label: `Pago ${money(amt)} — crédito #${loan?.id || loan?.loan_id}`,
-              payload: { ...payload, client_reference_id: clientReferenceId },
+              label: `Pago ${usdInfo ? usdMoney(typedAmount) : money(amt)} — crédito #${loan?.id || loan?.loan_id}`,
+              payload: { ...payload, client_reference_id: clientReferenceId, ...(usdInfo ? { usd: usdInfo } : {}) },
             });
             refreshPendingCount();
-            setResult({ pendingOffline: true, clientReferenceId });
+            setResult({ pendingOffline: true, clientReferenceId, usd: usdInfo });
             setStep(3);
           },
           { confirmText: "Guardar" },
@@ -430,7 +480,7 @@ export default function PaymentsScreen({ route }) {
         phone,
         buildPaymentMessage({
           tenantName: session?.tenant?.commercial_name || session?.tenant?.legal_name,
-          amount: toNumber(amount),
+          amount: amountNio,
           date,
           loanLabel: loan?.credit_code || loan?.id || loan?.loan_id,
           principal: applied ? Number(applied.principal) || 0 : undefined,
@@ -457,7 +507,7 @@ export default function PaymentsScreen({ route }) {
         loanLabel: loan?.credit_code || loan?.id || loan?.loan_id,
         date,
         collectorName: session?.user?.full_name || session?.user?.user_name,
-        amount: toNumber(amount),
+        amount: amountNio,
         breakdownRows: receiptRows,
         principalBalanceBefore: result?.principal_balance_before,
         principalBalanceAfter: result?.principal_balance_after,
@@ -469,7 +519,7 @@ export default function PaymentsScreen({ route }) {
 
   const onConfirm = async () => {
     setError("");
-    const amt = toNumber(amount);
+    const amt = amountNio;
     if (!amt || amt <= 0) {
       setError("Ingrese un monto válido");
       return;
@@ -484,7 +534,7 @@ export default function PaymentsScreen({ route }) {
     const methodName = methods.find((m) => m.id === methodId)?.name || "";
     confirmAction(
       "Confirmar pago",
-      `¿Registrar un pago de ${money(amt)} al crédito #${loan?.id || loan?.loan_id}${methodName ? ` por ${methodName}` : ""}?`,
+      `¿Registrar un pago de ${usdInfo ? `${usdMoney(typedAmount)} (${money(amt)} al tipo de cambio de compra ${fxRate(usdRate.buy_rate)})` : money(amt)} al crédito #${loan?.id || loan?.loan_id}${methodName ? ` por ${methodName}` : ""}?`,
       submitPayment,
     );
   };
@@ -621,9 +671,31 @@ export default function PaymentsScreen({ route }) {
               <Text style={styles.muted}>Saldo pendiente</Text>
             </View>
 
+            {isCash && usdRate?.enabled && (
+              <View style={[styles.chipsRow, { marginTop: SPACING.md }]}>
+                <Chip selected={currency === "NIO"} showSelectedCheck={false} onPress={() => switchCurrency("NIO")} style={{ backgroundColor: currency === "NIO" ? COLORS.primarySoft : COLORS.card }}>
+                  C$ Córdobas
+                </Chip>
+                <Chip
+                  selected={currency === "USD"}
+                  showSelectedCheck={false}
+                  disabled={!usdRate.available}
+                  icon="currency-usd"
+                  onPress={() => switchCurrency("USD")}
+                  style={{ backgroundColor: currency === "USD" ? COLORS.primarySoft : COLORS.card }}
+                >
+                  US$ Dólares
+                </Chip>
+              </View>
+            )}
+            {isCash && usdRate?.enabled && !usdRate.available && (
+              <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: SPACING.xs }}>
+                {usdRate.message || "Para recibir dólares el supervisor debe registrar el tipo de cambio de compra de hoy."}
+              </Text>
+            )}
             <TextInput
               mode="outlined"
-              label="Monto"
+              label={usdMode ? "Dólares recibidos (US$)" : "Monto"}
               value={amount}
               onChangeText={(t) => { setAmount(formatAmountInput(t)); setBreakdown(null); }}
               keyboardType="decimal-pad"
@@ -631,6 +703,12 @@ export default function PaymentsScreen({ route }) {
               outlineStyle={{ borderRadius: RADIUS.md, borderColor: COLORS.border }}
               left={<TextInput.Icon icon="cash" />}
             />
+            {usdMode && (
+              <Text style={{ color: COLORS.primary, fontSize: 12, fontWeight: "700", marginTop: SPACING.xs }}>
+                Tipo de cambio de compra: C$ {fxRate(usdRate.buy_rate)} por US$ 1 · equivale a {money(amountNio)}
+                {usdRate.fromCache ? " (tipo de cambio guardado, sin conexión)" : ""}
+              </Text>
+            )}
 
             <Button
               mode="outlined"
@@ -658,7 +736,10 @@ export default function PaymentsScreen({ route }) {
                 <Chip
                   key={m.id}
                   selected={methodId === m.id}
-                  onPress={() => setMethodId(m.id)}
+                  onPress={() => {
+                    setMethodId(m.id);
+                    if (currency === "USD" && String(m.name || "").trim().toLowerCase() !== "efectivo") switchCurrency("NIO");
+                  }}
                   style={{ backgroundColor: methodId === m.id ? COLORS.primarySoft : COLORS.card }}
                 >
                   {m.name || m.description}
@@ -740,7 +821,8 @@ export default function PaymentsScreen({ route }) {
                 date={date}
                 collectorName={session?.user?.full_name || session?.user?.user_name}
                 receiptNumber={formatReceiptNumber(result?.payment_id)}
-                amount={toNumber(amount)}
+                usd={result?.usd}
+                amount={amountNio}
                 rows={receiptRows}
                 principalBefore={result?.principal_balance_before}
                 principalAfter={result?.principal_balance_after}

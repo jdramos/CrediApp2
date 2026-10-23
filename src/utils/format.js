@@ -19,3 +19,15 @@ export function formatAmountInput(text) {
   const intPart = intRaw.replace(/^0+(?=\d)/, "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return dec === null ? intPart : `${intPart || "0"}.${dec}`;
 }
+
+// Dólares: "US$ 1,250.50".
+export function usd(n) {
+  return `US$ ${(Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// Tipo de cambio sin ceros de más, con al menos 2 decimales: 36.8 -> "36.80", 36.6243 -> "36.6243".
+export function fxRate(n) {
+  const v = Number(n) || 0;
+  const s = v.toFixed(4).replace(/0+$/, "");
+  return s.endsWith(".") ? `${s}00` : /\.\d$/.test(s) ? `${s}0` : s;
+}

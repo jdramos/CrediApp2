@@ -735,6 +735,7 @@ export default function ClientPortfolioScreen() {
                         <Text style={{ color: COLORS.muted, fontSize: 11 }}>
                           Recibo {formatReceiptNumber(p.id)} · {p.forma_pago_name || "-"} · Capital {money(p.principal_payment)} · Interés{" "}
                           {money(p.interest_payment)}
+                          {p.usd_amount ? ` · US$ ${Number(p.usd_amount).toFixed(2)}` : ""}
                         </Text>
                       </Pressable>
                     ))}

@@ -47,3 +47,14 @@ export async function getPayoff(token, loanId, date) {
     throw friendly(e);
   }
 }
+
+// Cobro en dólares (efectivo US$ al cobrador): tipo de cambio de COMPRA de hoy de
+// la institución, el que fija el supervisor en Caja → Tipo de cambio — permiso
+// pagos.ver. Responde { enabled, available, buy_rate, date, message }.
+export const getUsdRate = (token) => credimasterGet("/api/collections/usd-rate", token);
+
+// Asienta cuántos US$ se recibieron en un pago ya registrado (por C$, al tipo de
+// cambio de compra) — permiso pagos.insertar. Se identifica por `payment_id` o,
+// si el pago se hizo sin conexión, por `client_reference_id`. Es idempotente.
+export const recordUsdReceipt = (token, { payment_id, client_reference_id, foreign_amount, fx_rate }) =>
+  credimasterPost("/api/collections/usd-receipt", { payment_id, client_reference_id, foreign_amount, fx_rate }, token);

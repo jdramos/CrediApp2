@@ -63,6 +63,7 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
         principal: payment.principal_payment,
         interest: payment.interest_payment,
         receiptNumber: formatReceiptNumber(payment.id),
+        usd: payment.usd_amount ? { foreign_amount: payment.usd_amount, fx_rate: payment.fx_rate } : null,
       })
     : "";
 
@@ -82,6 +83,7 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
         amount: payment.amount,
         breakdownRows: rows,
         receiptNumber: formatReceiptNumber(payment.id),
+        usd: payment.usd_amount ? { foreign_amount: payment.usd_amount, fx_rate: payment.fx_rate } : null,
       }),
     );
   };
@@ -107,6 +109,7 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
                   date={`${payment.payment_date}${payment.time ? ` ${payment.time}` : ""}`}
                   collectorName={collectorName}
                   receiptNumber={formatReceiptNumber(payment.id)}
+                  usd={payment.usd_amount ? { foreign_amount: payment.usd_amount, fx_rate: payment.fx_rate } : null}
                   amount={payment.amount}
                   rows={rows}
                 />

@@ -2,7 +2,7 @@ import React from "react";
 import { View, StyleSheet, Image } from "react-native";
 import { Text, Divider } from "react-native-paper";
 import AddressLines from "./AddressLines";
-import { money } from "../utils/format";
+import { money, usd as usdMoney, fxRate } from "../utils/format";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -34,6 +34,7 @@ export default function PaymentReceiptCard({
   date,
   collectorName,
   receiptNumber,
+  usd,
   amount,
   rows = [],
   principalBefore,
@@ -69,6 +70,11 @@ export default function PaymentReceiptCard({
           <Text style={{ color: COLORS.text, fontWeight: "800" }}>Monto pagado</Text>
           <Text style={{ color: COLORS.primary, fontWeight: "800", fontSize: 18 }}>{money(amount)}</Text>
         </View>
+        {!!usd && (
+          <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+            Recibido en dólares: {usdMoney(usd.foreign_amount)} al tipo de cambio de compra C$ {fxRate(usd.fx_rate)}
+          </Text>
+        )}
         {rows.length > 0 && (
           <>
             <Divider style={{ marginVertical: SPACING.xs }} />

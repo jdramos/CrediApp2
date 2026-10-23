@@ -212,6 +212,15 @@ export default function DayCloseScreen() {
             <View style={styles.card}>
               <Text variant="titleMedium" style={styles.cardTitle}>Lo que debo entregar</Text>
               <Row label="Efectivo del día" value={money(data.cash_to_deliver)} color={COLORS.success} />
+              {data.usd?.count > 0 && (
+                <>
+                  <Row label="  · En córdobas" value={money(data.cash_to_deliver_nio)} />
+                  <Row label="  · En dólares (entregar US$)" value={`US$ ${Number(data.usd.foreign_total).toFixed(2)}`} color={COLORS.primary} />
+                  <Text style={{ color: COLORS.muted, fontSize: 11, marginBottom: 4 }}>
+                    Los dólares equivalen a {money(data.usd.local_total)} al tipo de cambio de compra; se entregan en dólares, no en córdobas.
+                  </Text>
+                </>
+              )}
               {pending.cashAmount > 0 && (
                 <>
                   <Row label="Efectivo sin enviar (pagos sin señal)" value={money(pending.cashAmount)} color={COLORS.warning} />
