@@ -10,6 +10,7 @@ import PortfolioTab from "./finance/PortfolioTab";
 import ManagementTab from "./finance/ManagementTab";
 import IndicatorsTab from "./finance/IndicatorsTab";
 import PositionTab from "./finance/PositionTab";
+import BudgetTab from "./finance/BudgetTab";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SPACING } from "../theme/layout";
 
@@ -35,6 +36,7 @@ const SECTIONS = [
   { key: "management", label: "Gestión del mes", icon: "chart-timeline-variant", permission: "balances.ver", Component: ManagementTab },
   { key: "indicators", label: "Indicadores", icon: "speedometer", permission: "contabilidad.ver", Component: IndicatorsTab },
   { key: "position", label: "Situación financiera", icon: "scale-balance", permission: "contabilidad.ver", Component: PositionTab },
+  { key: "budget", label: "Presupuesto", icon: "calculator-variant-outline", permission: "presupuesto.ver", Component: BudgetTab },
 ];
 
 export const financeSectionsFor = (permissions) => SECTIONS.filter((s) => permissions?.includes(s.permission));

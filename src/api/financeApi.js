@@ -34,3 +34,11 @@ export const getManagementDashboard = (token, { date_from, date_to, branch_id })
     `/api/dashboard/management?date_from=${date_from}&date_to=${date_to}${branch_id ? `&branch_id=${branch_id}` : ""}`,
     token,
   );
+
+// ---- Presupuesto (permiso presupuesto.ver; módulo "budget" de la empresa).
+// Lista de presupuestos (uno por año), seguimiento de un mes (cuentas con
+// presupuestado y real del mes y del año, y colocación por sucursal) y alertas.
+export const getBudgets = (token) => credimasterGet("/api/budget", token);
+export const getBudgetTracking = (token, budgetId, month) =>
+  credimasterGet(`/api/budget/${budgetId}/tracking?month=${month}`, token);
+export const getBudgetAlerts = (token) => credimasterGet("/api/budget/alerts", token);

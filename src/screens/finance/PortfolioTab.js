@@ -1,5 +1,6 @@
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { View, ScrollView, RefreshControl } from "react-native";
+import { View, ScrollView, RefreshControl, Pressable } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { Text, Chip, Button } from "react-native-paper";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import { SessionContext } from "../../auth/SessionContext";
@@ -21,6 +22,10 @@ const RISK_LABEL = { A: "A · Normal", B: "B · Potencial", C: "C · Real", D: "
 // sucursal. El servidor ya limita a las sucursales del usuario.
 export default function PortfolioTab() {
   const { session } = useContext(SessionContext);
+  const navigation = useNavigation();
+  // El detalle de la mora (créditos, cobrador, gestión) pide cobranza.ver, como la web.
+  const canDrill = session?.permissions?.includes("cobranza.ver");
+  const openOverdue = (extra = {}) => navigation.navigate("OverdueLoans", { branchId: branchId, branchName: branchId ? branchName : undefined, ...extra });
   const logoUrl = useTenantLogo(session?.token);
   const shotRef = useRef(null);
   const [branches, setBranches] = useState([]);
@@ -172,7 +177,7 @@ export default function PortfolioTab() {
                 const share = agingTotal > 0 ? (Number(r.total_balance) / agingTotal) * 100 : 0;
                 const late = r.bucket !== "Al día";
                 return (
-                  <View key={r.bucket} style={{ marginBottom: 4 }}>
+                  <Pressable key={r.bucket} disabled={!canDrill || !late} onPress={() => openOverdue({ bucket: r.bucket })} style={{ marginBottom: 4 }}>
                     <View style={fin.row}>
                       <Text style={fin.rowLabel}>{r.bucket === "Al día" ? "Al día" : `${r.bucket} días`}</Text>
                       <Text style={fin.rowValue}>{money(r.total_balance)} · {pct(share, 1)}</Text>
@@ -180,9 +185,10 @@ export default function PortfolioTab() {
                     <View style={{ height: 6, borderRadius: 3, backgroundColor: COLORS.bg }}>
                       <View style={{ width: `${Math.min(100, Math.max(share, 0.5))}%`, height: 6, borderRadius: 3, backgroundColor: late ? COLORS.danger : COLORS.success }} />
                     </View>
-                  </View>
+                  </Pressable>
                 );
               })}
+              {canDrill && <Text style={fin.muted}>Tocá un tramo para ver esos créditos.</Text>}
             </View>
 
             {data.risk.length > 0 && (
@@ -203,6 +209,7 @@ export default function PortfolioTab() {
               <View style={fin.card}>
                 <Text style={fin.title}>Por sucursal</Text>
                 {data.byBranch.map((b) => (
+                  <Pressable key={b.branch_id} disabled={!canDrill} onPress={() => navigation.navigate("OverdueLoans", { branchId: b.branch_id, branchName: b.branch_name })}>
                   <Row
                     key={b.branch_id}
                     label={b.branch_name}
@@ -213,10 +220,18 @@ export default function PortfolioTab() {
                       </Text>
                     }
                   />
+                  </Pressable>
                 ))}
+                {canDrill && <Text style={fin.muted}>Tocá una sucursal para ver sus créditos en mora.</Text>}
               </View>
             )}
           </ViewShot>
+
+          {canDrill && (
+            <Button mode="contained" icon="alert-circle-outline" onPress={() => openOverdue()} style={{ borderRadius: RADIUS.md }} contentStyle={{ height: 46 }}>
+              Ver créditos en mora
+            </Button>
+          )}
 
           {(data?.byMonth || []).length > 6 && (
             <View style={fin.chips}>

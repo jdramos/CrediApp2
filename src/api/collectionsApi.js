@@ -100,3 +100,13 @@ export const getMyPayments = (token, params = {}) => {
 // Responde { data, total }.
 export const getMyLoanPayments = (token, loanId, { limit = 5 } = {}) =>
   credimasterGet(`/api/collections/my-loans/${loanId}/payments?limit=${limit}`, token);
+
+// Créditos en mora agrupados por crédito (más atrasados primero), con cobrador,
+// monto vencido, última gestión y promesa — permiso cobranza.ver. `branch_id` y
+// `min_days` opcionales. Responde { data, summary }.
+export const getWorklist = (token, params = {}) => {
+  const qs = new URLSearchParams(
+    Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ""),
+  ).toString();
+  return credimasterGet(`/api/collections/worklist${qs ? `?${qs}` : ""}`, token);
+};

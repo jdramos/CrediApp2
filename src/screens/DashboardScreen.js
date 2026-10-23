@@ -104,7 +104,7 @@ export default function DashboardScreen() {
   const canViewLoans = session?.permissions?.includes("creditos.ver");
   const canSimulate = session?.permissions?.includes("creditos.amortizacion.ver");
   // Finanzas: saldos de cartera (balances.ver) o indicadores y situación financiera (contabilidad.ver).
-  const canFinance = session?.permissions?.includes("balances.ver") || session?.permissions?.includes("contabilidad.ver");
+  const canFinance = ["balances.ver", "contabilidad.ver", "presupuesto.ver"].some((p) => session?.permissions?.includes(p));
   const canPay = session?.permissions?.includes("pagos.insertar") || session?.permissions?.includes("pagos.ver");
   const canSupervise = session?.permissions?.includes("creditos.productividad.ver");
   const canSeeRoutes = session?.permissions?.includes("rastreo.ver");
