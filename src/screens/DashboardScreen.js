@@ -102,6 +102,8 @@ export default function DashboardScreen() {
   const canApprove = session?.permissions?.includes("aprobaciones.ver");
   const canViewLoans = session?.permissions?.includes("creditos.ver");
   const canSimulate = session?.permissions?.includes("creditos.amortizacion.ver");
+  // Finanzas: saldos de cartera (balances.ver) o indicadores y situación financiera (contabilidad.ver).
+  const canFinance = session?.permissions?.includes("balances.ver") || session?.permissions?.includes("contabilidad.ver");
   const canPay = session?.permissions?.includes("pagos.insertar") || session?.permissions?.includes("pagos.ver");
   const canSupervise = session?.permissions?.includes("creditos.productividad.ver");
   const canSeeRoutes = session?.permissions?.includes("rastreo.ver");
@@ -267,6 +269,15 @@ export default function DashboardScreen() {
               subtitle="Dónde estuvo cada cobrador"
               gradient={GRADIENTS.dark}
               onPress={() => navigation.navigate("RoutesDay")}
+            />
+          )}
+          {canFinance && (
+            <ActionTile
+              icon="finance"
+              title="Finanzas"
+              subtitle="Cartera, indicadores y situación"
+              gradient={GRADIENTS.dark}
+              onPress={() => navigation.navigate("Finance")}
             />
           )}
           {canSimulate && (

@@ -10,6 +10,7 @@ import DayCloseScreen from "../screens/DayCloseScreen";
 import TeamProductivityScreen from "../screens/TeamProductivityScreen";
 import RoutesDayScreen from "../screens/RoutesDayScreen";
 import RouteMapScreen from "../screens/RouteMapScreen";
+import FinanceScreen from "../screens/FinanceScreen";
 import CollectorDetailScreen from "../screens/CollectorDetailScreen";
 import GlobalSearchScreen from "../screens/GlobalSearchScreen";
 import AppTabs from "./AppTabs";
@@ -53,6 +54,7 @@ export default function AppNavigator() {
             <Stack.Screen name="TeamProductivity" component={TeamProductivityScreen} />
             <Stack.Screen name="RoutesDay" component={RoutesDayScreen} />
             <Stack.Screen name="RouteMap" component={RouteMapScreen} />
+            <Stack.Screen name="Finance" component={FinanceScreen} />
             <Stack.Screen name="CollectorDetail" component={CollectorDetailScreen} />
             <Stack.Screen name="GlobalSearch" component={GlobalSearchScreen} options={{ animation: "fade_from_bottom" }} />
           </>
