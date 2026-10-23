@@ -25,3 +25,12 @@ export const getFinancialPosition = (token, period) =>
 // balances.ver; `branch_id` opcional.
 export const getPortfolioByMonth = (token, branch_id) =>
   credimasterGet(`/api/dashboard/balances-fast/portfolio-by-month${branch_id ? `?branch_id=${branch_id}` : ""}`, token);
+
+// Tablero gerencial del período (permiso balances.ver): colocación con su meta,
+// recuperación, clientes, saneados, tendencia de 12 meses y rankings, contra el
+// mismo rango del mes anterior. `date_from`/`date_to` = YYYY-MM-DD.
+export const getManagementDashboard = (token, { date_from, date_to, branch_id }) =>
+  credimasterGet(
+    `/api/dashboard/management?date_from=${date_from}&date_to=${date_to}${branch_id ? `&branch_id=${branch_id}` : ""}`,
+    token,
+  );

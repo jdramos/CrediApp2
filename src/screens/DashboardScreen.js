@@ -21,6 +21,7 @@ import { syncReminders } from "../notifications/reminders";
 import { workdayRequired } from "../tracking/workday";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import WorkdayCard from "../components/WorkdayCard";
+import FinanceGlance from "../components/FinanceGlance";
 import { money } from "../utils/format";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
@@ -205,6 +206,7 @@ export default function DashboardScreen() {
           />
         ))}
         {canPay && <WorkdayCard />}
+        {session?.permissions?.includes("balances.ver") && <FinanceGlance />}
         <Text style={styles.sectionTitle}>Accesos rápidos</Text>
         <View style={styles.actionsGrid}>
           {canViewCustomers && (

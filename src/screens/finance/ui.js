@@ -64,7 +64,7 @@ export function Delta({ current, previous, kind = "money", polarity = "neutral" 
   const up = diff > 0;
   const good = polarity === "neutral" ? null : (polarity === "higher") === up;
   const color = good == null ? COLORS.muted : good ? COLORS.success : COLORS.danger;
-  const text = kind === "pct" ? `${Math.abs(diff).toFixed(2)} pts` : money(Math.abs(diff));
+  const text = kind === "pct" ? `${Math.abs(diff).toFixed(2)} pts` : kind === "count" ? String(Math.round(Math.abs(diff))) : money(Math.abs(diff));
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
       <MaterialCommunityIcons name={up ? "arrow-up" : "arrow-down"} size={12} color={color} />

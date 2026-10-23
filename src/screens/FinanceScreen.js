@@ -7,6 +7,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import PortfolioTab from "./finance/PortfolioTab";
+import ManagementTab from "./finance/ManagementTab";
 import IndicatorsTab from "./finance/IndicatorsTab";
 import PositionTab from "./finance/PositionTab";
 import { COLORS, GRADIENTS } from "../theme/colors";
@@ -31,6 +32,7 @@ const styles = StyleSheet.create({
 // situación financiera), y el servidor los vuelve a exigir en cada consulta.
 const SECTIONS = [
   { key: "portfolio", label: "Cartera", icon: "wallet-outline", permission: "balances.ver", Component: PortfolioTab },
+  { key: "management", label: "Gestión del mes", icon: "chart-timeline-variant", permission: "balances.ver", Component: ManagementTab },
   { key: "indicators", label: "Indicadores", icon: "speedometer", permission: "contabilidad.ver", Component: IndicatorsTab },
   { key: "position", label: "Situación financiera", icon: "scale-balance", permission: "contabilidad.ver", Component: PositionTab },
 ];
