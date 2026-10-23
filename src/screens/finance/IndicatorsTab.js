@@ -9,7 +9,7 @@ import ShareCardHeader from "../../components/ShareCardHeader";
 import { shareImage } from "../../utils/shareImage";
 import { COLORS } from "../../theme/colors";
 import { RADIUS, SPACING } from "../../theme/layout";
-import { fin, MonthNav, periodLabel, Delta, LevelChip, Loading, ErrorBox, pct } from "./ui";
+import { fin, MonthNav, periodLabel, Delta, LevelChip, Loading, ErrorBox, pct, MiniBars, monthShort } from "./ui";
 
 const formatValue = (ind, v) => (v == null ? "—" : ind.unit === "pct" ? pct(v) : `${Number(v).toFixed(2)} veces`);
 
@@ -103,6 +103,12 @@ export default function IndicatorsTab() {
 
             {indicators.map((ind) => {
               const expanded = open === ind.key;
+              // Tendencia: el valor de este indicador en cada uno de los últimos 6 meses.
+              const series = data.series || [];
+              const trend = series.map((sr) => sr.values?.[ind.key] ?? null);
+              const known = trend.filter((v) => v != null);
+              const first = known[0];
+              const last = known[known.length - 1];
               return (
                 <Pressable key={ind.key} onPress={() => setOpen(expanded ? null : ind.key)} style={fin.card}>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", gap: SPACING.sm }}>
@@ -120,6 +126,17 @@ export default function IndicatorsTab() {
                       <Delta current={ind.value} previous={ind.previous} kind="pct" polarity={ind.polarity} />
                     </View>
                   </View>
+                  {known.length >= 2 && (
+                    <View>
+                      <MiniBars values={trend} labels={series.map((sr) => monthShort(sr.period))} />
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 2 }}>
+                        <Text style={fin.muted}>
+                          {series.length} meses: {formatValue(ind, first)} → {formatValue(ind, last)}
+                        </Text>
+                        <Delta current={last} previous={first} kind="pct" polarity={ind.polarity} />
+                      </View>
+                    </View>
+                  )}
                   {sectorOk && ind.sector?.median != null && (
                     <Text style={fin.muted}>
                       Sector: mediana {formatValue(ind, ind.sector.median)}
@@ -170,16 +187,16 @@ export default function IndicatorsTab() {
 
 // Filtro por grupo (Activos, Pasivos, Rentabilidad...), arriba de la lista.
 export function IndicatorGroups({ groups, value, onChange }) {
+  const chip = (key, label) => (
+    <Chip key={key} selected={value === key} showSelectedCheck={false} onPress={() => onChange(key)} style={{ backgroundColor: value === key ? COLORS.primarySoft : COLORS.card }}>
+      {label}
+    </Chip>
+  );
+  // Una sola fila que se desliza hacia los lados, para no ocupar media pantalla.
   return (
-    <View style={fin.chips}>
-      <Chip selected={value === "all"} showSelectedCheck={false} onPress={() => onChange("all")} style={{ backgroundColor: value === "all" ? COLORS.primarySoft : COLORS.card }}>
-        Todos
-      </Chip>
-      {(groups || []).map((g) => (
-        <Chip key={g.key} selected={value === g.key} showSelectedCheck={false} onPress={() => onChange(g.key)} style={{ backgroundColor: value === g.key ? COLORS.primarySoft : COLORS.card }}>
-          {g.label}
-        </Chip>
-      ))}
-    </View>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.xs, paddingRight: SPACING.lg }} style={{ flexGrow: 0 }}>
+      {chip("all", "Todos")}
+      {(groups || []).map((g) => chip(g.key, g.label))}
+    </ScrollView>
   );
 }

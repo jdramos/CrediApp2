@@ -3,7 +3,7 @@ import { View, ScrollView, RefreshControl } from "react-native";
 import { Text, Chip, Button } from "react-native-paper";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import { SessionContext } from "../../auth/SessionContext";
-import { getPortfolioSummary, getPortfolioAging, getPortfolioRisk, getPortfolioByBranch } from "../../api/financeApi";
+import { getPortfolioSummary, getPortfolioAging, getPortfolioRisk, getPortfolioByBranch, getPortfolioByMonth } from "../../api/financeApi";
 import { getAccessibleBranches } from "../../api/branchApi";
 import { useTenantLogo } from "../../hooks/useTenantLogo";
 import ShareCardHeader from "../../components/ShareCardHeader";
@@ -12,7 +12,7 @@ import { money } from "../../utils/format";
 import { todayISO } from "../../utils/date";
 import { COLORS } from "../../theme/colors";
 import { RADIUS, SPACING } from "../../theme/layout";
-import { fin, Kpi, Row, Loading, ErrorBox, pct } from "./ui";
+import { fin, Kpi, Row, Loading, ErrorBox, pct, Delta, StackedBars } from "./ui";
 
 const RISK_LABEL = { A: "A · Normal", B: "B · Potencial", C: "C · Real", D: "D · Dudosa", E: "E · Irrecuperable" };
 
@@ -30,6 +30,7 @@ export default function PortfolioTab() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [sharing, setSharing] = useState(false);
+  const [months, setMonths] = useState(6); // meses que muestra la gráfica de evolución
 
   useEffect(() => {
     getAccessibleBranches(session.token).then((r) => setBranches(r?.data || [])).catch(() => {});
@@ -41,13 +42,20 @@ export default function PortfolioTab() {
       else setLoading(true);
       setError("");
       try {
-        const [summary, aging, risk, byBranch] = await Promise.all([
+        const [summary, aging, risk, byBranch, byMonth] = await Promise.all([
           getPortfolioSummary(session.token, branchId),
           getPortfolioAging(session.token, branchId),
           getPortfolioRisk(session.token, branchId),
           getPortfolioByBranch(session.token),
+          getPortfolioByMonth(session.token, branchId).catch(() => null), // la evolución es un extra: si falla, el resto se ve igual
         ]);
-        setData({ summary: summary?.data, aging: aging?.data || [], risk: risk?.data || [], byBranch: byBranch?.data || [] });
+        setData({
+          summary: summary?.data,
+          aging: aging?.data || [],
+          risk: risk?.data || [],
+          byBranch: byBranch?.data || [],
+          byMonth: byMonth?.data || [],
+        });
       } catch (e) {
         setError(e?.message || "No se pudieron cargar los saldos de cartera. Revisá tu conexión.");
       } finally {
@@ -75,6 +83,15 @@ export default function PortfolioTab() {
   };
 
   const s = data?.summary;
+  // Últimos `months` meses de cartera total y vencida, con el % de mora de cada uno.
+  const evolution = (data?.byMonth || [])
+    .slice(-months)
+    .map((r) => ({
+      period: r.period,
+      total: Number(r.total_portfolio) || 0,
+      overdue: Number(r.overdue_portfolio) || 0,
+      rate: Number(r.total_portfolio) > 0 ? (Number(r.overdue_portfolio) / Number(r.total_portfolio)) * 100 : 0,
+    }));
   const agingTotal = (data?.aging || []).reduce((a, r) => a + Number(r.total_balance || 0), 0);
   const branchName = branchId ? branches.find((b) => b.id === branchId)?.name : "Todas mis sucursales";
 
@@ -115,6 +132,29 @@ export default function PortfolioTab() {
               <Kpi label="Capital" value={money(s.total_capital)} />
               <Kpi label="Provisión estimada" value={money(s.estimated_provision)} color={COLORS.warning} />
             </View>
+
+            {evolution.length >= 2 && (
+              <View style={fin.card}>
+                <Text style={fin.title}>Evolución de la cartera</Text>
+                <StackedBars rows={evolution} />
+                <View style={{ flexDirection: "row", gap: SPACING.xs, alignItems: "center", marginTop: 2 }}>
+                  <View style={{ width: 8, height: 8, backgroundColor: COLORS.primary, borderRadius: 2 }} />
+                  <Text style={fin.muted}>Cartera total</Text>
+                  <View style={{ width: 8, height: 8, backgroundColor: COLORS.danger, borderRadius: 2, marginLeft: SPACING.sm }} />
+                  <Text style={fin.muted}>Vencida</Text>
+                </View>
+                <Row
+                  label="Cartera total"
+                  value={`${money(evolution[0].total)} → ${money(evolution[evolution.length - 1].total)}`}
+                  sub={<Delta current={evolution[evolution.length - 1].total} previous={evolution[0].total} polarity="higher" />}
+                />
+                <Row
+                  label="Mora (vencida / total)"
+                  value={`${pct(evolution[0].rate, 1)} → ${pct(evolution[evolution.length - 1].rate, 1)}`}
+                  sub={<Delta current={evolution[evolution.length - 1].rate} previous={evolution[0].rate} kind="pct" polarity="lower" />}
+                />
+              </View>
+            )}
 
             <View style={fin.card}>
               <Text style={fin.title}>Composición de la cartera</Text>
@@ -177,6 +217,16 @@ export default function PortfolioTab() {
               </View>
             )}
           </ViewShot>
+
+          {(data?.byMonth || []).length > 6 && (
+            <View style={fin.chips}>
+              {[6, 12].map((m) => (
+                <Chip key={m} compact selected={months === m} showSelectedCheck={false} onPress={() => setMonths(m)} style={{ backgroundColor: months === m ? COLORS.primarySoft : COLORS.card }}>
+                  {`Evolución: ${m} meses`}
+                </Chip>
+              ))}
+            </View>
+          )}
 
           <Button mode="outlined" icon="share-variant" onPress={onShare} loading={sharing} disabled={sharing} style={{ borderRadius: RADIUS.md }} contentStyle={{ height: 46 }}>
             Compartir como imagen

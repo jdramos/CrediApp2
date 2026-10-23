@@ -20,3 +20,8 @@ export const getFinancialIndicators = (token, period) =>
 // mes con el mes anterior y el cierre del año anterior.
 export const getFinancialPosition = (token, period) =>
   credimasterGet(`/api/accounting/financial-position${period ? `?period=${period}` : ""}`, token);
+
+// Cartera total y vencida por mes (últimos cierres de cada mes) — permiso
+// balances.ver; `branch_id` opcional.
+export const getPortfolioByMonth = (token, branch_id) =>
+  credimasterGet(`/api/dashboard/balances-fast/portfolio-by-month${branch_id ? `?branch_id=${branch_id}` : ""}`, token);
