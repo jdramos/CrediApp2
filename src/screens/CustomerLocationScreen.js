@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import { View, StyleSheet, ScrollView, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, Card, Button, ActivityIndicator, HelperText, Snackbar } from "react-native-paper";
@@ -9,6 +9,8 @@ import { isNetworkError } from "../api/credimasterClient";
 import { enqueue } from "../offline/queue";
 import { useSync } from "../offline/SyncProvider";
 import { confirmAction } from "../utils/confirm";
+import { openDirectionsTo } from "../utils/maps";
+import PlaceMap from "../components/PlaceMap";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -30,6 +32,20 @@ const styles = StyleSheet.create({
   coords: { marginTop: SPACING.xs, color: COLORS.muted },
   btn: { marginTop: SPACING.sm, borderRadius: RADIUS.md },
   saveBtn: { marginTop: SPACING.lg, borderRadius: RADIUS.md },
+  rowBtns: { flexDirection: "row", gap: SPACING.xs, marginTop: SPACING.sm },
+  mapCard: {
+    marginTop: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: "hidden",
+    backgroundColor: COLORS.card,
+    ...SHADOW.card,
+  },
+  map: { height: 280 },
+  legend: { flexDirection: "row", gap: SPACING.md, padding: SPACING.sm },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  dot: { width: 10, height: 10, borderRadius: 5 },
 });
 
 const formatCoords = (lat, lng) =>
@@ -56,6 +72,15 @@ export default function CustomerLocationScreen({ route }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [snackbar, setSnackbar] = useState("");
+  const [focusKey, setFocusKey] = useState(null); // lugar en el que se centra el mapa
+
+  // Lugares con ubicación (guardada o recién capturada, aunque todavía no se guarde).
+  const places = useMemo(() => {
+    const list = [];
+    if (homeLat != null && homeLng != null) list.push({ key: "home", label: "Casa", lat: Number(homeLat), lng: Number(homeLng), color: "#1D4ED8" });
+    if (businessLat != null && businessLng != null) list.push({ key: "business", label: "Negocio", lat: Number(businessLat), lng: Number(businessLng), color: "#F59E0B" });
+    return list;
+  }, [homeLat, homeLng, businessLat, businessLng]);
 
   useEffect(() => {
     (async () => {
@@ -176,6 +201,16 @@ export default function CustomerLocationScreen({ route }) {
           >
             Capturar ubicación actual
           </Button>
+          {homeLat != null && homeLng != null && (
+            <View style={styles.rowBtns}>
+              <Button mode="outlined" icon="map" onPress={() => setFocusKey("home")} style={{ flex: 1, borderRadius: RADIUS.md }}>
+                Ver en el mapa
+              </Button>
+              <Button mode="contained-tonal" icon="map-marker-path" onPress={() => openDirectionsTo(homeLat, homeLng)} style={{ flex: 1, borderRadius: RADIUS.md }}>
+                Ir
+              </Button>
+            </View>
+          )}
         </View>
 
         <View style={styles.card}>
@@ -191,7 +226,31 @@ export default function CustomerLocationScreen({ route }) {
           >
             Capturar ubicación actual
           </Button>
+          {businessLat != null && businessLng != null && (
+            <View style={styles.rowBtns}>
+              <Button mode="outlined" icon="map" onPress={() => setFocusKey("business")} style={{ flex: 1, borderRadius: RADIUS.md }}>
+                Ver en el mapa
+              </Button>
+              <Button mode="contained-tonal" icon="map-marker-path" onPress={() => openDirectionsTo(businessLat, businessLng)} style={{ flex: 1, borderRadius: RADIUS.md }}>
+                Ir
+              </Button>
+            </View>
+          )}
         </View>
+
+        {places.length > 0 && (
+          <View style={styles.mapCard}>
+            <PlaceMap places={places} focusKey={focusKey} style={styles.map} />
+            <View style={styles.legend}>
+              {places.map((p) => (
+                <View key={p.key} style={styles.legendItem}>
+                  <View style={[styles.dot, { backgroundColor: p.color }]} />
+                  <Text style={{ color: COLORS.muted, fontSize: 12 }}>{p.label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         <Button
           mode="contained"

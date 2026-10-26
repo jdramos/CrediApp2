@@ -31,7 +31,12 @@ export async function openDirections(customer) {
     );
     return;
   }
-  const url = `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}&travelmode=driving`;
+  return openDirectionsTo(dest.lat, dest.lng);
+}
+
+// Ruta en auto hacia unas coordenadas (casa o negocio de un cliente, etc.).
+export async function openDirectionsTo(lat, lng) {
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
   try {
     await Linking.openURL(url);
   } catch {
