@@ -90,6 +90,10 @@ export default function CustomerFileScreen() {
   const [newBrand, setNewBrand] = useState("");
   const [newSeries, setNewSeries] = useState("");
   const [newValue, setNewValue] = useState("");
+  // Fotos de la garantía que se está creando (todavía sin guardar: se pueden
+  // cambiar o quitar). Al guardar la garantía se suben a ella.
+  const [newPhotos, setNewPhotos] = useState([]);
+  const MAX_NEW_PHOTOS = 6;
 
   const load = useCallback(
     async (isRefresh = false) => {
@@ -163,6 +167,16 @@ export default function CustomerFileScreen() {
       return null;
     }
   };
+
+  const addNewPhoto = async () => {
+    const file = await pick();
+    if (file) setNewPhotos((list) => (list.length < MAX_NEW_PHOTOS ? [...list, file] : list));
+  };
+  const replaceNewPhoto = async (index) => {
+    const file = await pick();
+    if (file) setNewPhotos((list) => list.map((f, i) => (i === index ? file : f)));
+  };
+  const removeNewPhoto = (index) => setNewPhotos((list) => list.filter((_, i) => i !== index));
 
   // Paso 1: elegir la primera foto (cámara o galería) y mostrarla para revisarla.
   const startDraft = async (title, save, itemCode, { multi = false } = {}) => {
@@ -287,12 +301,45 @@ export default function CustomerFileScreen() {
         value: toNumber(newValue) || null,
       };
       await saveCustomerGuarantees(session.token, customerId, fullCustomer, [...existing, created]);
+
+      // Las fotos se suben a la garantía recién creada: se busca su id entre las del
+      // cliente (la que no estaba antes). La garantía ya quedó guardada, así que si
+      // una foto falla NO se vuelve a crear; se avisa y se puede subir desde su tarjeta.
+      let photoProblem = "";
+      if (newPhotos.length && canPhotoGuarantee) {
+        const knownIds = new Set(existing.map((g) => g.id));
+        const fresh = await getCustomerGuarantees(session.token, customerId);
+        const createdGuarantee = (Array.isArray(fresh) ? fresh : []).filter((g) => !knownIds.has(g.id)).sort((a, b) => b.id - a.id)[0];
+        if (!createdGuarantee) {
+          photoProblem = "No se encontró la garantía recién creada para subirle las fotos.";
+        } else {
+          for (const file of newPhotos) {
+            const result = await uploadOrQueue({
+              key: "newGuarantee",
+              run: () => uploadGuaranteePhoto(session.token, createdGuarantee.id, file),
+              queueItem: {
+                type: "GUARANTEE_PHOTO",
+                label: `Foto de garantía #${createdGuarantee.id}`,
+                payload: { guaranteeId: createdGuarantee.id, file },
+              },
+              queuedMessage: "La foto se guardó en el equipo y se subirá sola cuando vuelva la señal.",
+            });
+            if (!result) {
+              photoProblem = "La garantía se guardó, pero una foto no se pudo subir. Subila desde la tarjeta de la garantía.";
+              break;
+            }
+          }
+        }
+      }
+
       setNewArticle("");
       setNewBrand("");
       setNewSeries("");
       setNewValue("");
+      setNewPhotos([]);
       setShowAddGuarantee(false);
       await load(true);
+      if (photoProblem) setError(photoProblem);
     } catch (e) {
       setError(e?.message ?? "No se pudo agregar la garantía");
     } finally {
@@ -526,6 +573,7 @@ export default function CustomerFileScreen() {
           onDismiss={() => setShowAddGuarantee(false)}
           contentContainerStyle={styles.modal}
         >
+          <ScrollView style={{ maxHeight: 440 }} keyboardShouldPersistTaps="handled">
           <Text variant="titleMedium" style={[styles.title, { marginBottom: SPACING.sm }]}>Nueva garantía</Text>
           <TextInput
             mode="outlined"
@@ -561,6 +609,41 @@ export default function CustomerFileScreen() {
             outlineStyle={{ borderRadius: RADIUS.md }}
             left={<TextInput.Icon icon="cash" />}
           />
+          {canPhotoGuarantee && (
+            <View style={{ marginTop: SPACING.md }}>
+              <Text style={styles.title}>Fotos de la garantía (opcional)</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm, marginTop: SPACING.xs }}>
+                {newPhotos.map((f, i) => (
+                  <View key={`${f.uri}-${i}`} style={{ width: 104 }}>
+                    <Image source={{ uri: f.uri }} style={{ width: 104, height: 104, borderRadius: RADIUS.md, backgroundColor: COLORS.bg }} resizeMode="cover" />
+                    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                      <Button compact onPress={() => replaceNewPhoto(i)} disabled={savingGuarantee} labelStyle={{ fontSize: 11 }}>
+                        Cambiar
+                      </Button>
+                      <Button compact textColor={COLORS.danger} onPress={() => removeNewPhoto(i)} disabled={savingGuarantee} labelStyle={{ fontSize: 11 }}>
+                        Quitar
+                      </Button>
+                    </View>
+                  </View>
+                ))}
+              </View>
+              {newPhotos.length < MAX_NEW_PHOTOS && (
+                <Button
+                  mode="outlined"
+                  icon="camera-plus-outline"
+                  onPress={addNewPhoto}
+                  disabled={savingGuarantee}
+                  style={{ marginTop: SPACING.xs, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+                >
+                  {newPhotos.length ? "Agregar otra foto" : "Agregar foto"}
+                </Button>
+              )}
+              <Text style={[styles.muted, { marginTop: SPACING.xs }]}>
+                Las fotos se pueden cambiar o quitar mientras no guardes. Ya guardada la garantía, quedan definitivas: no se pueden reemplazar ni eliminar desde la app.
+              </Text>
+            </View>
+          )}
+          </ScrollView>
           <Button
             mode="contained"
             onPress={addGuarantee}
