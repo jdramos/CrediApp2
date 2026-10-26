@@ -6,6 +6,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { SessionContext } from "../auth/SessionContext";
 import { changePassword } from "../api/userApi";
+import { getAccessibleBranches } from "../api/branchApi";
 import { confirmAction } from "../utils/confirm";
 import { remindersEnabled, setRemindersEnabled, syncReminders, sendTestReminder } from "../notifications/reminders";
 import { workdayRequired } from "../tracking/workday";
@@ -53,6 +54,18 @@ const styles = StyleSheet.create({
 // pestañas — más "app moderna" que un cajón lateral.
 export default function MoreScreen() {
   const { session, signOut } = useContext(SessionContext);
+
+  // Nombres de las sucursales a las que tiene acceso (la sesión solo guarda sus ids).
+  const [branchNames, setBranchNames] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    getAccessibleBranches(session.token)
+      .then((res) => !cancelled && setBranchNames((res?.data || []).map((b) => b.name).filter(Boolean)))
+      .catch(() => {}); // sin conexión: se muestra la cantidad como antes
+    return () => {
+      cancelled = true;
+    };
+  }, [session.token]);
   const fullName = session?.user?.full_name || session?.user?.user_name || "Usuario";
   const tenantName = session?.tenant?.commercial_name || session?.tenant?.legal_name || "";
 
@@ -161,7 +174,14 @@ export default function MoreScreen() {
           <Divider />
           <List.Item
             title="Sucursales asignadas"
-            description={session?.user?.branches?.length ? String(session.user.branches.length) : "Todas"}
+            description={
+              branchNames.length
+                ? branchNames.join(", ")
+                : session?.user?.branches?.length
+                  ? String(session.user.branches.length)
+                  : "Todas"
+            }
+            descriptionNumberOfLines={5}
             left={(props) => <List.Icon {...props} icon="office-building-outline" color={COLORS.primary} />}
           />
         </Animated.View>
