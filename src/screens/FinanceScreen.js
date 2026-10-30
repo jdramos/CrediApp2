@@ -1,4 +1,4 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { View, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, IconButton, Chip } from "react-native-paper";
@@ -11,6 +11,7 @@ import ManagementTab from "./finance/ManagementTab";
 import IndicatorsTab from "./finance/IndicatorsTab";
 import PositionTab from "./finance/PositionTab";
 import BudgetTab from "./finance/BudgetTab";
+import { getSessionModules } from "../api/financeApi";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SPACING } from "../theme/layout";
 
@@ -34,19 +35,34 @@ const styles = StyleSheet.create({
 const SECTIONS = [
   { key: "portfolio", label: "Cartera", icon: "wallet-outline", permission: "balances.ver", Component: PortfolioTab },
   { key: "management", label: "Gestión del mes", icon: "chart-timeline-variant", permission: "balances.ver", Component: ManagementTab },
-  { key: "indicators", label: "Indicadores", icon: "speedometer", permission: "contabilidad.ver", Component: IndicatorsTab },
-  { key: "position", label: "Situación financiera", icon: "scale-balance", permission: "contabilidad.ver", Component: PositionTab },
-  { key: "budget", label: "Presupuesto", icon: "calculator-variant-outline", permission: "presupuesto.ver", Component: BudgetTab },
+  { key: "indicators", label: "Indicadores", icon: "speedometer", permission: "contabilidad.ver", module: "accounting", Component: IndicatorsTab },
+  { key: "position", label: "Situación financiera", icon: "scale-balance", permission: "contabilidad.ver", module: "accounting", Component: PositionTab },
+  { key: "budget", label: "Presupuesto", icon: "calculator-variant-outline", permission: "presupuesto.ver", module: "budget", Component: BudgetTab },
 ];
 
-export const financeSectionsFor = (permissions) => SECTIONS.filter((s) => permissions?.includes(s.permission));
+// `modules`: enabled_modules de la empresa (null = todos). Sin el módulo la
+// sección no aparece aunque el rol tenga el permiso: en el paquete Cartera y
+// Cobranza (sin contabilidad ni presupuesto) esas pestañas solo mostraban el
+// error 403 MODULE_DISABLED del servidor.
+export const financeSectionsFor = (permissions, modules = null) =>
+  SECTIONS.filter((s) => permissions?.includes(s.permission) && (!s.module || modules == null || modules.includes(s.module)));
 
 // Finanzas: saldos de cartera, indicadores y situación financiera, para quien
 // tenga el permiso de cada sección. Solo se muestran las secciones permitidas.
 export default function FinanceScreen() {
   const navigation = useNavigation();
   const { session } = useContext(SessionContext);
-  const allowed = financeSectionsFor(session?.permissions);
+  // undefined = aún no se sabe: las secciones con módulo esperan la respuesta
+  // para no aparecer y desaparecer.
+  const [modules, setModules] = useState(undefined);
+  useEffect(() => {
+    let alive = true;
+    getSessionModules(session?.token)
+      .then((r) => alive && setModules(r?.data?.enabled_modules ?? null))
+      .catch(() => alive && setModules(null)); // servidor sin el endpoint: solo permisos, como antes
+    return () => { alive = false; };
+  }, [session?.token]);
+  const allowed = financeSectionsFor(session?.permissions, modules === undefined ? [] : modules);
   const [active, setActive] = useState(allowed[0]?.key);
   const current = allowed.find((s) => s.key === active) || allowed[0];
 

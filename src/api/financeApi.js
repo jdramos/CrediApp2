@@ -1,5 +1,9 @@
 import { credimasterGet } from "./credimasterClient";
 
+// Módulos vigentes de la empresa ({ enabled_modules, module_package, ... }).
+// enabled_modules null = todos (IMF regulada completa).
+export const getSessionModules = (token) => credimasterGet("/api/session/modules", token);
+
 // ---- Saldos de cartera (permiso balances.ver; el servidor limita a las
 // sucursales del usuario) -- último cierre diario de saldos.
 export const getPortfolioSummary = (token, branch_id) =>
