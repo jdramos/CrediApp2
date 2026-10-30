@@ -67,6 +67,11 @@ export const getTeamCollectorDetail = (token, collectorId, period) =>
 export const getMyDayClose = (token, date) =>
   credimasterGet(`/api/collections/my-day-close${date ? `?date=${date}` : ""}`, token);
 
+// Guarda el cierre del día con el conteo por denominación ({ NIO: {"1000": 2}, USD: {...} }).
+// El servidor rechaza el cierre (400 FALTANTE) si lo contado no alcanza lo cobrado en efectivo.
+export const submitMyDayClose = (token, { date, denominations, notes }) =>
+  credimasterPost("/api/collections/my-day-close", { date, denominations, notes }, token);
+
 // Cuotas que vencen y promesas por día, de hoy a hoy+N: alimenta los
 // recordatorios locales (notifications/reminders.js) — permiso pagos.ver.
 export const getMyReminders = (token, days = 7) =>

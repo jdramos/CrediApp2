@@ -15,6 +15,7 @@ import ShareCardHeader from "../components/ShareCardHeader";
 import OfflineNotice from "../components/OfflineNotice";
 import { cachedFetch } from "../offline/cache";
 import PaymentEvidenceModal from "../components/PaymentEvidenceModal";
+import DayCloseCount from "../components/DayCloseCount";
 import { money } from "../utils/format";
 import { todayISO, shiftDay } from "../utils/date";
 import { COLORS, GRADIENTS } from "../theme/colors";
@@ -187,6 +188,13 @@ export default function DayCloseScreen() {
 
         {data && linked && (
           <>
+            <DayCloseCount
+              token={session.token}
+              date={date}
+              cashCount={data.cash_count}
+              pendingCashAmount={pending.cashAmount}
+              onSaved={() => load(date, true)}
+            />
             <ViewShot ref={shotRef} options={{ format: "png", quality: 0.95 }} style={{ gap: SPACING.md, backgroundColor: COLORS.bg }}>
             <ShareCardHeader
               logoUrl={logoUrl}
