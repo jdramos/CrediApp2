@@ -79,6 +79,8 @@ export function SessionProvider({ children }) {
         role_id: res.role_id,
         department_id: res.department_id,
         collector_id: res.collector_id ?? null,
+        // Excepción a la ubicación obligatoria (se administra desde la web).
+        location_exempt: !!res.location_exempt,
         branches: res.branches || [],
       },
       tenant: res.tenant,

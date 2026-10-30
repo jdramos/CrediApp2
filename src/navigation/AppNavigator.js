@@ -15,6 +15,7 @@ import OverdueLoansScreen from "../screens/OverdueLoansScreen";
 import CollectorDetailScreen from "../screens/CollectorDetailScreen";
 import GlobalSearchScreen from "../screens/GlobalSearchScreen";
 import AppTabs from "./AppTabs";
+import LocationGate from "../components/LocationGate";
 import { ActivityIndicator } from "react-native-paper";
 import { View } from "react-native";
 import { COLORS } from "../theme/colors";
@@ -44,6 +45,7 @@ export default function AppNavigator() {
   }
 
   return (
+    <>
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {session ? (
@@ -65,5 +67,8 @@ export default function AppNavigator() {
         )}
       </Stack.Navigator>
     </NavigationContainer>
+    {/* Sin ubicación activa no se puede operar: bloquea toda la app (no el login). */}
+    {session ? <LocationGate /> : null}
+    </>
   );
 }
