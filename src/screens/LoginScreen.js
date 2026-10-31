@@ -1,9 +1,8 @@
 import React, { useContext, useRef, useState } from "react";
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Button, HelperText, Checkbox } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import Animated, { FadeInDown, FadeIn, ZoomIn } from "react-native-reanimated";
 import { SessionContext } from "../auth/SessionContext";
 import { COLORS, GRADIENTS } from "../theme/colors";
@@ -18,14 +17,16 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xl,
   },
   logoCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    backgroundColor: "#FFFFFF",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: SPACING.md,
+    ...SHADOW.card,
   },
+  logoImage: { width: 84, height: 84 },
   brand: { color: COLORS.onGradient, fontWeight: "800", letterSpacing: 0.5 },
   tagline: { color: COLORS.onGradientMuted, marginTop: 4 },
   sheet: {
@@ -132,7 +133,7 @@ export default function LoginScreen() {
           >
             <Animated.View entering={FadeIn.duration(500)} style={styles.hero}>
               <Animated.View entering={ZoomIn.delay(120).springify()} style={styles.logoCircle}>
-                <MaterialCommunityIcons name="hand-coin-outline" size={44} color={COLORS.onGradient} />
+                <Image source={require("../../assets/logo.png")} style={styles.logoImage} resizeMode="contain" accessibilityLabel="CrediMaster" />
               </Animated.View>
               <Text variant="headlineMedium" style={styles.brand}>CrediApp</Text>
               <Text style={styles.tagline}>Microfinanzas al alcance de tu mano</Text>
