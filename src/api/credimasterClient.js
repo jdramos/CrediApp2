@@ -40,7 +40,9 @@ async function request(method, path, { body, token } = {}) {
 
   if (!response.ok) {
     checkUnauthorized(response.status, !!token);
-    const message = data?.message || `Error HTTP ${response.status}`;
+    // Algunos controladores del backend responden { error } (aprobaciones, por
+    // ejemplo) y otros { message }: se muestra el motivo real en cualquier caso.
+    const message = data?.message || data?.error || `Error HTTP ${response.status}`;
     const err = new Error(message);
     err.status = response.status;
     err.data = data;
@@ -95,7 +97,9 @@ export async function credimasterUpload(path, formData, token, method = "POST") 
 
   if (!response.ok) {
     checkUnauthorized(response.status, !!token);
-    const message = data?.message || `Error HTTP ${response.status}`;
+    // Algunos controladores del backend responden { error } (aprobaciones, por
+    // ejemplo) y otros { message }: se muestra el motivo real en cualquier caso.
+    const message = data?.message || data?.error || `Error HTTP ${response.status}`;
     const err = new Error(message);
     err.status = response.status;
     err.data = data;
