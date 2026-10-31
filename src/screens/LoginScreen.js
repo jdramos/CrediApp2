@@ -1,10 +1,11 @@
-import React, { useContext, useRef, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Button, HelperText, Checkbox } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeInDown, FadeIn, ZoomIn } from "react-native-reanimated";
 import { SessionContext } from "../auth/SessionContext";
+import { useKeyboardHeight } from "../hooks/useKeyboardHeight";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -61,6 +62,19 @@ export default function LoginScreen() {
   const [remember, setRemember] = useState(true);
 
   const passRef = useRef(null);
+
+  // En Android el teclado se dibuja ENCIMA del formulario (la ventana no se
+  // achica sola): se deja espacio igual a su altura y se baja hasta el final
+  // para que los campos y el botón queden visibles encima del teclado. En iOS
+  // ya lo resuelve el KeyboardAvoidingView.
+  const scrollRef = useRef(null);
+  const keyboardHeight = useKeyboardHeight();
+  const keyboardSpace = Platform.OS === "android" ? keyboardHeight : 0;
+  useEffect(() => {
+    if (keyboardSpace <= 0) return undefined;
+    const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+    return () => clearTimeout(t);
+  }, [keyboardSpace]);
 
   const onSubmit = async () => {
     setError("");
@@ -128,7 +142,8 @@ export default function LoginScreen() {
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <ScrollView
-            contentContainerStyle={{ flexGrow: 1 }}
+            ref={scrollRef}
+            contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardSpace }}
             keyboardShouldPersistTaps="handled"
           >
             <Animated.View entering={FadeIn.duration(500)} style={styles.hero}>
