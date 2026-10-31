@@ -12,6 +12,7 @@ import { remindersEnabled, setRemindersEnabled, syncReminders, sendTestReminder 
 import { workdayRequired } from "../tracking/workday";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
 const initials = (name) =>
   (name || "?")
@@ -227,33 +228,35 @@ export default function MoreScreen() {
         <Dialog visible={pwdVisible} onDismiss={closePwdDialog}>
           <Dialog.Title>Cambiar contraseña</Dialog.Title>
           <Dialog.Content style={{ gap: SPACING.sm }}>
-            <TextInput
-              label="Contraseña actual"
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-              secureTextEntry
-              mode="outlined"
-              outlineStyle={{ borderRadius: RADIUS.md }}
-            />
-            <TextInput
-              label="Nueva contraseña"
-              value={newPassword}
-              onChangeText={setNewPassword}
-              secureTextEntry
-              mode="outlined"
-              style={{ marginTop: SPACING.sm }}
-              outlineStyle={{ borderRadius: RADIUS.md }}
-            />
-            <TextInput
-              label="Confirmar nueva contraseña"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              mode="outlined"
-              style={{ marginTop: SPACING.sm }}
-              outlineStyle={{ borderRadius: RADIUS.md }}
-            />
-            <HelperText type="error" visible={!!pwdError}>{pwdError}</HelperText>
+            <KeyboardAwareScroll style={{ maxHeight: 320 }}>
+              <TextInput
+                label="Contraseña actual"
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                secureTextEntry
+                mode="outlined"
+                outlineStyle={{ borderRadius: RADIUS.md }}
+              />
+              <TextInput
+                label="Nueva contraseña"
+                value={newPassword}
+                onChangeText={setNewPassword}
+                secureTextEntry
+                mode="outlined"
+                style={{ marginTop: SPACING.sm }}
+                outlineStyle={{ borderRadius: RADIUS.md }}
+              />
+              <TextInput
+                label="Confirmar nueva contraseña"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                mode="outlined"
+                style={{ marginTop: SPACING.sm }}
+                outlineStyle={{ borderRadius: RADIUS.md }}
+              />
+              <HelperText type="error" visible={!!pwdError}>{pwdError}</HelperText>
+            </KeyboardAwareScroll>
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={closePwdDialog} disabled={pwdSaving}>Cancelar</Button>

@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState } from "react";
-import { View, StyleSheet, ScrollView, FlatList, Alert } from "react-native";
+import { View, StyleSheet, FlatList, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Card, Button, Chip, ActivityIndicator, HelperText, IconButton, Checkbox, Portal, Modal } from "react-native-paper";
 import Animated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
@@ -31,6 +31,7 @@ import { money, toNumber, formatAmountInput } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
 const STEPS = ["Cliente", "Crédito", "Garantías", "Confirmar", "Listo"];
 
@@ -546,7 +547,7 @@ export default function NewLoanRequestScreen({ route }) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScroll contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {step === 0 && (
           <Animated.View entering={FadeIn} exiting={FadeOut}>
             <StepHeader step={0} title="Nueva solicitud" />
@@ -900,52 +901,54 @@ export default function NewLoanRequestScreen({ route }) {
             onDismiss={() => setShowAddGuarantee(false)}
             contentContainerStyle={{ backgroundColor: COLORS.card, margin: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.md }}
           >
-            <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text, marginBottom: SPACING.sm }}>
-              Nueva garantía
-            </Text>
-            <TextInput
-              mode="outlined"
-              label="Artículo"
-              value={newArticle}
-              onChangeText={setNewArticle}
-              style={{ backgroundColor: COLORS.card, marginBottom: SPACING.sm }}
-              outlineStyle={{ borderRadius: RADIUS.md }}
-            />
-            <TextInput
-              mode="outlined"
-              label="Marca (opcional)"
-              value={newBrand}
-              onChangeText={setNewBrand}
-              style={{ backgroundColor: COLORS.card, marginBottom: SPACING.sm }}
-              outlineStyle={{ borderRadius: RADIUS.md }}
-            />
-            <TextInput
-              mode="outlined"
-              label="Serie (opcional)"
-              value={newSeries}
-              onChangeText={setNewSeries}
-              style={{ backgroundColor: COLORS.card, marginBottom: SPACING.sm }}
-              outlineStyle={{ borderRadius: RADIUS.md }}
-            />
-            <TextInput
-              mode="outlined"
-              label="Valor estimado"
-              value={newValue}
-              onChangeText={setNewValue}
-              keyboardType="decimal-pad"
-              style={{ backgroundColor: COLORS.card }}
-              outlineStyle={{ borderRadius: RADIUS.md }}
-              left={<TextInput.Icon icon="cash" />}
-            />
-            <Button
-              mode="contained"
-              onPress={addGuarantee}
-              loading={savingGuarantee}
-              disabled={savingGuarantee}
-              style={{ marginTop: SPACING.md, borderRadius: RADIUS.md }}
-            >
-              Guardar garantía
-            </Button>
+            <KeyboardAwareScroll style={{ maxHeight: 520 }}>
+              <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text, marginBottom: SPACING.sm }}>
+                Nueva garantía
+              </Text>
+              <TextInput
+                mode="outlined"
+                label="Artículo"
+                value={newArticle}
+                onChangeText={setNewArticle}
+                style={{ backgroundColor: COLORS.card, marginBottom: SPACING.sm }}
+                outlineStyle={{ borderRadius: RADIUS.md }}
+              />
+              <TextInput
+                mode="outlined"
+                label="Marca (opcional)"
+                value={newBrand}
+                onChangeText={setNewBrand}
+                style={{ backgroundColor: COLORS.card, marginBottom: SPACING.sm }}
+                outlineStyle={{ borderRadius: RADIUS.md }}
+              />
+              <TextInput
+                mode="outlined"
+                label="Serie (opcional)"
+                value={newSeries}
+                onChangeText={setNewSeries}
+                style={{ backgroundColor: COLORS.card, marginBottom: SPACING.sm }}
+                outlineStyle={{ borderRadius: RADIUS.md }}
+              />
+              <TextInput
+                mode="outlined"
+                label="Valor estimado"
+                value={newValue}
+                onChangeText={setNewValue}
+                keyboardType="decimal-pad"
+                style={{ backgroundColor: COLORS.card }}
+                outlineStyle={{ borderRadius: RADIUS.md }}
+                left={<TextInput.Icon icon="cash" />}
+              />
+              <Button
+                mode="contained"
+                onPress={addGuarantee}
+                loading={savingGuarantee}
+                disabled={savingGuarantee}
+                style={{ marginTop: SPACING.md, borderRadius: RADIUS.md }}
+              >
+                Guardar garantía
+              </Button>
+            </KeyboardAwareScroll>
           </Modal>
         </Portal>
 
@@ -1031,7 +1034,7 @@ export default function NewLoanRequestScreen({ route }) {
             </Button>
           </Animated.View>
         )}
-      </ScrollView>
+      </KeyboardAwareScroll>
     </SafeAreaView>
   );
 }

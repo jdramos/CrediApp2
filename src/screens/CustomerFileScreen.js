@@ -18,6 +18,7 @@ import { confirmAction } from "../utils/confirm";
 import { money, toNumber } from "../utils/format";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -573,7 +574,7 @@ export default function CustomerFileScreen() {
           onDismiss={() => setShowAddGuarantee(false)}
           contentContainerStyle={styles.modal}
         >
-          <ScrollView style={{ maxHeight: 440 }} keyboardShouldPersistTaps="handled">
+          <KeyboardAwareScroll style={{ maxHeight: 440 }} keyboardShouldPersistTaps="handled">
           <Text variant="titleMedium" style={[styles.title, { marginBottom: SPACING.sm }]}>Nueva garantía</Text>
           <TextInput
             mode="outlined"
@@ -643,7 +644,7 @@ export default function CustomerFileScreen() {
               </Text>
             </View>
           )}
-          </ScrollView>
+          </KeyboardAwareScroll>
           <Button
             mode="contained"
             onPress={addGuarantee}

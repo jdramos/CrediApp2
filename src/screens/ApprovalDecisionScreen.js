@@ -1,5 +1,5 @@
 import React, { useContext, useState } from "react";
-import { View, StyleSheet, ScrollView, Alert } from "react-native";
+import { View, StyleSheet, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Button, Chip, HelperText, Divider } from "react-native-paper";
 import Animated, { FadeIn } from "react-native-reanimated";
@@ -9,6 +9,7 @@ import { decideApproval } from "../api/approvalApi";
 import { money } from "../utils/format";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -91,7 +92,7 @@ export default function ApprovalDecisionScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAwareScroll contentContainerStyle={styles.content}>
         <Animated.View entering={FadeIn}>
           <Text variant="headlineSmall" style={styles.header}>{item.customer_name || "Cliente"}</Text>
           <Text style={styles.amount}>{money(item.requested_amount)}</Text>
@@ -195,7 +196,7 @@ export default function ApprovalDecisionScreen() {
             )}
           </View>
         </Animated.View>
-      </ScrollView>
+      </KeyboardAwareScroll>
     </SafeAreaView>
   );
 }

@@ -12,6 +12,7 @@ import { confirmAction } from "../utils/confirm";
 import { money } from "../utils/format";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
 const IMAGE_REQUIRED_TRUE = ["true", "1", "si", "sí"];
 
@@ -166,50 +167,52 @@ export default function PendingDeliveriesScreen() {
 
       <Portal>
         <Modal visible={!!active} onDismiss={() => setActive(null)} contentContainerStyle={styles.modal}>
-          <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text }}>
-            Confirmar entrega
-          </Text>
-          <Text style={{ color: COLORS.muted, marginTop: 2 }}>{active?.customer_name}</Text>
+          <KeyboardAwareScroll style={{ maxHeight: 520 }}>
+            <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text }}>
+              Confirmar entrega
+            </Text>
+            <Text style={{ color: COLORS.muted, marginTop: 2 }}>{active?.customer_name}</Text>
 
-          <TextInput
-            mode="outlined"
-            label="Notas de la entrega (opcional)"
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            style={{ backgroundColor: COLORS.card, marginTop: SPACING.md }}
-            outlineStyle={{ borderRadius: RADIUS.md }}
-          />
-
-          {photo ? (
-            <View style={[styles.photoBox, { borderStyle: "solid" }]}>
-              <MaterialCommunityIcons name="check-circle" size={28} color={COLORS.success} />
-              <Text style={{ color: COLORS.text, marginTop: SPACING.xs }}>Foto lista</Text>
-              <Button compact onPress={capturePhoto} style={{ marginTop: SPACING.xs }}>Cambiar foto</Button>
-            </View>
-          ) : (
-            <Button
+            <TextInput
               mode="outlined"
-              icon="camera-outline"
-              onPress={capturePhoto}
-              style={{ marginTop: SPACING.md, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+              label="Notas de la entrega (opcional)"
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              style={{ backgroundColor: COLORS.card, marginTop: SPACING.md }}
+              outlineStyle={{ borderRadius: RADIUS.md }}
+            />
+
+            {photo ? (
+              <View style={[styles.photoBox, { borderStyle: "solid" }]}>
+                <MaterialCommunityIcons name="check-circle" size={28} color={COLORS.success} />
+                <Text style={{ color: COLORS.text, marginTop: SPACING.xs }}>Foto lista</Text>
+                <Button compact onPress={capturePhoto} style={{ marginTop: SPACING.xs }}>Cambiar foto</Button>
+              </View>
+            ) : (
+              <Button
+                mode="outlined"
+                icon="camera-outline"
+                onPress={capturePhoto}
+                style={{ marginTop: SPACING.md, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+              >
+                {imageRequired ? "Adjuntar foto (obligatoria)" : "Adjuntar foto (opcional)"}
+              </Button>
+            )}
+
+            <HelperText type="error" visible={!!modalError}>{modalError}</HelperText>
+
+            <Button
+              mode="contained"
+              onPress={confirmDelivery}
+              loading={saving}
+              disabled={saving}
+              style={{ marginTop: SPACING.md, borderRadius: RADIUS.md }}
+              contentStyle={{ height: 46 }}
             >
-              {imageRequired ? "Adjuntar foto (obligatoria)" : "Adjuntar foto (opcional)"}
+              Confirmar entrega
             </Button>
-          )}
-
-          <HelperText type="error" visible={!!modalError}>{modalError}</HelperText>
-
-          <Button
-            mode="contained"
-            onPress={confirmDelivery}
-            loading={saving}
-            disabled={saving}
-            style={{ marginTop: SPACING.md, borderRadius: RADIUS.md }}
-            contentStyle={{ height: 46 }}
-          >
-            Confirmar entrega
-          </Button>
+          </KeyboardAwareScroll>
         </Modal>
       </Portal>
     </SafeAreaView>

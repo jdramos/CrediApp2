@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useMemo, useState } from "react";
-import { View, StyleSheet, FlatList, Alert, ScrollView, Pressable } from "react-native";
+import { View, StyleSheet, FlatList, Alert, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Text,
@@ -48,6 +48,7 @@ import OfflineNotice from "../components/OfflineNotice";
 import { cachedFetch, readCache } from "../offline/cache";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
 const emptyGestionForm = {
   action_type: "VISIT",
@@ -858,7 +859,7 @@ export default function ClientPortfolioScreen() {
             maxHeight: "85%",
           }}
         >
-          <ScrollView keyboardShouldPersistTaps="handled">
+          <KeyboardAwareScroll keyboardShouldPersistTaps="handled">
             <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text }}>
               Gestión de cobro
             </Text>
@@ -1010,7 +1011,7 @@ export default function ClientPortfolioScreen() {
             >
               Registrar gestión
             </Button>
-          </ScrollView>
+          </KeyboardAwareScroll>
         </Modal>
       </Portal>
       <PaymentReceiptModal payment={receiptFor} onDismiss={() => setReceiptFor(null)} />

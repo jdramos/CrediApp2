@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, StyleSheet, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Button, Chip, IconButton, ActivityIndicator, HelperText } from "react-native-paper";
 import ViewShot, { captureRef } from "react-native-view-shot";
@@ -24,6 +24,7 @@ import { money, toNumber, formatAmountInput } from "../utils/format";
 import { todayISO, shiftDay } from "../utils/date";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
 // Frecuencias que el simulador ofrece. "Al vencimiento" exige fecha de
 // vencimiento, e "Irregular" / "No aplica" no tienen cuotas regulares.
@@ -290,7 +291,7 @@ export default function LoanSimulatorScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScroll contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.headerRow}>
           <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
           <Text variant="headlineSmall" style={styles.title}>Simulador de crédito</Text>
@@ -512,7 +513,7 @@ export default function LoanSimulatorScreen() {
             )}
           </>
         )}
-      </ScrollView>
+      </KeyboardAwareScroll>
     </SafeAreaView>
   );
 }

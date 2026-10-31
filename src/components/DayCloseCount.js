@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet } from "react-native";
 import { Text, Button, Portal, Modal, TextInput, HelperText } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { submitMyDayClose } from "../api/collectionsApi";
@@ -8,6 +8,7 @@ import { money, usd } from "../utils/format";
 import DenominationCounter, { countTotal, cleanCounts } from "./DenominationCounter";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import KeyboardAwareScroll from "./KeyboardAwareScroll";
 
 const TOLERANCE = 0.005;
 
@@ -219,7 +220,7 @@ export default function DayCloseCount({ token, date, cashCount, pendingCashAmoun
 
       <Portal>
         <Modal visible={open} onDismiss={() => !saving && setOpen(false)} contentContainerStyle={styles.modal}>
-          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <KeyboardAwareScroll keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <Text variant="titleLarge" style={styles.title}>Arqueo por denominación</Text>
             <Text style={styles.muted}>Contá billete por billete y moneda por moneda. Solo se guarda si cuadra o te sobra.</Text>
 
@@ -310,7 +311,7 @@ export default function DayCloseCount({ token, date, cashCount, pendingCashAmoun
                 Guardar cierre
               </Button>
             </View>
-          </ScrollView>
+          </KeyboardAwareScroll>
         </Modal>
       </Portal>
     </View>

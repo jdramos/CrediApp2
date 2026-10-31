@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { View, StyleSheet, FlatList, ScrollView } from "react-native";
+import { View, StyleSheet, FlatList } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Text,
@@ -44,6 +44,7 @@ import { todayISO } from "../utils/date";
 import { printReceipt, buildPaymentReceiptLines } from "../utils/printer";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
 const BREAKDOWN_MAP = [
   ["principal", "Capital"],
@@ -555,7 +556,7 @@ export default function PaymentsScreen({ route }) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScroll contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {step === 0 && (
           <Animated.View entering={FadeIn} exiting={FadeOut}>
             <StepHeader
@@ -912,7 +913,7 @@ export default function PaymentsScreen({ route }) {
         )}
 
         <Divider style={{ marginTop: SPACING.lg, opacity: 0 }} />
-      </ScrollView>
+      </KeyboardAwareScroll>
       <SignatureModal visible={signatureVisible} onDismiss={() => setSignatureVisible(false)} onSave={onSaveSignature} />
     </SafeAreaView>
   );
