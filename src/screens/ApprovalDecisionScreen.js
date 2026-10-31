@@ -1,7 +1,7 @@
 import React, { useContext, useState } from "react";
 import { View, StyleSheet, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Text, TextInput, Button, Chip, HelperText, Divider } from "react-native-paper";
+import { Text, TextInput, Button, Chip, HelperText, Divider, IconButton } from "react-native-paper";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
@@ -15,6 +15,8 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
   content: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.md },
   header: { fontWeight: "800", color: COLORS.text },
+  topBar: { flexDirection: "row", alignItems: "center", paddingHorizontal: SPACING.sm, paddingTop: SPACING.xs },
+  topTitle: { fontWeight: "800", color: COLORS.text, flex: 1 },
   card: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.lg,
@@ -85,6 +87,10 @@ export default function ApprovalDecisionScreen() {
   if (!item) {
     return (
       <SafeAreaView style={styles.safe}>
+        <View style={styles.topBar}>
+          <IconButton icon="arrow-left" onPress={() => navigation.goBack()} accessibilityLabel="Volver" />
+          <Text variant="titleLarge" style={styles.topTitle}>Decisión de aprobación</Text>
+        </View>
         <Text style={{ padding: SPACING.lg }}>No se encontró la solicitud.</Text>
       </SafeAreaView>
     );
@@ -92,6 +98,10 @@ export default function ApprovalDecisionScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <View style={styles.topBar}>
+        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} accessibilityLabel="Volver" />
+        <Text variant="titleLarge" style={styles.topTitle}>Decisión de aprobación</Text>
+      </View>
       <KeyboardAwareScroll contentContainerStyle={styles.content}>
         <Animated.View entering={FadeIn}>
           <Text variant="headlineSmall" style={styles.header}>{item.customer_name || "Cliente"}</Text>

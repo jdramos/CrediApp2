@@ -98,7 +98,7 @@ function StepHeader({ step, onBack, title }) {
 
 const money2 = (n) => (n ? money(n) : null);
 
-export default function NewLoanRequestScreen({ route }) {
+export default function NewLoanRequestScreen({ route, navigation }) {
   // Datos que trae el simulador de crédito (opcional): precargan el paso del crédito.
   const sim = route?.params?.sim;
   const { session } = useContext(SessionContext);
@@ -550,7 +550,11 @@ export default function NewLoanRequestScreen({ route }) {
       <KeyboardAwareScroll contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {step === 0 && (
           <Animated.View entering={FadeIn} exiting={FadeOut}>
-            <StepHeader step={0} title="Nueva solicitud" />
+            <StepHeader
+              step={0}
+              title="Nueva solicitud"
+              onBack={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate("CreditsHome"))}
+            />
             <Text style={styles.sub}>Buscá el cliente para el que vas a registrar la solicitud</Text>
             <TextInput
               mode="outlined"

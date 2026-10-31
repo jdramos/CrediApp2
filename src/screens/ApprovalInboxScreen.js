@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useState } from "react";
 import { View, StyleSheet, FlatList, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Text, Card, Chip, ActivityIndicator, HelperText } from "react-native-paper";
+import { Text, Card, Chip, ActivityIndicator, HelperText, IconButton } from "react-native-paper";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -67,8 +67,11 @@ export default function ApprovalInboxScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={{ paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg }}>
-        <Text variant="headlineSmall" style={styles.header}>Aprobaciones</Text>
+      <View style={{ paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm }}>
+        <View style={{ flexDirection: "row", alignItems: "center", marginLeft: -SPACING.sm }}>
+          <IconButton icon="arrow-left" onPress={() => navigation.goBack()} accessibilityLabel="Volver" />
+          <Text variant="headlineSmall" style={styles.header}>Aprobaciones</Text>
+        </View>
         <Text style={styles.sub}>Solicitudes pendientes de tu decisión</Text>
         <HelperText type="error" visible={!!error}>{error}</HelperText>
       </View>
