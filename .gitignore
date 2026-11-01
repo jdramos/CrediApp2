@@ -15,8 +15,9 @@ build/
 web-build/
 
 # iOS / Android (si algún día haces prebuild)
-ios/
-android/
+# Solo las carpetas nativas generadas en la raíz (prebuild); no las de modules/
+/ios/
+/android/
 
 # Env
 .env
