@@ -1,5 +1,5 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { View, StyleSheet, FlatList } from "react-native";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { View, StyleSheet, FlatList, BackHandler } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Text,
@@ -15,7 +15,7 @@ import {
 import Animated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import { shareImage } from "../utils/shareImage";
 import { SessionContext } from "../auth/SessionContext";
@@ -96,7 +96,7 @@ const STEPS = ["Cliente", "Crédito", "Monto", "Listo"];
 function StepHeader({ step, onBack, title, right }) {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", marginBottom: SPACING.sm }}>
-      {step > 0 && step < 3 && <IconButton icon="arrow-left" onPress={onBack} style={{ margin: 0 }} />}
+      {!!onBack && step < 3 && <IconButton icon="arrow-left" onPress={onBack} style={{ margin: 0 }} accessibilityLabel="Volver" />}
       <View style={{ flex: 1 }}>
         <Text variant="headlineSmall" style={styles.header}>{title}</Text>
         <Text style={styles.sub}>Paso {step + 1} de {STEPS.length}: {STEPS[step]}</Text>
@@ -239,6 +239,28 @@ export default function PaymentsScreen({ route }) {
       }
     })();
   }, [route?.params?.prefill, session.token]);
+
+  // Retroceder fuera del registro: vuelve a la pantalla de donde se vino ("Mis cobros", la
+  // cartera del cliente...). Si esta es la primera de la pila (se entró por la pestaña Pagos),
+  // se cambia por "Mis cobros" para no dejar un ciclo entre las dos.
+  const leave = useCallback(() => {
+    if ((navigation.getState()?.routes?.length || 1) > 1) navigation.goBack();
+    else navigation.replace("PaymentHistory");
+  }, [navigation]);
+
+  // El botón atrás del teléfono retrocede un paso del registro (monto → crédito → cliente)
+  // en vez de salir y perder lo avanzado; en el primer paso y en el final sale.
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+        if (step === 1) setStep(0);
+        else if (step === 2) setStep(1);
+        else leave();
+        return true;
+      });
+      return () => sub.remove();
+    }, [step, leave]),
+  );
 
   const reset = () => {
     setStep(0);
@@ -596,6 +618,7 @@ export default function PaymentsScreen({ route }) {
             <StepHeader
               step={0}
               title="Registrar pago"
+              onBack={leave}
               right={
                 canView && (
                   <View style={{ flexDirection: "row" }}>
