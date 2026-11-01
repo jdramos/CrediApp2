@@ -11,6 +11,8 @@ import { resetTracking, setTrackingSessionGetter } from "../tracking/tracker";
 import { queueCount } from "../offline/queue";
 import { discardQueue } from "../offline/syncManager";
 import { confirmAction } from "../utils/confirm";
+import { setNoticeReporter } from "../utils/contact";
+import { reportPaymentNotice } from "../api/paymentNoticeApi";
 
 export const SessionContext = createContext(null);
 
@@ -54,6 +56,15 @@ export function SessionProvider({ children }) {
         ? { token: sessionRef.current.token, userId: sessionRef.current.user?.id ?? null }
         : null,
     );
+  }, []);
+  // Los avisos manuales por SMS/WhatsApp (utils/contact.js) se reportan a la oficina
+  // con el token de la sesión actual, sin esperar la respuesta ni estorbar el envío.
+  useEffect(() => {
+    setNoticeReporter((payload) => {
+      const token = sessionRef.current?.token;
+      if (token) reportPaymentNotice(token, payload).catch(() => {});
+    });
+    return () => setNoticeReporter(null);
   }, []);
   useEffect(() => {
     setUnauthorizedHandler(() => {

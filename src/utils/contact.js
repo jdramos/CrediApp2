@@ -5,6 +5,29 @@ import { money } from "./format";
 // el número en formato internacional sin "+".
 const DEFAULT_COUNTRY_CODE = "505";
 
+// Cada aviso manual (SMS o WhatsApp) que el cobrador manda desde la app se reporta
+// a la oficina para detectar fraude (SessionContext registra el reporte con el
+// token de la sesión). `meta`: { kind: "PAYMENT" | "REMINDER", paymentId, loanId }.
+let noticeReporter = null;
+export const setNoticeReporter = (fn) => {
+  noticeReporter = fn;
+};
+const reportManualNotice = (channel, phone, body, meta = {}) => {
+  try {
+    noticeReporter?.({
+      kind: meta.kind || "REMINDER",
+      channel,
+      status: "OPENED",
+      payment_id: meta.paymentId,
+      loan_id: meta.loanId,
+      phone_to: String(phone || "").replace(/[^\d+]/g, "") || undefined,
+      message: body,
+    });
+  } catch {
+    // reportar no debe estorbar el envío
+  }
+};
+
 const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 
 // "2026-10-30" (o con hora) -> "30 de octubre".
@@ -56,23 +79,25 @@ function noPhone() {
 
 // Abre la app de mensajes con el texto listo (se envía con el plan del
 // teléfono del cobrador). En el navegador de escritorio no hay app de SMS.
-export async function openSms(phone, body) {
+export async function openSms(phone, body, meta) {
   const to = String(phone || "").replace(/[^\d+]/g, "");
   if (!to) return noPhone();
   try {
     await Linking.openURL(`sms:${to}${Platform.OS === "ios" ? "&" : "?"}body=${encodeURIComponent(body)}`);
+    reportManualNotice("MANUAL_SMS", to, body, meta);
   } catch {
     Alert.alert("No se pudo abrir los mensajes", "Este dispositivo no puede enviar SMS desde la app.");
   }
 }
 
 // Abre WhatsApp en la conversación con el cliente, con el texto ya escrito.
-export async function openWhatsApp(phone, body) {
+export async function openWhatsApp(phone, body, meta) {
   let digits = String(phone || "").replace(/\D/g, "");
   if (!digits) return noPhone();
   if (digits.length === 8) digits = `${DEFAULT_COUNTRY_CODE}${digits}`;
   try {
     await Linking.openURL(`https://wa.me/${digits}?text=${encodeURIComponent(body)}`);
+    reportManualNotice("MANUAL_WHATSAPP", digits, body, meta);
   } catch {
     Alert.alert("No se pudo abrir WhatsApp", "Verificá que WhatsApp esté instalado en este dispositivo.");
   }

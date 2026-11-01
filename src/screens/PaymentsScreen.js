@@ -39,6 +39,7 @@ import { money, toNumber, formatAmountInput, usd as usdMoney, fxRate } from "../
 import { loadUsdRate } from "../utils/usdRate";
 import { buildReceiptRows, formatReceiptNumber } from "../utils/receipt";
 import { buildPaymentMessage, openSms, openWhatsApp, phoneOf } from "../utils/contact";
+import { buildShortPaymentSms, sendAutoPaymentSms } from "../utils/paymentSms";
 import PaymentReceiptCard from "../components/PaymentReceiptCard";
 import { todayISO } from "../utils/date";
 import { printReceipt, buildPaymentReceiptLines } from "../utils/printer";
@@ -161,6 +162,8 @@ export default function PaymentsScreen({ route }) {
   const [result, setResult] = useState(null);
   const [sharing, setSharing] = useState(false);
   const [smsBusy, setSmsBusy] = useState(false);
+  // SMS automático al cliente: { state: "sending" | "sent" | "failed" | "disabled" | "unavailable", error? }
+  const [autoSms, setAutoSms] = useState(null);
   const receiptShotRef = useRef(null);
   const [evidence, setEvidence] = useState({}); // { PHOTO: "sent"|"queued", SIGNATURE: ... }
   const [evidenceBusy, setEvidenceBusy] = useState(null);
@@ -252,6 +255,7 @@ export default function PaymentsScreen({ route }) {
     setMethodId(null);
     setBreakdown(null);
     setResult(null);
+    setAutoSms(null);
     setEvidence({});
     setEvidenceBusy(null);
     setSignatureVisible(false);
@@ -372,6 +376,7 @@ export default function PaymentsScreen({ route }) {
       }
       setResult({ ...created, usd: usdInfo });
       setStep(3);
+      runAutoSms(created);
     } catch (e) {
       if (isNetworkError(e)) {
         confirmAction(
@@ -468,14 +473,42 @@ export default function PaymentsScreen({ route }) {
   // (se envía desde el teléfono del cobrador, sin servicio externo). El
   // teléfono sale del cliente seleccionado; si no vino en la búsqueda se
   // consulta su ficha.
+  const resolvePhone = async () => {
+    let phone = phoneOf(customer);
+    if (!phone && customer?.id) {
+      const res = await getCustomer(session.token, customer.id).catch(() => null);
+      phone = phoneOf(res?.data?.customer);
+    }
+    return phone;
+  };
+
+  // SMS automático (por defecto): al grabar el pago se manda solo, con el plan del
+  // teléfono del cobrador, un texto corto con el pago y el saldo. Si falla, el pago
+  // ya quedó grabado: se avisa y se puede reintentar.
+  const runAutoSms = async (created) => {
+    setAutoSms({ state: "sending" });
+    const phone = await resolvePhone();
+    const message = buildShortPaymentSms({
+      tenantName: session?.tenant?.commercial_name || session?.tenant?.legal_name,
+      amount: amountNio,
+      date,
+      principalAfter: created?.principal_balance_after,
+      loanLabel: loan?.credit_code || loan?.id || loan?.loan_id,
+    });
+    const res = await sendAutoPaymentSms({
+      token: session.token,
+      phone,
+      message,
+      paymentId: created?.payment_id,
+      loanId: loan?.id || loan?.loan_id,
+    });
+    setAutoSms(res);
+  };
+
   const sendNotice = async (open) => {
     try {
       setSmsBusy(true);
-      let phone = phoneOf(customer);
-      if (!phone && customer?.id) {
-        const res = await getCustomer(session.token, customer.id).catch(() => null);
-        phone = phoneOf(res?.data?.customer);
-      }
+      const phone = await resolvePhone();
       const applied = result?.applied;
       await open(
         phone,
@@ -489,6 +522,7 @@ export default function PaymentsScreen({ route }) {
           principalAfter: result?.principal_balance_after,
           receiptNumber: formatReceiptNumber(result?.payment_id),
         }),
+        { kind: "PAYMENT", paymentId: result?.payment_id, loanId: loan?.id || loan?.loan_id },
       );
     } finally {
       setSmsBusy(false);
@@ -871,6 +905,34 @@ export default function PaymentsScreen({ route }) {
             >
               Compartir comprobante (WhatsApp, correo, etc.)
             </Button>
+
+            {(autoSms?.state === "sending" || autoSms?.state === "sent" || autoSms?.state === "failed") && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: SPACING.xs,
+                  padding: SPACING.sm,
+                  borderRadius: RADIUS.md,
+                  backgroundColor: autoSms.state === "failed" ? COLORS.dangerSoft : autoSms.state === "sent" ? COLORS.successSoft : COLORS.card,
+                  borderWidth: 1,
+                  borderColor: autoSms.state === "failed" ? COLORS.danger : autoSms.state === "sent" ? COLORS.success : COLORS.border,
+                }}
+              >
+                <Text style={{ flex: 1, color: autoSms.state === "failed" ? COLORS.danger : COLORS.text }}>
+                  {autoSms.state === "sending"
+                    ? "Enviando SMS al cliente…"
+                    : autoSms.state === "sent"
+                      ? "SMS enviado al cliente con su pago y saldo."
+                      : `SMS no enviado: ${autoSms.error || "error desconocido"}`}
+                </Text>
+                {autoSms.state === "failed" && (
+                  <Button compact mode="text" onPress={() => runAutoSms(result)}>
+                    Reintentar
+                  </Button>
+                )}
+              </View>
+            )}
 
             <View style={{ flexDirection: "row", gap: SPACING.xs }}>
               <Button

@@ -151,6 +151,7 @@ export default function OverdueLoansScreen() {
                   overdueAmount: r.overdue_amount,
                   daysOverdue: r.days_overdue,
                 }),
+                { kind: "REMINDER", loanId: r.loan_id },
               )
             }
             style={{ flex: 1, borderRadius: RADIUS.md }}

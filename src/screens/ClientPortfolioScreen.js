@@ -838,10 +838,10 @@ export default function ClientPortfolioScreen() {
               <Button mode="contained" icon="phone" onPress={() => contactAction((i) => callPhone(phoneOf(i)))} style={{ borderRadius: RADIUS.md }}>
                 Llamar
               </Button>
-              <Button mode="outlined" icon="whatsapp" onPress={() => contactAction((i) => openWhatsApp(phoneOf(i), reminderText(i)))} style={{ borderRadius: RADIUS.md }}>
+              <Button mode="outlined" icon="whatsapp" onPress={() => contactAction((i) => openWhatsApp(phoneOf(i), reminderText(i), { kind: "REMINDER", loanId: i.loan_id }))} style={{ borderRadius: RADIUS.md }}>
                 Recordatorio por WhatsApp
               </Button>
-              <Button mode="outlined" icon="message-text-outline" onPress={() => contactAction((i) => openSms(phoneOf(i), reminderText(i)))} style={{ borderRadius: RADIUS.md }}>
+              <Button mode="outlined" icon="message-text-outline" onPress={() => contactAction((i) => openSms(phoneOf(i), reminderText(i), { kind: "REMINDER", loanId: i.loan_id }))} style={{ borderRadius: RADIUS.md }}>
                 Recordatorio por SMS
               </Button>
               <Button onPress={() => setContactItem(null)}>Cancelar</Button>

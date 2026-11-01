@@ -122,10 +122,10 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
               <Button compact mode="outlined" icon="share-variant" onPress={onShare} loading={sharing} disabled={sharing} style={styles.action} labelStyle={styles.actionLabel}>
                 Imagen
               </Button>
-              <Button compact mode="outlined" icon="message-text-outline" onPress={() => openSms(phoneOf(payment), message)} style={styles.action} labelStyle={styles.actionLabel}>
+              <Button compact mode="outlined" icon="message-text-outline" onPress={() => openSms(phoneOf(payment), message, { kind: "PAYMENT", paymentId: payment.id, loanId: payment.loan_id })} style={styles.action} labelStyle={styles.actionLabel}>
                 SMS
               </Button>
-              <Button compact mode="outlined" icon="whatsapp" onPress={() => openWhatsApp(phoneOf(payment), message)} style={styles.action} labelStyle={styles.actionLabel}>
+              <Button compact mode="outlined" icon="whatsapp" onPress={() => openWhatsApp(phoneOf(payment), message, { kind: "PAYMENT", paymentId: payment.id, loanId: payment.loan_id })} style={styles.action} labelStyle={styles.actionLabel}>
                 WhatsApp
               </Button>
             </View>
