@@ -192,8 +192,8 @@ export default function PendingDeliveriesScreen() {
             </Text>
             <Text style={{ color: COLORS.muted, marginTop: 2 }}>{active?.customer_name}</Text>
             <Text style={{ color: COLORS.muted }}>
-              {money(active?.amount)} · {METHOD_LABEL[active?.disbursement_method] || active?.disbursement_method}
-              {active && sourceLabel(active) ? ` · ${sourceLabel(active)}` : ""}
+              {money(active?.amount)} ·{" "}
+              {(active && sourceLabel(active)) || METHOD_LABEL[active?.disbursement_method] || active?.disbursement_method}
             </Text>
 
             <TextInput
