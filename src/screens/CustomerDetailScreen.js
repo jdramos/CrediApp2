@@ -8,6 +8,7 @@ import { SessionContext } from "../auth/SessionContext";
 import { getCustomer } from "../api/customerApi";
 import { getLoans } from "../api/loanApi";
 import { money } from "../utils/format";
+import { loanStage } from "../utils/loanStage";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
@@ -39,19 +40,6 @@ const styles = StyleSheet.create({
   loanTitle: { fontWeight: "700", color: COLORS.text },
   balance: { color: COLORS.primary, fontWeight: "800", fontSize: 18, marginTop: 2 },
 });
-
-const STATUS_COLOR = {
-  PENDIENTE: COLORS.warning, PENDING: COLORS.warning,
-  APROBADO: COLORS.success, APPROVED: COLORS.success,
-  RECHAZADO: COLORS.danger, REJECTED: COLORS.danger,
-  DISBURSED: COLORS.primary, CANCELLED: COLORS.muted, WRITTEN_OFF: COLORS.muted, DRAFT: COLORS.muted,
-};
-const STATUS_LABEL = {
-  PENDIENTE: "Pendiente", PENDING: "Pendiente",
-  APROBADO: "Aprobado", APPROVED: "Aprobado",
-  RECHAZADO: "Rechazado", REJECTED: "Rechazado",
-  DISBURSED: "Desembolsado", CANCELLED: "Cancelado", WRITTEN_OFF: "Castigado", DRAFT: "Borrador",
-};
 
 const InfoRow = ({ icon, text }) =>
   text ? (
@@ -170,7 +158,10 @@ export default function CustomerDetailScreen({ route, navigation }) {
               keyExtractor={(item) => String(item.id || item.loan_id)}
               scrollEnabled={false}
               renderItem={({ item }) => {
-                const st = item.approval_status || item.status;
+                // Estado real del crédito (cancelado, desembolsado, en aprobación...). Antes se mostraba el
+                // estado de las aprobaciones, que sale "Pendiente" cuando no hay registro (créditos migrados o
+                // anteriores al flujo de aprobación), aunque el crédito ya estuviera pagado.
+                const stage = loanStage(item);
                 return (
                   <Card
                     style={styles.loanRow}
@@ -181,13 +172,13 @@ export default function CustomerDetailScreen({ route, navigation }) {
                     <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
                       {item.date} · {money(item.amount)}
                     </Text>
-                    {!!st && (
+                    {!!stage.label && (
                       <Chip
                         compact
                         style={{ marginTop: SPACING.xs, alignSelf: "flex-start", backgroundColor: COLORS.bg }}
-                        textStyle={{ color: STATUS_COLOR[st] || COLORS.muted, fontWeight: "700", fontSize: 11 }}
+                        textStyle={{ color: stage.color, fontWeight: "700", fontSize: 11 }}
                       >
-                        {STATUS_LABEL[st] || st}
+                        {stage.label}
                       </Chip>
                     )}
                   </Card>
