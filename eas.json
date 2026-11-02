@@ -14,13 +14,15 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_CREDIMASTER_API_URL": "https://api.credimaster.app"
+        "EXPO_PUBLIC_CREDIMASTER_API_URL": "https://api.credimaster.app",
+        "EXPO_PUBLIC_ANDROID_MAPS": "1"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_CREDIMASTER_API_URL": "https://api.credimaster.app"
+        "EXPO_PUBLIC_CREDIMASTER_API_URL": "https://api.credimaster.app",
+        "EXPO_PUBLIC_ANDROID_MAPS": "1"
       }
     }
   },

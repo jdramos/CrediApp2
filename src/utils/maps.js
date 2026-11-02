@@ -44,6 +44,17 @@ export async function openDirectionsTo(lat, lng) {
   }
 }
 
+// Muestra un punto (casa, negocio, parada de la ruta) en Google Maps: abre la app de Maps si está
+// instalada y, si no, el navegador. Sin dependencias nativas.
+export async function openPlaceInMaps(lat, lng) {
+  const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  try {
+    await Linking.openURL(url);
+  } catch {
+    Alert.alert("No se pudo abrir el mapa", "Revisá que tengas una app de mapas o un navegador instalado.");
+  }
+}
+
 // Distancia en metros en línea recta entre dos puntos { lat, lng } (Haversine).
 export function distanceMeters(a, b) {
   const rad = (d) => (d * Math.PI) / 180;

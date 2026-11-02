@@ -17,6 +17,11 @@
       "bundleIdentifier": "com.jdramos395steam.crediapp"
     },
     "android": {
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyApOnQ4dT3p4p3xysmEjgW5JcjkAbgGx4o"
+        }
+      },
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
