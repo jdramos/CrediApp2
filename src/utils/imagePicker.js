@@ -25,6 +25,13 @@ async function launchLibrary() {
   return buildFile(res.assets[0]);
 }
 
+// Abre directo la cámara (sin galería) para comprobantes que deben ser una
+// foto del momento, como el recibido de la entrega de un desembolso. Devuelve
+// { uri, name, type } o null si el usuario cancela.
+export function takePhoto() {
+  return launchCamera();
+}
+
 // Muestra "Cámara / Galería / Cancelar" y devuelve { uri, name, type } listo
 // para meter en un FormData, o null si el usuario cancela.
 export function pickImage() {

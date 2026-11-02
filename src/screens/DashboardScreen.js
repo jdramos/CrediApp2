@@ -13,6 +13,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { SessionContext } from "../auth/SessionContext";
 import { getApprovalInbox } from "../api/approvalApi";
+import { getPendingDeliveries } from "../api/remittanceApi";
 import { getAssignedLoans } from "../api/collectionsApi";
 import { useSync } from "../offline/SyncProvider";
 import { useBusinessDayAlerts } from "../hooks/useBusinessDayStatus";
@@ -96,6 +97,7 @@ export default function DashboardScreen() {
   const { pendingCount: pendingSyncCount } = useSync();
   const [pendingCount, setPendingCount] = useState(0);
   const [overdueLoans, setOverdueLoans] = useState({ count: 0, amount: 0 });
+  const [pendingDeliveries, setPendingDeliveries] = useState(0);
 
   const businessDayAlerts = useBusinessDayAlerts(session?.token, session?.user?.branches);
   const multiBranch = (session?.user?.branches || []).length > 1;
@@ -109,6 +111,7 @@ export default function DashboardScreen() {
   const canSupervise = session?.permissions?.includes("creditos.productividad.ver");
   const canSeeRoutes = session?.permissions?.includes("rastreo.ver");
   const canViewCustomers = session?.permissions?.includes("clientes.ver");
+  const canDeliver = session?.permissions?.includes("especial.creditos.entregar");
 
   const logoUrl = useTenantLogo(session?.token);
   const fullName = session?.user?.full_name || session?.user?.user_name || "Usuario";
@@ -126,6 +129,15 @@ export default function DashboardScreen() {
         .then((res) => setPendingCount(res?.summary?.total ?? 0))
         .catch(() => {});
     }, [canApprove, session.token]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!canDeliver) return;
+      getPendingDeliveries(session.token)
+        .then((res) => setPendingDeliveries((res?.data || []).length))
+        .catch(() => {});
+    }, [canDeliver, session.token]),
   );
 
   useFocusEffect(
@@ -298,6 +310,16 @@ export default function DashboardScreen() {
               subtitle="Estado y nueva solicitud"
               gradient={GRADIENTS.dark}
               onPress={() => navigation.navigate("Creditos", { screen: "MyLoanRequests" })}
+            />
+          )}
+          {canDeliver && (
+            <ActionTile
+              icon="truck-delivery-outline"
+              title="Mis entregas"
+              subtitle={pendingDeliveries > 0 ? "Desembolsos por entregar" : "Sin entregas pendientes"}
+              gradient={GRADIENTS.success}
+              badge={pendingDeliveries}
+              onPress={() => navigation.navigate("Creditos", { screen: "PendingDeliveries" })}
             />
           )}
           {canApprove && (

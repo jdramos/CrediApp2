@@ -7,7 +7,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SessionContext } from "../auth/SessionContext";
 import { getPendingDeliveries, markDelivered } from "../api/remittanceApi";
 import { getCreditPolicies } from "../api/creditPolicyApi";
-import { pickImage } from "../utils/imagePicker";
+import { takePhoto } from "../utils/imagePicker";
 import { confirmAction } from "../utils/confirm";
 import { money } from "../utils/format";
 import { COLORS } from "../theme/colors";
@@ -17,6 +17,19 @@ import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 const IMAGE_REQUIRED_TRUE = ["true", "1", "si", "sí"];
 
 const METHOD_LABEL = { CHEQUE: "Cheque", TRANSFERENCIA: "Transferencia", EFECTIVO: "Efectivo" };
+
+// De dónde sale el dinero: número de cheque y cuenta, o la caja.
+const sourceLabel = (item) => {
+  if (item.check_number) return `Cheque #${item.check_number}${item.bank_account_alias ? ` · ${item.bank_account_alias}` : ""}`;
+  return item.cash_register_name || item.bank_account_alias || "";
+};
+
+// disbursed_at llega como "YYYY-MM-DD HH:mm:ss" en hora de Nicaragua (la
+// sesión MySQL está en -06:00), así que se muestra tal cual, sin convertir zona.
+const formatDisbursedAt = (value) => {
+  const m = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}` : "";
+};
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -56,7 +69,9 @@ export default function PendingDeliveriesScreen() {
   const [deliveries, setDeliveries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [imageRequired, setImageRequired] = useState(false);
+  // null = no se pudo leer la política (sin permiso de catálogos); el
+  // servidor igual la valida y su mensaje se muestra al confirmar.
+  const [imageRequired, setImageRequired] = useState(null);
 
   const [active, setActive] = useState(null); // remesa seleccionada para confirmar
   const [notes, setNotes] = useState("");
@@ -99,7 +114,7 @@ export default function PendingDeliveriesScreen() {
 
   const capturePhoto = async () => {
     try {
-      const file = await pickImage();
+      const file = await takePhoto();
       if (file) setPhoto(file);
     } catch (e) {
       setModalError(e?.message ?? "No se pudo capturar la foto");
@@ -121,7 +136,7 @@ export default function PendingDeliveriesScreen() {
   };
 
   const confirmDelivery = () => {
-    if (imageRequired && !photo) {
+    if (imageRequired === true && !photo) {
       setModalError("La foto del comprobante de entrega es obligatoria.");
       return;
     }
@@ -132,7 +147,7 @@ export default function PendingDeliveriesScreen() {
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.headerRow}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
-        <Text variant="headlineSmall" style={styles.title}>Entregas pendientes</Text>
+        <Text variant="headlineSmall" style={styles.title}>Mis entregas pendientes</Text>
       </View>
       <Text style={styles.sub}>Créditos ya desembolsados que faltan entregar al cliente</Text>
 
@@ -152,6 +167,10 @@ export default function PendingDeliveriesScreen() {
                 <Text style={styles.amount}>{money(item.amount)}</Text>
               </View>
               <Text style={styles.muted}>Crédito #{item.credit_code || item.loan_id} · Cédula: {item.customer_identification}</Text>
+              {!!sourceLabel(item) && <Text style={styles.muted}>{sourceLabel(item)}</Text>}
+              {!!formatDisbursedAt(item.disbursed_at) && (
+                <Text style={styles.muted}>Desembolsado: {formatDisbursedAt(item.disbursed_at)}</Text>
+              )}
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: SPACING.xs }}>
                 <Chip compact style={{ backgroundColor: COLORS.primarySoft }}>
                   {METHOD_LABEL[item.disbursement_method] || item.disbursement_method}
@@ -172,6 +191,10 @@ export default function PendingDeliveriesScreen() {
               Confirmar entrega
             </Text>
             <Text style={{ color: COLORS.muted, marginTop: 2 }}>{active?.customer_name}</Text>
+            <Text style={{ color: COLORS.muted }}>
+              {money(active?.amount)} · {METHOD_LABEL[active?.disbursement_method] || active?.disbursement_method}
+              {active && sourceLabel(active) ? ` · ${sourceLabel(active)}` : ""}
+            </Text>
 
             <TextInput
               mode="outlined"
@@ -196,7 +219,11 @@ export default function PendingDeliveriesScreen() {
                 onPress={capturePhoto}
                 style={{ marginTop: SPACING.md, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
               >
-                {imageRequired ? "Adjuntar foto (obligatoria)" : "Adjuntar foto (opcional)"}
+                {imageRequired === true
+                  ? "Tomar foto del recibido (obligatoria)"
+                  : imageRequired === false
+                    ? "Tomar foto del recibido (opcional)"
+                    : "Tomar foto del recibido"}
               </Button>
             )}
 

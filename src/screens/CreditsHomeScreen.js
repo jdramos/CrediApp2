@@ -144,7 +144,7 @@ export default function CreditsHomeScreen() {
         {canDeliver && (
           <ActionCard
             icon="truck-delivery-outline"
-            title="Entregas pendientes"
+            title="Mis entregas pendientes"
             subtitle="Confirmar entrega al cliente"
             gradient={GRADIENTS.success}
             badge={pendingDeliveries}
