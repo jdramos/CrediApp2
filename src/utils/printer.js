@@ -47,8 +47,10 @@ const twoCol = (left, right) => {
 //   - Atrasado: lo pendiente de cuotas vencidas (capital+interés+cargos).
 //   - Vigente: capital que aún no vence, más lo pendiente de la cuota
 //     parcialmente pagada que sigue vigente. NO incluye el interés de
-//     cuotas futuras (no se debe todavía).
-export function summarizeMovements(movements) {
+//     cuotas futuras (no se debe todavía), salvo en un crédito flat
+//     (`flatPlan`): ahí el interés es fijo y el saldo es todo lo que falta
+//     según el plan (dueño, 2026-11-02).
+export function summarizeMovements(movements, flatPlan = false) {
   let overdueBalance = 0;
   let currentBalance = 0;
   let overdueSinceDate = null;
@@ -61,7 +63,7 @@ export function summarizeMovements(movements) {
     } else if (m.status === "PARTIAL") {
       currentBalance += Number(m.pending_total || 0);
     } else if (m.status === "CURRENT") {
-      currentBalance += Number(m.pending_principal || 0);
+      currentBalance += Number((flatPlan ? m.pending_total : m.pending_principal) || 0);
     }
   }
   return {
@@ -77,7 +79,7 @@ export function summarizeMovements(movements) {
 // (no "CrediMaster", que es solo el nombre de la plataforma) -- ver
 // session.tenant en SessionContext.js.
 export function buildAccountStatementReceiptLines(statement, tenantName) {
-  const { overdueBalance, currentBalance, totalBalance, overdueSinceDate } = summarizeMovements(statement.movements);
+  const { overdueBalance, currentBalance, totalBalance, overdueSinceDate } = summarizeMovements(statement.movements, !!statement.is_flat_plan);
   const lines = [
     center((tenantName || "CrediMaster").toUpperCase()),
     center(statement.customer_name || ""),

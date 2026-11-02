@@ -66,7 +66,10 @@ export default function AccountStatementScreen({ route }) {
   // todavía no vence, y desde cuándo empezó el atraso -- no el desglose
   // capital/interés/seguro de cada rubro. Mismo cálculo que usa el ticket
   // impreso (ver utils/printer.js) para que nunca queden desincronizados.
-  const summary = useMemo(() => summarizeMovements(statement?.movements), [statement?.movements]);
+  const summary = useMemo(
+    () => summarizeMovements(statement?.movements, !!statement?.is_flat_plan),
+    [statement?.movements, statement?.is_flat_plan],
+  );
 
   useEffect(() => {
     (async () => {
