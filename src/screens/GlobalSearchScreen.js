@@ -8,6 +8,7 @@ import { globalSearch } from "../api/searchApi";
 import { isNetworkError } from "../api/credimasterClient";
 import { money } from "../utils/format";
 import { COLORS } from "../theme/colors";
+import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
 // Búsqueda general: un solo campo para encontrar clientes (nombre, cédula
@@ -33,9 +34,8 @@ const describe = (type, it) => {
     case "customer":
       return {
         primary: it.customer_name,
-        secondary: [it.identification && `Cédula ${it.identification}`, it.cellphone && `Tel. ${it.cellphone}`]
-          .filter(Boolean)
-          .join(" · "),
+        identification: it.identification,
+        secondary: [it.cellphone && `Tel. ${it.cellphone}`].filter(Boolean).join(" · "),
         chip:
           it.active_loans > 0
             ? { label: `${it.active_loans} activo(s)`, color: COLORS.primary, bg: COLORS.primarySoft }
@@ -220,10 +220,18 @@ export default function GlobalSearchScreen({ navigation }) {
                 <Text style={styles.primary} numberOfLines={1}>
                   {d.primary}
                 </Text>
-                {!!d.secondary && (
-                  <Text style={styles.secondary} numberOfLines={1}>
-                    {d.secondary}
-                  </Text>
+                {(!!d.identification || !!d.secondary) && (
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    {!!d.identification && (
+                      <CopyableId label="Cédula " value={d.identification} textStyle={styles.secondary} numberOfLines={1} />
+                    )}
+                    {!!d.secondary && (
+                      <Text style={[styles.secondary, { flexShrink: 1 }]} numberOfLines={1}>
+                        {d.identification ? " · " : ""}
+                        {d.secondary}
+                      </Text>
+                    )}
+                  </View>
                 )}
               </View>
               {d.chip && (

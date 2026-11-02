@@ -12,6 +12,7 @@ import { confirmAction } from "../utils/confirm";
 import { openDirectionsTo } from "../utils/maps";
 import PlaceMap from "../components/PlaceMap";
 import { COLORS } from "../theme/colors";
+import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
 const styles = StyleSheet.create({
@@ -182,7 +183,7 @@ export default function CustomerLocationScreen({ route }) {
         <Text variant="headlineSmall" style={styles.header}>
           {customer?.customer_name || "Cliente"}
         </Text>
-        <Text style={styles.sub}>Cédula: {customer?.identification || "-"}</Text>
+        <CopyableId label="Cédula: " value={customer?.identification} textStyle={styles.sub} />
 
         <HelperText type="error" visible={!!error}>
           {error}

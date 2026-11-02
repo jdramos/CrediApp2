@@ -10,6 +10,7 @@ import { money } from "../utils/format";
 import { periodRange } from "../utils/date";
 import { loanStage } from "../utils/loanStage";
 import { COLORS } from "../theme/colors";
+import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
 const STATUS_FILTERS = [
@@ -270,7 +271,10 @@ export default function MyLoanRequestsScreen() {
                   <Text style={styles.name} numberOfLines={1}>{item.customer_name || "Cliente"}</Text>
                   <Text style={styles.amount}>{money(item.amount)}</Text>
                 </View>
-                <Text style={styles.muted}>Cédula: {item.customer_identification} · Solicitud #{item.id}</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
+                  <CopyableId label="Cédula: " value={item.customer_identification} textStyle={styles.muted} />
+                  <Text style={styles.muted}> · Solicitud #{item.id}</Text>
+                </View>
                 {!!item.created_by_name && (
                   <Text style={styles.muted}>
                     Solicitado por {item.created_by_name}{item.source ? ` · ${item.source === "MOBILE" ? "App" : "Web"}` : ""} · {item.date}

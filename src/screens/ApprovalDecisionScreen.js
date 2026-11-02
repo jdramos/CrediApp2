@@ -8,6 +8,7 @@ import { SessionContext } from "../auth/SessionContext";
 import { decideApproval } from "../api/approvalApi";
 import { money } from "../utils/format";
 import { COLORS } from "../theme/colors";
+import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
@@ -118,7 +119,7 @@ export default function ApprovalDecisionScreen() {
           <View style={[styles.card, { marginTop: SPACING.md }]}>
             <View style={styles.row}>
               <Text style={{ color: COLORS.muted }}>Cédula del cliente</Text>
-              <Text style={{ fontWeight: "600" }}>{item.customer_identification || "-"}</Text>
+              <CopyableId value={item.customer_identification} textStyle={{ fontWeight: "600" }} />
             </View>
             <View style={styles.row}>
               <Text style={{ color: COLORS.muted }}>Plazo solicitado</Text>

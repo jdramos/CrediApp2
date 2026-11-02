@@ -9,6 +9,7 @@ import { getCustomer } from "../api/customerApi";
 import { getLoans } from "../api/loanApi";
 import { money } from "../utils/format";
 import { COLORS } from "../theme/colors";
+import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
 const styles = StyleSheet.create({
@@ -129,7 +130,7 @@ export default function CustomerDetailScreen({ route, navigation }) {
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text variant="headlineSmall" style={styles.header}>{customer?.customer_name || "Cliente"}</Text>
-        <Text style={styles.sub}>Cédula: {customer?.identification || "-"}</Text>
+        <CopyableId label="Cédula: " value={customer?.identification} textStyle={styles.sub} />
 
         <HelperText type="error" visible={!!error}>{error}</HelperText>
 

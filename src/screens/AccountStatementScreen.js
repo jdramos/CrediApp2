@@ -14,6 +14,7 @@ import { money } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { printReceipt, buildAccountStatementReceiptLines, summarizeMovements } from "../utils/printer";
 import { COLORS } from "../theme/colors";
+import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
 const STATUS_COLOR = {
@@ -159,7 +160,7 @@ export default function AccountStatementScreen({ route }) {
               </Text>
             )}
             <Text variant="titleLarge" style={styles.name}>{statement.customer_name}</Text>
-            <Text style={styles.muted}>Cédula: {statement.customer_identification}</Text>
+            <CopyableId label="Cédula: " value={statement.customer_identification} textStyle={styles.muted} />
             <AddressLines
               customer={{
                 home_address: statement.customer_home_address,

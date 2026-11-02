@@ -47,6 +47,7 @@ import { ensureWorkday } from "../tracking/workday";
 import OfflineNotice from "../components/OfflineNotice";
 import { cachedFetch, readCache } from "../offline/cache";
 import { COLORS } from "../theme/colors";
+import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
@@ -617,7 +618,10 @@ export default function ClientPortfolioScreen() {
                     </Chip>
                   )}
                 </View>
-                <Text style={styles.muted}>Código: {item.customer_identification} · Crédito #{item.credit_code || item.loan_id}</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
+                  <CopyableId label="Código: " value={item.customer_identification} textStyle={styles.muted} />
+                  <Text style={styles.muted}> · Crédito #{item.credit_code || item.loan_id}</Text>
+                </View>
                 <AddressLines customer={item} />
                 {(sortMode === "near" || sortMode === "route") && myPos && (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 }}>

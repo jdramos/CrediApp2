@@ -30,6 +30,7 @@ import { confirmAction } from "../utils/confirm";
 import { money, toNumber, formatAmountInput } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { COLORS } from "../theme/colors";
+import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
@@ -575,7 +576,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
               renderItem={({ item }) => (
                 <Card style={styles.row} onPress={() => pickCustomer(item)}>
                   <Text style={styles.name}>{item.customer_name}</Text>
-                  <Text style={styles.muted}>Cédula: {item.identification}</Text>
+                  <CopyableId label="Cédula: " value={item.identification} textStyle={styles.muted} />
                 </Card>
               )}
             />
@@ -963,7 +964,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>{customer?.customer_name}</Text>
-              <Text style={styles.muted}>Cédula: {customer?.identification}</Text>
+              <CopyableId label="Cédula: " value={customer?.identification} textStyle={styles.muted} />
 
               <View style={{ marginTop: SPACING.md }}>
                 <View style={styles.summaryRow}>

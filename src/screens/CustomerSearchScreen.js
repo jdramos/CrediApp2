@@ -6,6 +6,7 @@ import { SessionContext } from "../auth/SessionContext";
 import { searchCustomers } from "../api/customerApi";
 import AddressLines from "../components/AddressLines";
 import { COLORS } from "../theme/colors";
+import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
 const styles = StyleSheet.create({
@@ -98,7 +99,7 @@ export default function CustomerSearchScreen({ navigation }) {
             onPress={() => navigation.navigate("CustomerDetail", { customerId: item.id })}
           >
             <Text style={styles.name}>{item.customer_name}</Text>
-            <Text style={styles.id}>Cédula: {item.identification}</Text>
+            <CopyableId label="Cédula: " value={item.identification} textStyle={styles.id} />
             <AddressLines customer={item} />
           </Card>
         )}

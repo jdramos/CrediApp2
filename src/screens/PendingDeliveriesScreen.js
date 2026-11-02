@@ -11,6 +11,7 @@ import { takePhoto } from "../utils/imagePicker";
 import { confirmAction } from "../utils/confirm";
 import { money } from "../utils/format";
 import { COLORS } from "../theme/colors";
+import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
@@ -166,7 +167,10 @@ export default function PendingDeliveriesScreen() {
                 <Text style={styles.name}>{item.customer_name || "Cliente"}</Text>
                 <Text style={styles.amount}>{money(item.amount)}</Text>
               </View>
-              <Text style={styles.muted}>Crédito #{item.credit_code || item.loan_id} · Cédula: {item.customer_identification}</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
+                <Text style={styles.muted}>Crédito #{item.credit_code || item.loan_id} · </Text>
+                <CopyableId label="Cédula: " value={item.customer_identification} textStyle={styles.muted} />
+              </View>
               {!!sourceLabel(item) && <Text style={styles.muted}>{sourceLabel(item)}</Text>}
               {!!formatDisbursedAt(item.disbursed_at) && (
                 <Text style={styles.muted}>Desembolsado: {formatDisbursedAt(item.disbursed_at)}</Text>

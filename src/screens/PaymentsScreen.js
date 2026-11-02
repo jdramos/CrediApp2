@@ -44,6 +44,7 @@ import PaymentReceiptCard from "../components/PaymentReceiptCard";
 import { todayISO } from "../utils/date";
 import { printReceipt, buildPaymentReceiptLines } from "../utils/printer";
 import { COLORS } from "../theme/colors";
+import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
@@ -653,7 +654,7 @@ export default function PaymentsScreen({ route }) {
               renderItem={({ item }) => (
                 <Card style={styles.row} onPress={() => pickCustomer(item)}>
                   <Text style={styles.name}>{item.customer_name}</Text>
-                  <Text style={styles.muted}>Cédula: {item.identification}</Text>
+                  <CopyableId label="Cédula: " value={item.identification} textStyle={styles.muted} />
                   <AddressLines customer={item} />
                 </Card>
               )}
