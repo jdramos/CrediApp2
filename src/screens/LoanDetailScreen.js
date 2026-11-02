@@ -104,7 +104,7 @@ export default function LoanDetailScreen({ route }) {
         />
         <Text variant="headlineSmall" style={styles.title}>Crédito #{loanId}</Text>
         <Text style={styles.sub}>{loan?.customer_name || "-"}</Text>
-        <Text style={styles.balance}>{money(loan?.current_balance)}</Text>
+        <Text style={styles.balance}>{money(loan?.display_balance ?? loan?.current_balance)}</Text>
         <Text style={styles.sub}>Saldo pendiente</Text>
         <View style={styles.metaRow}>
           {!!loan?.status && (

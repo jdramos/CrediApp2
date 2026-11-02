@@ -168,7 +168,7 @@ export default function CustomerDetailScreen({ route, navigation }) {
                     onPress={() => navigation.navigate("LoanDetail", { loanId: item.id || item.loan_id })}
                   >
                     <Text style={styles.loanTitle}>Crédito #{item.id || item.loan_id}</Text>
-                    <Text style={styles.balance}>{money(item.current_balance)}</Text>
+                    <Text style={styles.balance}>{money(item.display_balance ?? item.current_balance)}</Text>
                     <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
                       {item.date} · {money(item.amount)}
                     </Text>

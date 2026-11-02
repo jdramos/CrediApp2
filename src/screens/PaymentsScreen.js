@@ -569,7 +569,7 @@ export default function PaymentsScreen({ route }) {
         breakdownRows: receiptRows,
         principalBalanceBefore: result?.principal_balance_before,
         principalBalanceAfter: result?.principal_balance_after,
-        newBalance: result?.loan?.current_balance,
+        newBalance: result?.loan?.display_balance ?? result?.loan?.current_balance,
         receiptNumber: formatReceiptNumber(result?.payment_id),
       }),
     );
@@ -696,7 +696,7 @@ export default function PaymentsScreen({ route }) {
                       </Chip>
                     )}
                   </View>
-                  <Text style={styles.balance}>{money(item.current_balance)}</Text>
+                  <Text style={styles.balance}>{money(item.display_balance ?? item.current_balance)}</Text>
                   <Text style={styles.muted}>Saldo pendiente</Text>
                   {inArrears && (
                     <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: SPACING.xs }}>
@@ -726,7 +726,7 @@ export default function PaymentsScreen({ route }) {
 
             <View style={styles.card}>
               <Text style={styles.muted}>Crédito #{loan?.id || loan?.loan_id}</Text>
-              <Text style={styles.balance}>{money(loan?.current_balance)}</Text>
+              <Text style={styles.balance}>{money(loan?.display_balance ?? loan?.current_balance)}</Text>
               <Text style={styles.muted}>Saldo pendiente</Text>
             </View>
 
@@ -885,7 +885,7 @@ export default function PaymentsScreen({ route }) {
                 rows={receiptRows}
                 principalBefore={result?.principal_balance_before}
                 principalAfter={result?.principal_balance_after}
-                newBalance={result?.loan?.current_balance}
+                newBalance={result?.loan?.display_balance ?? result?.loan?.current_balance}
               />
             </ViewShot>
 

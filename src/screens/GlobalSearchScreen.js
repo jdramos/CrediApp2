@@ -44,7 +44,7 @@ const describe = (type, it) => {
     case "loan":
       return {
         primary: `Crédito #${it.credit_code || it.id}`,
-        secondary: [it.customer_name, `Saldo ${money(it.current_balance)}`].filter(Boolean).join(" · "),
+        secondary: [it.customer_name, `Saldo ${money(it.display_balance ?? it.current_balance)}`].filter(Boolean).join(" · "),
         chip: LOAN_STATUS[it.status] || { label: it.status, color: COLORS.muted, bg: COLORS.bg },
       };
     case "payment":

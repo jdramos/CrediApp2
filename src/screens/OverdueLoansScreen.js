@@ -102,7 +102,7 @@ export default function OverdueLoansScreen() {
     .sort((a, b) => (sort === "amount" ? Number(b.overdue_amount) - Number(a.overdue_amount) : b.days_overdue - a.days_overdue));
 
   const totalOverdue = filtered.reduce((s, r) => s + Number(r.overdue_amount || 0), 0);
-  const totalBalance = filtered.reduce((s, r) => s + Number(r.current_balance || 0), 0);
+  const totalBalance = filtered.reduce((s, r) => s + Number(r.display_balance ?? r.current_balance ?? 0), 0);
   const tenantName = session?.tenant?.commercial_name || session?.tenant?.legal_name;
 
   const renderItem = ({ item: r }) => {
@@ -126,7 +126,7 @@ export default function OverdueLoansScreen() {
           </Text>
           <Text style={styles.amount}>{money(r.overdue_amount)}</Text>
         </View>
-        <Text style={styles.muted}>Saldo del crédito: {money(r.current_balance)}</Text>
+        <Text style={styles.muted}>Saldo del crédito: {money(r.display_balance ?? r.current_balance)}</Text>
         <Text style={[styles.muted, noAction && { color: COLORS.danger, fontWeight: "700" }]}>
           {noAction ? "Sin gestión registrada" : `Última gestión: ${String(r.last_action_date).slice(0, 10)}`}
           {r.promise_status === "PENDING" && r.promised_date ? ` · Promesa ${money(r.promised_amount)} para ${String(r.promised_date).slice(0, 10)}` : ""}
