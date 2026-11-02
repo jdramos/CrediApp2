@@ -1,14 +1,17 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
-import { View, StyleSheet, ScrollView, Alert } from "react-native";
+import { View, StyleSheet, ScrollView, Alert, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, Card, Button, ActivityIndicator, HelperText, Snackbar } from "react-native-paper";
 import * as Location from "expo-location";
 import { SessionContext } from "../auth/SessionContext";
 import { getCustomer, saveCustomerLocation } from "../api/customerApi";
+import { uploadCustomerDocument } from "../api/customerDocumentApi";
 import { isNetworkError } from "../api/credimasterClient";
 import { enqueue } from "../offline/queue";
+import { persistLocalFile } from "../offline/filePersist";
 import { useSync } from "../offline/SyncProvider";
 import { confirmAction } from "../utils/confirm";
+import { pickImage } from "../utils/imagePicker";
 import { openDirectionsTo } from "../utils/maps";
 import PlaceMap from "../components/PlaceMap";
 import { COLORS } from "../theme/colors";
@@ -47,7 +50,13 @@ const styles = StyleSheet.create({
   legend: { flexDirection: "row", gap: SPACING.md, padding: SPACING.sm },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   dot: { width: 10, height: 10, borderRadius: 5 },
+  thumbs: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginTop: SPACING.sm },
+  thumb: { width: 64, height: 64, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, backgroundColor: "#fff" },
 });
+
+// Fotos que se pueden agregar por lugar en una misma visita.
+const MAX_PLACE_PHOTOS = 5;
+const PHOTO_NAME = { home: "Foto de la casa", business: "Foto del negocio" };
 
 const formatCoords = (lat, lng) =>
   lat != null && lng != null ? `${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}` : "Sin ubicación fijada";
@@ -74,6 +83,12 @@ export default function CustomerLocationScreen({ route }) {
   const [error, setError] = useState("");
   const [snackbar, setSnackbar] = useState("");
   const [focusKey, setFocusKey] = useState(null); // lugar en el que se centra el mapa
+
+  // Fotos de la casa / el negocio (fachada, referencias para llegar): se suben al expediente del
+  // cliente como documento. `photos` = las agregadas en esta pantalla, con su estado.
+  const canUploadPhotos = session?.permissions?.includes("clientes.documentos.subir");
+  const [photos, setPhotos] = useState({ home: [], business: [] });
+  const [photoBusy, setPhotoBusy] = useState(null); // "home" | "business" | null
 
   // Lugares con ubicación (guardada o recién capturada, aunque todavía no se guarde).
   const places = useMemo(() => {
@@ -129,6 +144,78 @@ export default function CustomerLocationScreen({ route }) {
     } finally {
       setCapturing(null);
     }
+  };
+
+  // Toma o elige una foto del lugar y la sube al expediente; sin señal queda en la cola y se envía sola.
+  const addPlacePhoto = async (target) => {
+    setError("");
+    let file;
+    try {
+      file = await pickImage();
+    } catch (e) {
+      setError(e?.message ?? "No se pudo abrir la cámara o la galería");
+      return;
+    }
+    if (!file) return;
+    const options = { docType: "OTRO", docName: PHOTO_NAME[target], relatedItemCode: "OTHER_DOC" };
+    setPhotoBusy(target);
+    try {
+      await uploadCustomerDocument(session.token, customerId, file, options);
+      setPhotos((p) => ({ ...p, [target]: [...p[target], { uri: file.uri, state: "sent" }] }));
+      setSnackbar("Foto guardada en el expediente");
+    } catch (e) {
+      if (isNetworkError(e)) {
+        try {
+          const stableUri = await persistLocalFile(file.uri, file.name);
+          await enqueue({
+            type: "CUSTOMER_DOCUMENT",
+            label: `${PHOTO_NAME[target]} — ${customer?.customer_name || "cliente"}`,
+            payload: { customerId, file: { ...file, uri: stableUri }, options },
+          });
+          refreshPendingCount();
+          setPhotos((p) => ({ ...p, [target]: [...p[target], { uri: file.uri, state: "queued" }] }));
+          Alert.alert("Sin conexión", "La foto se guardó en el equipo y se subirá sola cuando vuelva la señal.");
+        } catch (queueErr) {
+          setError(queueErr?.message ?? "No se pudo guardar la foto para enviarla después");
+        }
+      } else {
+        setError(e?.message ?? "No se pudo subir la foto");
+      }
+    } finally {
+      setPhotoBusy(null);
+    }
+  };
+
+  const renderPlacePhotos = (target, lat, lng) => {
+    if (!canUploadPhotos || lat == null || lng == null) return null;
+    const list = photos[target];
+    const queued = list.filter((f) => f.state === "queued").length;
+    return (
+      <View>
+        {list.length > 0 && (
+          <View style={styles.thumbs}>
+            {list.map((f, i) => (
+              <Image key={`${f.uri}-${i}`} source={{ uri: f.uri }} style={[styles.thumb, f.state === "queued" && { opacity: 0.5 }]} />
+            ))}
+          </View>
+        )}
+        {list.length > 0 && (
+          <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
+            {`${list.length} foto${list.length === 1 ? "" : "s"} agregada${list.length === 1 ? "" : "s"}${queued ? ` (${queued} por enviar cuando haya señal)` : ""}`}
+          </Text>
+        )}
+        <Button
+          mode="outlined"
+          icon="camera-outline"
+          onPress={() => addPlacePhoto(target)}
+          loading={photoBusy === target}
+          disabled={photoBusy !== null || list.length >= MAX_PLACE_PHOTOS}
+          style={styles.btn}
+        >
+          {target === "home" ? "Agregar foto de la casa" : "Agregar foto del negocio"}
+        </Button>
+      </View>
+    );
   };
 
   const saveLocation = async () => {
@@ -212,6 +299,7 @@ export default function CustomerLocationScreen({ route }) {
               </Button>
             </View>
           )}
+          {renderPlacePhotos("home", homeLat, homeLng)}
         </View>
 
         <View style={styles.card}>
@@ -237,6 +325,7 @@ export default function CustomerLocationScreen({ route }) {
               </Button>
             </View>
           )}
+          {renderPlacePhotos("business", businessLat, businessLng)}
         </View>
 
         {places.length > 0 && (
