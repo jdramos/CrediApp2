@@ -52,6 +52,19 @@ export function pickImage() {
 // Arma el FormData listo para credimasterUpload. El nombre del campo del
 // archivo varía por endpoint: "file" en garantías/documentos de cliente,
 // "image" en la entrega de desembolsos — por eso es configurable.
+export function buildImagesFormData(files, extraFields = {}, fieldName = "images") {
+  const form = new FormData();
+  if (Platform.OS === "web") {
+    form.__webFiles = { fieldName, files };
+  } else {
+    files.forEach((file) => form.append(fieldName, { uri: file.uri, name: file.name, type: file.type }));
+  }
+  Object.entries(extraFields).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) form.append(key, String(value));
+  });
+  return form;
+}
+
 export function buildImageFormData(file, extraFields = {}, fieldName = "file") {
   const form = new FormData();
   if (Platform.OS === "web") {

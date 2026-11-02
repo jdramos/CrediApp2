@@ -81,6 +81,15 @@ export async function credimasterUpload(path, formData, token, method = "POST") 
     formData.append(fieldName, new Blob([blob], { type: file.type || blob.type }), file.name);
   }
 
+  // Web, varias fotos (buildImagesFormData).
+  if (formData?.__webFiles) {
+    const { fieldName, files } = formData.__webFiles;
+    for (const file of files) {
+      const blob = await (await fetch(file.uri)).blob();
+      formData.append(fieldName, new Blob([blob], { type: file.type || blob.type }), file.name);
+    }
+  }
+
   const response = await fetch(`${BASE_URL}${path}`, {
     method,
     headers,

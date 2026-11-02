@@ -1,11 +1,10 @@
 import React, { useCallback, useContext, useState } from "react";
-import { View, StyleSheet, FlatList } from "react-native";
+import { View, StyleSheet, FlatList, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, Card, Button, ActivityIndicator, HelperText, IconButton, Portal, Modal, TextInput, Chip } from "react-native-paper";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SessionContext } from "../auth/SessionContext";
-import { getPendingDeliveries, markDelivered } from "../api/remittanceApi";
+import { getPendingDeliveries, markDelivered, MAX_DELIVERY_PHOTOS } from "../api/remittanceApi";
 import { getCreditPolicies } from "../api/creditPolicyApi";
 import { takePhoto } from "../utils/imagePicker";
 import { confirmAction } from "../utils/confirm";
@@ -52,15 +51,10 @@ const styles = StyleSheet.create({
   muted: { color: COLORS.muted, marginTop: 2, fontSize: 12 },
   empty: { textAlign: "center", color: COLORS.muted, marginTop: SPACING.xl, paddingHorizontal: SPACING.xl },
   modal: { backgroundColor: COLORS.card, margin: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.md },
-  photoBox: {
-    marginTop: SPACING.sm,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderStyle: "dashed",
-    padding: SPACING.md,
-    alignItems: "center",
-  },
+  photosRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm, marginTop: SPACING.sm },
+  thumb: { width: 76, height: 76, borderRadius: RADIUS.md, backgroundColor: COLORS.border },
+  thumbWrap: { position: "relative" },
+  thumbRemove: { position: "absolute", top: -10, right: -10, margin: 0, backgroundColor: COLORS.card },
 });
 
 export default function PendingDeliveriesScreen() {
@@ -76,7 +70,7 @@ export default function PendingDeliveriesScreen() {
 
   const [active, setActive] = useState(null); // remesa seleccionada para confirmar
   const [notes, setNotes] = useState("");
-  const [photo, setPhoto] = useState(null);
+  const [photos, setPhotos] = useState([]);
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState("");
 
@@ -109,14 +103,14 @@ export default function PendingDeliveriesScreen() {
   const openConfirm = (item) => {
     setActive(item);
     setNotes("");
-    setPhoto(null);
+    setPhotos([]);
     setModalError("");
   };
 
   const capturePhoto = async () => {
     try {
       const file = await takePhoto();
-      if (file) setPhoto(file);
+      if (file) setPhotos((list) => [...list, file].slice(0, MAX_DELIVERY_PHOTOS));
     } catch (e) {
       setModalError(e?.message ?? "No se pudo capturar la foto");
     }
@@ -126,7 +120,7 @@ export default function PendingDeliveriesScreen() {
     try {
       setSaving(true);
       setModalError("");
-      await markDelivered(session.token, active.loan_id, { deliveryNotes: notes, file: photo });
+      await markDelivered(session.token, active.loan_id, { deliveryNotes: notes, files: photos });
       setActive(null);
       load();
     } catch (e) {
@@ -137,8 +131,8 @@ export default function PendingDeliveriesScreen() {
   };
 
   const confirmDelivery = () => {
-    if (imageRequired === true && !photo) {
-      setModalError("La foto del comprobante de entrega es obligatoria.");
+    if (imageRequired === true && !photos.length) {
+      setModalError("Tomá al menos una foto de la entrega: es obligatoria.");
       return;
     }
     confirmAction("Confirmar entrega", `¿Confirmás que el crédito de ${active?.customer_name} ya fue entregado al cliente?`, submitDelivery);
@@ -210,26 +204,40 @@ export default function PendingDeliveriesScreen() {
               outlineStyle={{ borderRadius: RADIUS.md }}
             />
 
-            {photo ? (
-              <View style={[styles.photoBox, { borderStyle: "solid" }]}>
-                <MaterialCommunityIcons name="check-circle" size={28} color={COLORS.success} />
-                <Text style={{ color: COLORS.text, marginTop: SPACING.xs }}>Foto lista</Text>
-                <Button compact onPress={capturePhoto} style={{ marginTop: SPACING.xs }}>Cambiar foto</Button>
+            <Text style={{ color: COLORS.text, fontWeight: "700", marginTop: SPACING.md }}>
+              Fotos de la entrega{imageRequired === true ? " (obligatoria, al menos una)" : imageRequired === false ? " (opcional)" : ""}
+            </Text>
+            <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+              Evidencia de que le entregaste el dinero al cliente: el recibido, la firma o el dinero en la mano.
+            </Text>
+
+            {photos.length > 0 && (
+              <View style={styles.photosRow}>
+                {photos.map((p, i) => (
+                  <View key={`${p.uri}-${i}`} style={styles.thumbWrap}>
+                    <Image source={{ uri: p.uri }} style={styles.thumb} />
+                    <IconButton
+                      icon="close-circle"
+                      size={22}
+                      iconColor={COLORS.danger}
+                      style={styles.thumbRemove}
+                      onPress={() => setPhotos((list) => list.filter((_, j) => j !== i))}
+                      accessibilityLabel="Quitar foto"
+                    />
+                  </View>
+                ))}
               </View>
-            ) : (
-              <Button
-                mode="outlined"
-                icon="camera-outline"
-                onPress={capturePhoto}
-                style={{ marginTop: SPACING.md, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
-              >
-                {imageRequired === true
-                  ? "Tomar foto del recibido (obligatoria)"
-                  : imageRequired === false
-                    ? "Tomar foto del recibido (opcional)"
-                    : "Tomar foto del recibido"}
-              </Button>
             )}
+
+            <Button
+              mode="outlined"
+              icon="camera-outline"
+              onPress={capturePhoto}
+              disabled={photos.length >= MAX_DELIVERY_PHOTOS}
+              style={{ marginTop: SPACING.sm, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+            >
+              {photos.length ? `Agregar otra foto (${photos.length}/${MAX_DELIVERY_PHOTOS})` : "Tomar foto"}
+            </Button>
 
             <HelperText type="error" visible={!!modalError}>{modalError}</HelperText>
 
