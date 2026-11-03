@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+
 const BASE_URL = process.env.EXPO_PUBLIC_CREDIMASTER_API_URL;
 
 // El backend responde 401 SOLO por token ausente/inválido/vencido
@@ -90,11 +92,10 @@ export async function credimasterUpload(path, formData, token, method = "POST") 
     }
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers,
-    body: formData,
-  });
+  const response =
+    Platform.OS === "web"
+      ? await fetch(`${BASE_URL}${path}`, { method, headers, body: formData })
+      : await nativeMultipartSend(`${BASE_URL}${path}`, method, headers, formData);
 
   const text = await response.text();
   let data = null;
@@ -116,4 +117,27 @@ export async function credimasterUpload(path, formData, token, method = "POST") 
   }
 
   return data;
+}
+
+// En el celular el fetch global es el de Expo (SDK 53+), que no acepta archivos
+// del tipo { uri, name, type } dentro del FormData y falla con "Unsupported
+// FormDataPart implementation" (3-nov-2026, confirmar entrega con fotos).
+// XMLHttpRequest sí los sube leyéndolos del equipo. Un fallo de red lanza un
+// error sin `status`, igual que fetch, para que isNetworkError lo reconozca.
+function nativeMultipartSend(url, method, headers, formData) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+    Object.entries(headers).forEach(([key, value]) => xhr.setRequestHeader(key, value));
+    xhr.timeout = 120000;
+    xhr.onload = () =>
+      resolve({
+        status: xhr.status,
+        ok: xhr.status >= 200 && xhr.status < 300,
+        text: async () => xhr.responseText ?? "",
+      });
+    xhr.onerror = () => reject(new TypeError("Network request failed"));
+    xhr.ontimeout = () => reject(new TypeError("Network request timed out"));
+    xhr.send(formData);
+  });
 }
