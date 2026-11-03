@@ -22,3 +22,8 @@ web-build/
 # Env
 .env
 .env.* 
+# Llaves de firma y credenciales locales (nunca al repositorio)
+credentials.json
+*.jks
+*.keystore
+/keys

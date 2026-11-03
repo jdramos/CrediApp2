@@ -76,6 +76,8 @@ export default function CustomerLocationScreen({ route }) {
   const [homeLng, setHomeLng] = useState(null);
   const [businessLat, setBusinessLat] = useState(null);
   const [businessLng, setBusinessLng] = useState(null);
+  // Lo que ya está guardado: "Guardar ubicación" solo se activa si se capturó algo distinto.
+  const [saved, setSaved] = useState({ homeLat: null, homeLng: null, businessLat: null, businessLng: null });
 
   const [loading, setLoading] = useState(true);
   const [capturing, setCapturing] = useState(null); // "home" | "business" | null
@@ -91,6 +93,13 @@ export default function CustomerLocationScreen({ route }) {
   const [photoBusy, setPhotoBusy] = useState(null); // "home" | "business" | null
 
   // Lugares con ubicación (guardada o recién capturada, aunque todavía no se guarde).
+  const sameCoord = (a, b) => (a == null && b == null) || (a != null && b != null && Number(a) === Number(b));
+  const hasLocation = (homeLat != null && homeLng != null) || (businessLat != null && businessLng != null);
+  const hasChanges =
+    !sameCoord(homeLat, saved.homeLat) || !sameCoord(homeLng, saved.homeLng) ||
+    !sameCoord(businessLat, saved.businessLat) || !sameCoord(businessLng, saved.businessLng);
+  const canSave = hasLocation && hasChanges;
+
   const places = useMemo(() => {
     const list = [];
     if (homeLat != null && homeLng != null) list.push({ key: "home", label: "Casa", lat: Number(homeLat), lng: Number(homeLng), color: "#1D4ED8" });
@@ -105,10 +114,17 @@ export default function CustomerLocationScreen({ route }) {
         const res = await getCustomer(session.token, customerId);
         const c = res?.data?.customer;
         setCustomer(c);
-        setHomeLat(c?.home_lat != null ? Number(c.home_lat) : null);
-        setHomeLng(c?.home_lng != null ? Number(c.home_lng) : null);
-        setBusinessLat(c?.business_lat != null ? Number(c.business_lat) : null);
-        setBusinessLng(c?.business_lng != null ? Number(c.business_lng) : null);
+        const loaded = {
+          homeLat: c?.home_lat != null ? Number(c.home_lat) : null,
+          homeLng: c?.home_lng != null ? Number(c.home_lng) : null,
+          businessLat: c?.business_lat != null ? Number(c.business_lat) : null,
+          businessLng: c?.business_lng != null ? Number(c.business_lng) : null,
+        };
+        setHomeLat(loaded.homeLat);
+        setHomeLng(loaded.homeLng);
+        setBusinessLat(loaded.businessLat);
+        setBusinessLng(loaded.businessLng);
+        setSaved(loaded);
       } catch (e) {
         setError(e?.message ?? "Error cargando el cliente");
       } finally {
@@ -131,6 +147,11 @@ export default function CustomerLocationScreen({ route }) {
       const position = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
+
+      if (!Number.isFinite(position?.coords?.latitude) || !Number.isFinite(position?.coords?.longitude)) {
+        setError("No se pudo leer la ubicación. Revisá que el GPS esté encendido e intentá de nuevo.");
+        return;
+      }
 
       if (target === "home") {
         setHomeLat(position.coords.latitude);
@@ -230,6 +251,7 @@ export default function CustomerLocationScreen({ route }) {
     try {
       setSaving(true);
       await saveCustomerLocation(session.token, customerId, customer, location);
+      setSaved({ homeLat, homeLng, businessLat, businessLng });
       setSnackbar("Ubicación guardada");
     } catch (e) {
       if (isNetworkError(e)) {
@@ -240,6 +262,7 @@ export default function CustomerLocationScreen({ route }) {
             payload: { customerId, fullCustomer: customer, location },
           });
           refreshPendingCount();
+          setSaved({ homeLat, homeLng, businessLat, businessLng });
           Alert.alert("Sin conexión", "La ubicación se guardó en el equipo y se enviará sola cuando vuelva la señal.");
         } catch (queueErr) {
           setError(queueErr?.message ?? "No se pudo guardar la ubicación para enviarla después");
@@ -253,6 +276,10 @@ export default function CustomerLocationScreen({ route }) {
   };
 
   const onSave = () => {
+    if (!canSave) {
+      setError("Primero capturá la ubicación de la casa o del negocio.");
+      return;
+    }
     confirmAction("Guardar ubicación", `¿Guardar la ubicación de ${customer?.customer_name || "este cliente"}?`, saveLocation);
   };
 
@@ -346,13 +373,18 @@ export default function CustomerLocationScreen({ route }) {
           mode="contained"
           onPress={onSave}
           loading={saving}
-          disabled={saving || capturing !== null}
+          disabled={saving || capturing !== null || !canSave}
           style={styles.saveBtn}
           contentStyle={{ height: 46 }}
           labelStyle={{ fontWeight: "700" }}
         >
           Guardar ubicación
         </Button>
+        {!canSave && (
+          <HelperText type="info" visible>
+            {hasLocation ? "No hay cambios por guardar." : "Primero capturá la ubicación actual de la casa o del negocio."}
+          </HelperText>
+        )}
       </ScrollView>
 
       <Snackbar visible={!!snackbar} onDismiss={() => setSnackbar("")} duration={2500}>
