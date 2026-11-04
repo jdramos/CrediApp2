@@ -58,8 +58,12 @@ export const getTeamProductivity = (token, { period, branch_id } = {}) => {
 // Detalle de un cobrador (vista de supervisor): créditos en mora con su
 // categoría, visitas con verificación GPS y pagos del período — mismo
 // permiso y alcance de sucursales que getTeamProductivity.
-export const getTeamCollectorDetail = (token, collectorId, period) =>
-  credimasterGet(`/api/collections/team-productivity/${collectorId}${period ? `?period=${period}` : ""}`, token);
+// `overdueOffset` > 0 pide solo la siguiente página de créditos en mora (de a 20):
+// responde { overdue_loans } sin el resto del detalle.
+export const getTeamCollectorDetail = (token, collectorId, period, overdueOffset = 0) => {
+  const qs = [period ? `period=${period}` : "", overdueOffset > 0 ? `overdue_offset=${overdueOffset}` : ""].filter(Boolean).join("&");
+  return credimasterGet(`/api/collections/team-productivity/${collectorId}${qs ? `?${qs}` : ""}`, token);
+};
 
 // Cierre del día del cobrador (cobrado por forma de pago, efectivo a
 // entregar, custodia acumulada) — permiso pagos.ver. `date` YYYY-MM-DD,

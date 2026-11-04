@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useState } from "react";
 import { View, StyleSheet, ScrollView, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Text, IconButton, Chip, ActivityIndicator } from "react-native-paper";
+import { Text, IconButton, Chip, ActivityIndicator, Button } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
@@ -80,6 +80,8 @@ export default function CollectorDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState("");
 
   const load = useCallback(
     async (isRefresh = false) => {
@@ -99,6 +101,30 @@ export default function CollectorDetailScreen() {
   );
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // "Ver más": trae la siguiente página de créditos en mora (de a 20) y la agrega.
+  // Si el servidor no soporta páginas devuelve las mismas filas: se descartan las
+  // repetidas y, si no llegó nada nuevo, no se vuelve a ofrecer el botón.
+  const loadMoreOverdue = async () => {
+    if (loadingMore || !data) return;
+    setLoadingMore(true);
+    setMoreError("");
+    try {
+      const res = await getTeamCollectorDetail(session.token, params.collectorId, params.period, data.overdue_loans.length);
+      const known = new Set(data.overdue_loans.map((l) => l.loan_id));
+      const fresh = (res?.overdue_loans || []).filter((l) => !known.has(l.loan_id));
+      setData((d) => ({
+        ...d,
+        overdue_loans: [...d.overdue_loans, ...fresh],
+        // sin filas nuevas: se iguala el total para ocultar el botón
+        overdue_loans_total: fresh.length ? d.overdue_loans_total : d.overdue_loans.length,
+      }));
+    } catch (e) {
+      setMoreError(e?.message || "No se pudieron cargar más créditos.");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const periodText = PERIOD_LABEL[params.period] || "este mes";
 
@@ -165,10 +191,16 @@ export default function CollectorDetailScreen() {
                 </View>
               ))}
               {data.overdue_loans_total > data.overdue_loans.length && (
-                <Text style={styles.muted}>
-                  Mostrando los {data.overdue_loans.length} más atrasados de {data.overdue_loans_total}.
-                </Text>
+                <>
+                  <Text style={styles.muted}>
+                    Mostrando {data.overdue_loans.length} de {data.overdue_loans_total} (los más atrasados primero).
+                  </Text>
+                  <Button mode="outlined" onPress={loadMoreOverdue} loading={loadingMore} disabled={loadingMore} style={{ borderRadius: RADIUS.md }}>
+                    Ver más
+                  </Button>
+                </>
               )}
+              {!!moreError && <Text style={styles.error}>{moreError}</Text>}
             </View>
 
             <View style={styles.card}>
