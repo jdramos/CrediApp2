@@ -87,7 +87,7 @@ export default function CustomerSearchScreen({ navigation }) {
       <FlatList
         data={results}
         keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={{ paddingBottom: 110 }}
+        contentContainerStyle={{ paddingBottom: SPACING.xl }}
         ListEmptyComponent={
           !loading && query.trim().length >= 2 ? (
             <Text style={styles.empty}>Sin resultados</Text>

@@ -7,7 +7,7 @@ import { COLORS } from "../../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../../theme/layout";
 
 export const fin = StyleSheet.create({
-  content: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.md },
+  content: { padding: SPACING.lg, paddingBottom: SPACING.xl, gap: SPACING.md },
   card: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.lg,

@@ -1,5 +1,5 @@
-import React, { useEffect } from "react";
-import { View, Pressable, StyleSheet } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Pressable, StyleSheet, Keyboard, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "react-native-paper";
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from "react-native-reanimated";
@@ -55,6 +55,19 @@ function TabButton({ route, label, isFocused, onPress }) {
 export default function AppTabBar({ state, descriptors, navigation }) {
   const insets = useSafeAreaInsets();
 
+  // Con el teclado abierto la barra se oculta: ocupa su propio espacio (no
+  // flota sobre las pantallas) y le quitaría lugar al formulario.
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow", () => setKeyboardOpen(true));
+    const hide = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide", () => setKeyboardOpen(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  if (keyboardOpen) return null;
+
   return (
     <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, SPACING.sm) }]} pointerEvents="box-none">
       <View style={styles.bar}>
@@ -78,13 +91,13 @@ export default function AppTabBar({ state, descriptors, navigation }) {
 }
 
 const styles = StyleSheet.create({
+  // En el flujo normal (no absoluta): las pantallas terminan donde empieza la
+  // barra y nada queda tapado por el menú.
   wrapper: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
     alignItems: "center",
     paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.xs,
+    backgroundColor: COLORS.bg,
   },
   bar: {
     flexDirection: "row",

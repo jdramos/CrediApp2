@@ -36,7 +36,7 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
   title: { fontWeight: "800", color: COLORS.text },
   sub: { color: COLORS.muted, marginTop: 2, paddingHorizontal: SPACING.lg, marginBottom: SPACING.sm },
-  listContent: { padding: SPACING.lg, paddingTop: 0, paddingBottom: 110, gap: SPACING.sm },
+  listContent: { padding: SPACING.lg, paddingTop: 0, paddingBottom: SPACING.xl, gap: SPACING.sm },
   row: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.md,

@@ -24,7 +24,7 @@ const styles = StyleSheet.create({
   heroTitle: { color: COLORS.onGradient, fontWeight: "800", flex: 1 },
   dateRow: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
   dateText: { color: COLORS.onGradient, fontWeight: "700", minWidth: 130, textAlign: "center" },
-  content: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.sm },
+  content: { padding: SPACING.lg, paddingBottom: SPACING.xl, gap: SPACING.sm },
   card: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.lg,

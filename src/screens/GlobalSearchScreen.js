@@ -203,7 +203,7 @@ export default function GlobalSearchScreen({ navigation }) {
         sections={sections}
         keyExtractor={(item, index) => `${item.id}-${index}`}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: SPACING.lg, paddingBottom: 110 }}
+        contentContainerStyle={{ paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xl }}
         stickySectionHeadersEnabled={false}
         renderSectionHeader={({ section }) => <Text style={styles.section}>{section.title}</Text>}
         ListEmptyComponent={

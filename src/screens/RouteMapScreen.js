@@ -39,7 +39,7 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   dot: { width: 10, height: 10, borderRadius: 5 },
   legendText: { color: COLORS.muted, fontSize: 11 },
-  list: { padding: SPACING.md, paddingBottom: 110, gap: SPACING.xs },
+  list: { padding: SPACING.md, paddingBottom: SPACING.xl, gap: SPACING.xs },
   listTitle: { fontWeight: "800", color: COLORS.text, marginTop: SPACING.xs },
   event: {
     backgroundColor: COLORS.card,

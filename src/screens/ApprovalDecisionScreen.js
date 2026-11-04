@@ -14,7 +14,7 @@ import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
-  content: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.md },
+  content: { padding: SPACING.lg, paddingBottom: SPACING.xl, gap: SPACING.md },
   header: { fontWeight: "800", color: COLORS.text },
   topBar: { flexDirection: "row", alignItems: "center", paddingHorizontal: SPACING.sm, paddingTop: SPACING.xs },
   topTitle: { fontWeight: "800", color: COLORS.text, flex: 1 },

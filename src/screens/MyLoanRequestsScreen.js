@@ -36,7 +36,7 @@ const styles = StyleSheet.create({
   sub: { color: COLORS.muted, marginTop: 2, paddingHorizontal: SPACING.lg },
   filtersWrap: { paddingHorizontal: SPACING.lg, marginTop: SPACING.sm, gap: SPACING.sm },
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs },
-  listContent: { padding: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: 110, gap: SPACING.sm },
+  listContent: { padding: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: 96, gap: SPACING.sm },
   row: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.md,
@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
   muted: { color: COLORS.muted, marginTop: 2, fontSize: 12 },
   stageRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: SPACING.xs, gap: SPACING.sm },
   stageDetail: { color: COLORS.muted, fontSize: 12, flex: 1 },
-  fab: { position: "absolute", right: SPACING.lg, bottom: 96, backgroundColor: COLORS.primary },
+  fab: { position: "absolute", right: SPACING.lg, bottom: SPACING.lg, backgroundColor: COLORS.primary },
   empty: { textAlign: "center", color: COLORS.muted, marginTop: SPACING.xl, paddingHorizontal: SPACING.xl },
 });
 

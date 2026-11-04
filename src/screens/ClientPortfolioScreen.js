@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
   title: { fontWeight: "800", color: COLORS.text },
   sub: { color: COLORS.muted, marginTop: 2, paddingHorizontal: SPACING.lg },
   searchWrap: { paddingHorizontal: SPACING.lg, marginTop: SPACING.sm },
-  listContent: { padding: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: 110, gap: SPACING.sm },
+  listContent: { padding: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: SPACING.xl, gap: SPACING.sm },
   row: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.md,

@@ -28,7 +28,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
   headerRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
   title: { fontWeight: "800", color: COLORS.text, flex: 1 },
-  content: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.md },
+  content: { padding: SPACING.lg, paddingBottom: SPACING.xl, gap: SPACING.md },
   shot: { backgroundColor: COLORS.bg, gap: SPACING.md },
   card: {
     backgroundColor: COLORS.card,

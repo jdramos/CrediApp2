@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
   heroSub: { color: COLORS.onGradientMuted, marginTop: 2 },
   dateRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginTop: SPACING.xs },
   dateText: { color: COLORS.onGradient, fontWeight: "700", minWidth: 120, textAlign: "center" },
-  content: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.md },
+  content: { padding: SPACING.lg, paddingBottom: SPACING.xl, gap: SPACING.md },
   card: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.lg,

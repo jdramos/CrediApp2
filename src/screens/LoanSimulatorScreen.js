@@ -32,7 +32,7 @@ const HIDDEN_FREQUENCIES = ["V", "IR", "NA"];
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
-  content: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.md },
+  content: { padding: SPACING.lg, paddingBottom: SPACING.xl, gap: SPACING.md },
   headerRow: { flexDirection: "row", alignItems: "center", marginLeft: -SPACING.sm },
   title: { fontWeight: "800", color: COLORS.text, flex: 1 },
   card: {

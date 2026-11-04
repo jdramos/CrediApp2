@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
   heroSub: { color: COLORS.onGradient, opacity: 0.9, fontSize: 12 },
   filters: { paddingHorizontal: SPACING.lg, marginTop: SPACING.sm, gap: SPACING.xs },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs },
-  list: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.sm },
+  list: { padding: SPACING.lg, paddingBottom: SPACING.xl, gap: SPACING.sm },
   card: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.md,

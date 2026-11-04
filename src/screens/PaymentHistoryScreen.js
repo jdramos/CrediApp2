@@ -32,7 +32,7 @@ const styles = StyleSheet.create({
   total: { color: COLORS.onGradient, fontWeight: "800", fontSize: 30, marginTop: SPACING.sm },
   totalSub: { color: COLORS.onGradient, opacity: 0.85 },
   methods: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginTop: SPACING.sm },
-  listContent: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.sm },
+  listContent: { padding: SPACING.lg, paddingBottom: 96, gap: SPACING.sm },
   dayHeader: { flexDirection: "row", justifyContent: "space-between", marginTop: SPACING.sm },
   dayHeaderText: { fontWeight: "800", color: COLORS.text },
   dayHeaderTotal: { fontWeight: "700", color: COLORS.muted },
@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
   },
   noticeText: { color: COLORS.text, fontSize: 13 },
-  fab: { position: "absolute", right: SPACING.lg, bottom: 96, backgroundColor: COLORS.primary },
+  fab: { position: "absolute", right: SPACING.lg, bottom: SPACING.lg, backgroundColor: COLORS.primary },
   empty: { textAlign: "center", color: COLORS.muted, marginTop: SPACING.xl, paddingHorizontal: SPACING.xl },
   error: { textAlign: "center", color: COLORS.danger, marginTop: SPACING.lg, paddingHorizontal: SPACING.xl },
 });

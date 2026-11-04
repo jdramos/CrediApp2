@@ -18,7 +18,7 @@ const styles = StyleSheet.create({
   sub: { color: COLORS.onGradientMuted, marginTop: 2 },
   balance: { color: COLORS.onGradient, fontWeight: "800", fontSize: 28, marginTop: SPACING.sm },
   metaRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm, marginTop: SPACING.md },
-  listContent: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.sm },
+  listContent: { padding: SPACING.lg, paddingBottom: SPACING.xl, gap: SPACING.sm },
   sectionTitle: { fontWeight: "800", color: COLORS.text, marginBottom: SPACING.xs },
   row: {
     backgroundColor: COLORS.card,

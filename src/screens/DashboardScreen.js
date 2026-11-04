@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   searchText: { color: COLORS.muted, flex: 1 },
-  content: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.md },
+  content: { padding: SPACING.lg, paddingBottom: SPACING.xl, gap: SPACING.md },
   sectionTitle: { fontWeight: "800", color: COLORS.text, marginTop: SPACING.sm },
   actionsGrid: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm },
   action: {

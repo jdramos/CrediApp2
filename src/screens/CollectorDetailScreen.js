@@ -25,7 +25,7 @@ const styles = StyleSheet.create({
   heroTop: { flexDirection: "row", alignItems: "center", marginLeft: -SPACING.sm },
   heroTitle: { color: COLORS.onGradient, fontWeight: "800", flex: 1 },
   heroSub: { color: COLORS.onGradientMuted },
-  content: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.md },
+  content: { padding: SPACING.lg, paddingBottom: SPACING.xl, gap: SPACING.md },
   card: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.lg,

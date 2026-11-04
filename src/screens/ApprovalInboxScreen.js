@@ -13,7 +13,7 @@ import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
-  content: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.sm },
+  content: { padding: SPACING.lg, paddingBottom: SPACING.xl, gap: SPACING.sm },
   header: { fontWeight: "800", color: COLORS.text },
   sub: { color: COLORS.muted, marginTop: 2, marginBottom: SPACING.sm },
   card: {

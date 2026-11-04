@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
   heroLabel: { color: COLORS.onGradientMuted, marginTop: SPACING.sm },
   heroAmount: { color: COLORS.onGradient, fontWeight: "800" },
   heroSub: { color: COLORS.onGradientMuted, marginTop: 2 },
-  content: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.md },
+  content: { padding: SPACING.lg, paddingBottom: SPACING.xl, gap: SPACING.md },
   card: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.lg,

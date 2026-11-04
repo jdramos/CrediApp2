@@ -22,7 +22,7 @@ import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
-  content: { padding: SPACING.lg, paddingBottom: 110, gap: SPACING.md },
+  content: { padding: SPACING.lg, paddingBottom: SPACING.xl, gap: SPACING.md },
   header: { fontWeight: "800", color: COLORS.text },
   sectionTitle: { fontWeight: "800", color: COLORS.text, marginTop: SPACING.sm },
   hint: { color: COLORS.muted, fontSize: 12 },
