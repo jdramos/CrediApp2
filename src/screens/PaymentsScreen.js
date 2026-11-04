@@ -94,6 +94,89 @@ const styles = StyleSheet.create({
 
 const STEPS = ["Cliente", "Crédito", "Monto", "Listo"];
 
+// Cuántos clientes de la búsqueda muestran ya sus créditos (uno por consulta).
+const MAX_PREVIEW_CUSTOMERS = 6;
+const MAX_PREVIEW_LOANS = 3;
+
+// "Autorizado C$ 5,000.00 · Semanal · 4% mensual · Flat · 3 meses". Cada dato
+// se omite si el servidor no lo trae (backend sin actualizar).
+function loanTermsLine(l) {
+  const authorized = Number(l.approved_amount ?? l.amount ?? 0);
+  const rate = Number(l.interest_rate);
+  const term = Number(l.term_months);
+  return [
+    authorized > 0 ? `Autorizado ${money(authorized)}` : null,
+    l.frequency_name || l.frequency || null,
+    Number.isFinite(rate) && l.interest_rate != null ? `${rate}% mensual` : null,
+    l.interest_type || null,
+    Number.isFinite(term) && term > 0 ? `${term} ${term === 1 ? "mes" : "meses"}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+// Créditos activos del cliente dentro del resultado de la búsqueda, para ver
+// el saldo y si está en mora antes de entrar al cliente. loans: undefined =
+// cargando, null = no se pudo consultar, [] = sin créditos activos.
+function CustomerLoansPreview({ loans }) {
+  if (loans === undefined) {
+    return <Text style={[styles.muted, { marginTop: SPACING.xs }]}>Cargando créditos…</Text>;
+  }
+  if (loans === null) return null;
+  if (loans.length === 0) {
+    return <Text style={[styles.muted, { marginTop: SPACING.xs }]}>Sin créditos activos con saldo.</Text>;
+  }
+  return (
+    <View style={{ marginTop: SPACING.xs, gap: SPACING.xs }}>
+      {loans.slice(0, MAX_PREVIEW_LOANS).map((l) => {
+        const daysOverdue = Number(l.days_overdue || 0);
+        return (
+          <View
+            key={String(l.id || l.loan_id)}
+            style={{
+              borderTopWidth: 1,
+              borderTopColor: COLORS.border,
+              paddingTop: SPACING.xs,
+            }}
+          >
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Text style={styles.name}>Crédito #{l.credit_code || l.id || l.loan_id}</Text>
+              {daysOverdue > 0 && (
+                <Chip
+                  compact
+                  style={{ backgroundColor: COLORS.dangerSoft }}
+                  textStyle={{ color: COLORS.danger, fontWeight: "700" }}
+                >
+                  Mora {daysOverdue}d
+                </Chip>
+              )}
+            </View>
+            <Text style={{ color: COLORS.primary, fontWeight: "800" }}>
+              {money(l.display_balance ?? l.current_balance)}{" "}
+              <Text style={{ color: COLORS.muted, fontWeight: "400" }}>saldo pendiente</Text>
+            </Text>
+            {loanTermsLine(l) ? <Text style={styles.muted}>{loanTermsLine(l)}</Text> : null}
+            {daysOverdue > 0 && l.overdue_amount != null ? (
+              <Text style={{ color: COLORS.danger, fontSize: 12 }}>
+                Vencido: {money(l.overdue_amount)}
+              </Text>
+            ) : null}
+            {l.next_installment_amount != null && (
+              <Text style={styles.muted}>
+                Próxima cuota: {money(l.next_installment_amount)}
+                {l.next_payment_date ? ` — vence ${String(l.next_payment_date).slice(0, 10)}` : ""}
+              </Text>
+            )}
+          </View>
+        );
+      })}
+      {loans.length > MAX_PREVIEW_LOANS && (
+        <Text style={styles.muted}>y {loans.length - MAX_PREVIEW_LOANS} crédito(s) más</Text>
+      )}
+    </View>
+  );
+}
+
 function StepHeader({ step, onBack, title, right }) {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", marginBottom: SPACING.sm }}>
@@ -127,6 +210,32 @@ export default function PaymentsScreen({ route }) {
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [customer, setCustomer] = useState(null);
+  // Créditos de cada cliente de la búsqueda, por id (ver CustomerLoansPreview).
+  const [loansByCustomer, setLoansByCustomer] = useState({});
+
+  // Con los resultados ya a la vista, se consultan los créditos de los
+  // primeros clientes. Se espera un momento para no consultar por cada letra
+  // que se teclea, y lo ya consultado no se repite.
+  const requestedPreviews = useRef(new Set());
+  useEffect(() => {
+    if (step !== 0) return undefined;
+    const timer = setTimeout(() => {
+      results
+        .slice(0, MAX_PREVIEW_CUSTOMERS)
+        .filter((c) => !requestedPreviews.current.has(c.id))
+        .forEach((c) => {
+          requestedPreviews.current.add(c.id);
+          getCustomerActiveLoans(session.token, c.id)
+            .then((res) => setLoansByCustomer((prev) => ({ ...prev, [c.id]: res?.loans || [] })))
+            .catch(() => {
+              // Sin señal u otro fallo: se deja sin mostrar y se puede reintentar al volver a buscar.
+              requestedPreviews.current.delete(c.id);
+              setLoansByCustomer((prev) => ({ ...prev, [c.id]: null }));
+            });
+        });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [results, step, session.token]);
 
   // Paso 2: crédito
   const [loans, setLoans] = useState([]);
@@ -269,6 +378,8 @@ export default function PaymentsScreen({ route }) {
     setQuery("");
     setResults([]);
     setCustomer(null);
+    setLoansByCustomer({});
+    requestedPreviews.current.clear();
     setLoans([]);
     setLoan(null);
     setAmount("");
@@ -651,11 +762,12 @@ export default function PaymentsScreen({ route }) {
               data={results}
               keyExtractor={(item) => String(item.id)}
               scrollEnabled={false}
-              renderItem={({ item }) => (
+              renderItem={({ item, index }) => (
                 <Card style={styles.row} onPress={() => pickCustomer(item)}>
                   <Text style={styles.name}>{item.customer_name}</Text>
                   <CopyableId label="Cédula: " value={item.identification} textStyle={styles.muted} />
                   <AddressLines customer={item} />
+                  {index < MAX_PREVIEW_CUSTOMERS && <CustomerLoansPreview loans={loansByCustomer[item.id]} />}
                 </Card>
               )}
             />
@@ -698,6 +810,7 @@ export default function PaymentsScreen({ route }) {
                   </View>
                   <Text style={styles.balance}>{money(item.display_balance ?? item.current_balance)}</Text>
                   <Text style={styles.muted}>Saldo pendiente</Text>
+                  {loanTermsLine(item) ? <Text style={[styles.muted, { marginTop: SPACING.xs }]}>{loanTermsLine(item)}</Text> : null}
                   {inArrears && (
                     <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: SPACING.xs }}>
                       {item.overdue_installments} cuota{item.overdue_installments === 1 ? "" : "s"} vencida

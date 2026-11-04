@@ -2,9 +2,11 @@ import { credimasterGet, credimasterPut } from "./credimasterClient";
 
 // Búsqueda liviana por nombre o identificación (GET /getCustomerList,
 // permiso clientes.ver) — pensada para autocompletar, no trae todos los
-// campos del cliente.
+// campos del cliente. `app=1`: el servidor solo devuelve los clientes del
+// usuario (su cartera, los que supervisa, los que registró) salvo que tenga
+// el permiso clientes.ver.todos (nivel gerencial).
 export const searchCustomers = (token, query) =>
-  credimasterGet(`/api/customers/getCustomerList?query=${encodeURIComponent(query || "")}`, token);
+  credimasterGet(`/api/customers/getCustomerList?app=1&query=${encodeURIComponent(query || "")}`, token);
 
 // Registro completo del cliente (GET /:customerId, permiso clientes.ver).
 // Necesario antes de guardar una ubicación: el backend espera el objeto

@@ -7,6 +7,6 @@ import { credimasterGet } from "./credimasterClient";
 // de proveedores ni empleados).
 export const globalSearch = (token, query) =>
   credimasterGet(
-    `/api/search?q=${encodeURIComponent(query || "")}&types=customer,loan,payment`,
+    `/api/search?q=${encodeURIComponent(query || "")}&types=customer,loan,payment&app=1`,
     token,
   );
