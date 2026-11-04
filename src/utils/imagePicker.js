@@ -1,5 +1,6 @@
 import { Alert, Platform } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
 
 const buildFile = (asset) => {
   const uri = asset.uri;
@@ -9,10 +10,50 @@ const buildFile = (asset) => {
   return { uri, name, type };
 };
 
+// Cada foto que toma el selector queda en la caché de la app (ImagePicker/) y no se
+// borra sola: con las fotos de entregas, cédulas y comprobantes se llena el teléfono
+// y la cámara termina fallando con "Failed to write a file". Antes de abrir la cámara
+// o la galería se borran las de más de un día (las ya enviadas o encoladas; lo
+// pendiente de enviar se copia aparte, ver offline/filePersist.js).
+const PICKER_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+export async function purgeOldPickerCache(maxAgeMs = PICKER_CACHE_MAX_AGE_MS) {
+  if (Platform.OS === "web" || !FileSystem.cacheDirectory) return;
+  try {
+    const dir = `${FileSystem.cacheDirectory}ImagePicker/`;
+    const names = await FileSystem.readDirectoryAsync(dir).catch(() => []);
+    const now = Date.now();
+    await Promise.all(
+      names.map(async (name) => {
+        const info = await FileSystem.getInfoAsync(dir + name);
+        if (info.exists && info.modificationTime && now - info.modificationTime * 1000 > maxAgeMs) {
+          await FileSystem.deleteAsync(dir + name, { idempotent: true });
+        }
+      }),
+    );
+  } catch {
+    // limpiar la caché nunca debe impedir tomar la foto
+  }
+}
+
+// El selector falla con mensajes técnicos cuando el teléfono no tiene espacio.
+const friendlyPickerError = (e) => {
+  const msg = String(e?.message || e || "");
+  if (/failed to write|no space|enospc|disk full|not enough space/i.test(msg)) {
+    return new Error("El teléfono casi no tiene espacio para guardar la foto. Liberá espacio (borrá fotos, videos o apps que no uses) e intentá de nuevo.");
+  }
+  return e instanceof Error ? e : new Error(msg || "No se pudo abrir la cámara.");
+};
+
 async function launchCamera() {
   const perm = await ImagePicker.requestCameraPermissionsAsync();
   if (!perm.granted) throw new Error("Se necesita permiso de cámara para tomar la foto.");
-  const res = await ImagePicker.launchCameraAsync({ quality: 0.7, mediaTypes: ["images"] });
+  purgeOldPickerCache();
+  let res;
+  try {
+    res = await ImagePicker.launchCameraAsync({ quality: 0.7, mediaTypes: ["images"] });
+  } catch (e) {
+    throw friendlyPickerError(e);
+  }
   if (res.canceled || !res.assets?.[0]) return null;
   return buildFile(res.assets[0]);
 }
@@ -20,7 +61,13 @@ async function launchCamera() {
 async function launchLibrary() {
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!perm.granted) throw new Error("Se necesita permiso para acceder a tus fotos.");
-  const res = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ["images"] });
+  purgeOldPickerCache();
+  let res;
+  try {
+    res = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ["images"] });
+  } catch (e) {
+    throw friendlyPickerError(e);
+  }
   if (res.canceled || !res.assets?.[0]) return null;
   return buildFile(res.assets[0]);
 }

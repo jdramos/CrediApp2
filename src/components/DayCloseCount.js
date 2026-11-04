@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from "react";
-import { View, StyleSheet } from "react-native";
-import { Text, Button, Portal, Modal, TextInput, HelperText } from "react-native-paper";
+import { View, StyleSheet, Image } from "react-native";
+import { Text, Button, Portal, Modal, TextInput, HelperText, Switch } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { submitMyDayClose } from "../api/collectionsApi";
 import { confirmAction } from "../utils/confirm";
+import { evaluateDayClose, parseAmountInput } from "../utils/dayClose";
+import { pickImage } from "../utils/imagePicker";
 import { money, usd } from "../utils/format";
 import DenominationCounter, { countTotal, cleanCounts } from "./DenominationCounter";
 import { COLORS } from "../theme/colors";
@@ -11,6 +13,7 @@ import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import KeyboardAwareScroll from "./KeyboardAwareScroll";
 
 const TOLERANCE = 0.005;
+const fxText = (n) => Number(n).toFixed(2);
 
 const styles = StyleSheet.create({
   card: {
@@ -74,6 +77,12 @@ export default function DayCloseCount({ token, date, cashCount, pendingCashAmoun
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Depósito en el banco hecho antes de cerrar: monto(s) y foto de la minuta.
+  const [hasDeposit, setHasDeposit] = useState(false);
+  const [depositNioText, setDepositNioText] = useState("");
+  const [depositUsdText, setDepositUsdText] = useState("");
+  const [depositRef, setDepositRef] = useState("");
+  const [slip, setSlip] = useState(null);
 
   const expectedNio = round2(cashCount?.expected_nio);
   const expectedUsd = round2(cashCount?.expected_usd);
@@ -84,9 +93,25 @@ export default function DayCloseCount({ token, date, cashCount, pendingCashAmoun
 
   const countedNio = useMemo(() => countTotal(counts.NIO), [counts.NIO]);
   const countedUsd = useMemo(() => countTotal(counts.USD), [counts.USD]);
-  const diffNio = round2(countedNio - expectedNio);
-  const diffUsd = round2(countedUsd - expectedUsd);
-  const shortage = diffNio < -TOLERANCE || diffUsd < -TOLERANCE;
+  const fxRate = Number(cashCount?.fx_buy_rate) || null;
+  const depositNio = hasDeposit ? parseAmountInput(depositNioText) : 0;
+  const depositUsd = hasDeposit ? parseAmountInput(depositUsdText) : 0;
+  const depositInvalid = hasDeposit && (Number.isNaN(depositNio) || Number.isNaN(depositUsd));
+  const depositEmpty = hasDeposit && !depositInvalid && depositNio <= 0 && depositUsd <= 0;
+  const depositNoSlip = hasDeposit && !depositInvalid && !depositEmpty && !slip;
+  const calc = useMemo(
+    () =>
+      evaluateDayClose(
+        { expectedNio, expectedUsd },
+        { countedNio, countedUsd, depositNio: depositInvalid ? 0 : depositNio, depositUsd: depositInvalid ? 0 : depositUsd },
+        fxRate,
+      ),
+    [expectedNio, expectedUsd, countedNio, countedUsd, depositNio, depositUsd, depositInvalid, fxRate],
+  );
+  const diffNio = calc.differenceNio;
+  const diffUsd = calc.differenceUsd;
+  const depositProblem = depositInvalid || depositEmpty || depositNoSlip;
+  const shortage = calc.shortage;
 
   if (!cashCount) return null;
 
@@ -95,6 +120,11 @@ export default function DayCloseCount({ token, date, cashCount, pendingCashAmoun
     setShowUsd(false);
     setNotes("");
     setError("");
+    setHasDeposit(false);
+    setDepositNioText("");
+    setDepositUsdText("");
+    setDepositRef("");
+    setSlip(null);
     setOpen(true);
   };
 
@@ -106,6 +136,7 @@ export default function DayCloseCount({ token, date, cashCount, pendingCashAmoun
         date,
         denominations: { NIO: cleanCounts(counts.NIO), USD: cleanCounts(counts.USD) },
         notes: notes.trim() || undefined,
+        deposit: hasDeposit ? { nio: depositNio, usd: depositUsd, reference: depositRef.trim(), slip } : undefined,
       });
       setOpen(false);
       onSaved?.();
@@ -116,8 +147,17 @@ export default function DayCloseCount({ token, date, cashCount, pendingCashAmoun
     }
   };
 
+  const attachSlip = async () => {
+    try {
+      const file = await pickImage();
+      if (file) setSlip(file);
+    } catch (e) {
+      setError(e?.message ?? "No se pudo abrir la cámara.");
+    }
+  };
+
   const confirmSave = () => {
-    if (shortage) return;
+    if (shortage || depositProblem) return;
     const over = [];
     if (diffNio > TOLERANCE) over.push(`${money(diffNio)}`);
     if (diffUsd > TOLERANCE) over.push(usd(diffUsd));
@@ -171,6 +211,18 @@ export default function DayCloseCount({ token, date, cashCount, pendingCashAmoun
               {close.difference_nio > TOLERANCE ? ` · sobrante ${money(close.difference_nio)}` : ""}
               {close.difference_usd > TOLERANCE ? ` · sobrante ${usd(close.difference_usd)}` : ""}
             </Text>
+            {(close.deposit_nio > 0 || close.deposit_usd > 0) && (
+              <Text style={styles.muted}>
+                Depósito en el banco:{" "}
+                {[close.deposit_nio > 0 ? money(close.deposit_nio) : "", close.deposit_usd > 0 ? usd(close.deposit_usd) : ""].filter(Boolean).join(" y ")}
+                {close.has_deposit_slip ? " (minuta adjunta)" : ""}
+              </Text>
+            )}
+            {close.usd_applied > 0 && (
+              <Text style={styles.muted}>
+                {usd(close.usd_applied)} cubrieron {money(close.usd_applied_nio)} al tipo de cambio de compra C$ {fxText(close.fx_rate)}
+              </Text>
+            )}
             {!!close.review_notes && <Text style={styles.muted}>Nota de la oficina: {close.review_notes}</Text>}
           </View>
         </View>
@@ -257,8 +309,60 @@ export default function DayCloseCount({ token, date, cashCount, pendingCashAmoun
               </>
             ) : (
               <Button compact icon="currency-usd" onPress={() => setShowUsd(true)} style={{ alignSelf: "flex-start", marginTop: SPACING.sm }}>
-                Tengo dólares
+                Tengo dólares (cubren córdobas)
               </Button>
+            )}
+
+            <View style={[styles.row, { marginTop: SPACING.md }]}>
+              <Text style={[styles.section, { flex: 1, marginTop: 0, marginBottom: 0 }]}>Hice un depósito en el banco</Text>
+              <Switch
+                value={hasDeposit}
+                onValueChange={(v) => {
+                  setHasDeposit(v);
+                  setError("");
+                }}
+              />
+            </View>
+            {hasDeposit && (
+              <View style={{ gap: SPACING.sm, marginTop: SPACING.xs }}>
+                <Text style={styles.muted}>
+                  Lo depositado cuenta como efectivo entregado. La foto de la minuta es obligatoria: la oficina la revisa.
+                </Text>
+                <TextInput
+                  mode="outlined"
+                  label="Monto depositado (C$)"
+                  value={depositNioText}
+                  onChangeText={setDepositNioText}
+                  keyboardType="decimal-pad"
+                  style={{ backgroundColor: COLORS.card }}
+                  outlineStyle={{ borderRadius: RADIUS.md }}
+                />
+                <TextInput
+                  mode="outlined"
+                  label="Monto depositado (US$)"
+                  value={depositUsdText}
+                  onChangeText={setDepositUsdText}
+                  keyboardType="decimal-pad"
+                  style={{ backgroundColor: COLORS.card }}
+                  outlineStyle={{ borderRadius: RADIUS.md }}
+                />
+                <TextInput
+                  mode="outlined"
+                  label="No. de minuta o referencia (opcional)"
+                  value={depositRef}
+                  onChangeText={setDepositRef}
+                  maxLength={80}
+                  style={{ backgroundColor: COLORS.card }}
+                  outlineStyle={{ borderRadius: RADIUS.md }}
+                />
+                {slip ? <Image source={{ uri: slip.uri }} style={{ width: "100%", height: 180, borderRadius: RADIUS.md }} resizeMode="contain" /> : null}
+                <Button mode="outlined" icon="camera" onPress={attachSlip} disabled={saving} style={{ borderRadius: RADIUS.md }}>
+                  {slip ? "Cambiar foto de la minuta" : "Foto de la minuta"}
+                </Button>
+                {depositInvalid && <Text style={{ color: COLORS.danger }}>Revisá los montos del depósito (solo números, hasta 2 decimales).</Text>}
+                {depositEmpty && <Text style={{ color: COLORS.danger }}>Escribí cuánto depositaste, en córdobas o en dólares.</Text>}
+                {depositNoSlip && <Text style={{ color: COLORS.danger }}>Falta la foto de la minuta del depósito.</Text>}
+              </View>
             )}
 
             <View style={styles.summary}>
@@ -266,6 +370,26 @@ export default function DayCloseCount({ token, date, cashCount, pendingCashAmoun
                 <Text style={styles.label}>Contado (C$)</Text>
                 <Text style={styles.value}>{money(countedNio)}</Text>
               </View>
+              {hasDeposit && depositNio > 0 && (
+                <View style={styles.row}>
+                  <Text style={styles.label}>Depositado (C$)</Text>
+                  <Text style={styles.value}>{money(depositNio)}</Text>
+                </View>
+              )}
+              {hasDeposit && depositUsd > 0 && (
+                <View style={styles.row}>
+                  <Text style={styles.label}>Depositado (US$)</Text>
+                  <Text style={styles.value}>{usd(depositUsd)}</Text>
+                </View>
+              )}
+              {calc.usdApplied > 0 && (
+                <View style={styles.row}>
+                  <Text style={styles.label}>
+                    {usd(calc.usdApplied)} cubren (T/C compra {fxText(fxRate)})
+                  </Text>
+                  <Text style={styles.value}>{money(calc.usdAppliedNio)}</Text>
+                </View>
+              )}
               <DiffLine label="Resultado C$" diff={diffNio} fmt={money} />
               {withUsd && (
                 <>
@@ -278,9 +402,18 @@ export default function DayCloseCount({ token, date, cashCount, pendingCashAmoun
               )}
             </View>
 
+            {withUsd && (
+              <Text style={[styles.muted, { marginTop: SPACING.sm }]}>
+                {fxRate
+                  ? `Los dólares que te sobren (contados o depositados) cubren córdobas al tipo de cambio de compra de la empresa: C$ ${fxText(fxRate)}.`
+                  : "La oficina todavía no registró el tipo de cambio de compra de este día: los dólares no pueden cubrir córdobas."}
+              </Text>
+            )}
+
             {shortage && (
               <Text style={{ color: COLORS.danger, marginTop: SPACING.sm }}>
-                No se puede guardar con faltante. Revisá el conteo o buscá la diferencia antes de cerrar.
+                No se puede guardar con faltante. Revisá el conteo, declará el depósito o buscá la diferencia antes de cerrar.
+                {calc.needsRate ? " Tus dólares podrían cubrirlo, pero falta el tipo de cambio de compra del día." : ""}
               </Text>
             )}
 
@@ -305,7 +438,7 @@ export default function DayCloseCount({ token, date, cashCount, pendingCashAmoun
                 mode="contained"
                 onPress={confirmSave}
                 loading={saving}
-                disabled={saving || shortage}
+                disabled={saving || shortage || depositProblem}
                 style={{ flex: 1, borderRadius: RADIUS.md }}
               >
                 Guardar cierre

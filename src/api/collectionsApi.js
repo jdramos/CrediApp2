@@ -1,4 +1,5 @@
-import { credimasterGet, credimasterPost } from "./credimasterClient";
+import { credimasterGet, credimasterPost, credimasterUpload } from "./credimasterClient";
+import { buildImageFormData } from "../utils/imagePicker";
 
 // Cartera de créditos asignada al cobrador vinculado al usuario logueado
 // (users.collector_id) — permiso pagos.ver. Si el usuario no está
@@ -73,8 +74,21 @@ export const getMyDayClose = (token, date) =>
 
 // Guarda el cierre del día con el conteo por denominación ({ NIO: {"1000": 2}, USD: {...} }).
 // El servidor rechaza el cierre (400 FALTANTE) si lo contado no alcanza lo cobrado en efectivo.
-export const submitMyDayClose = (token, { date, denominations, notes }) =>
-  credimasterPost("/api/collections/my-day-close", { date, denominations, notes }, token);
+// Con depósito en el banco (`deposit`: { nio, usd, reference, slip }) se manda como
+// multipart con la foto de la minuta (obligatoria, campo "file"); sin depósito sigue
+// siendo JSON.
+export const submitMyDayClose = (token, { date, denominations, notes, deposit }) => {
+  if (!deposit) return credimasterPost("/api/collections/my-day-close", { date, denominations, notes }, token);
+  const form = buildImageFormData(deposit.slip, {
+    date,
+    denominations: JSON.stringify(denominations),
+    notes,
+    deposit_nio: deposit.nio || undefined,
+    deposit_usd: deposit.usd || undefined,
+    deposit_reference: deposit.reference || undefined,
+  });
+  return credimasterUpload("/api/collections/my-day-close", form, token);
+};
 
 // Cuotas que vencen y promesas por día, de hoy a hoy+N: alimenta los
 // recordatorios locales (notifications/reminders.js) — permiso pagos.ver.
