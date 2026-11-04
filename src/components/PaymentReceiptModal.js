@@ -6,7 +6,7 @@ import { SessionContext } from "../auth/SessionContext";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import PaymentReceiptCard from "./PaymentReceiptCard";
 import { appliedFromPaymentRow, buildReceiptRows, formatReceiptNumber } from "../utils/receipt";
-import { buildPaymentMessage, openSms, openWhatsApp, phoneOf } from "../utils/contact";
+import { buildPaymentMessage, openSms, phoneOf, sendReceiptImageWhatsApp } from "../utils/contact";
 import { printReceipt, buildPaymentReceiptLines } from "../utils/printer";
 import { shareImage } from "../utils/shareImage";
 import { COLORS } from "../theme/colors";
@@ -51,6 +51,16 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
       setError(e?.message ?? "No se pudo generar el comprobante para compartir");
     } finally {
       setSharing(false);
+    }
+  };
+
+  // WhatsApp: imagen del comprobante (no texto).
+  const onWhatsApp = async () => {
+    try {
+      setError("");
+      await sendReceiptImageWhatsApp(shotRef, phoneOf(payment), { kind: "PAYMENT", paymentId: payment.id, loanId: payment.loan_id });
+    } catch (e) {
+      setError(e?.message ?? "No se pudo generar el comprobante para WhatsApp");
     }
   };
 
@@ -125,7 +135,7 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
               <Button compact mode="outlined" icon="message-text-outline" onPress={() => openSms(phoneOf(payment), message, { kind: "PAYMENT", paymentId: payment.id, loanId: payment.loan_id })} style={styles.action} labelStyle={styles.actionLabel}>
                 SMS
               </Button>
-              <Button compact mode="outlined" icon="whatsapp" onPress={() => openWhatsApp(phoneOf(payment), message, { kind: "PAYMENT", paymentId: payment.id, loanId: payment.loan_id })} style={styles.action} labelStyle={styles.actionLabel}>
+              <Button compact mode="outlined" icon="whatsapp" onPress={onWhatsApp} style={styles.action} labelStyle={styles.actionLabel}>
                 WhatsApp
               </Button>
             </View>

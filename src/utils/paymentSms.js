@@ -26,7 +26,7 @@ const shortDate = (iso) => {
 // soltando lo menos importante (número de crédito, "Gracias", palabras) y por
 // último acorta el nombre de la empresa.
 //   MANOA: Pago C$1,250.00 recibido 01/11/26. Saldo capital: C$8,750.00. Cred. 1016. Gracias!
-export function buildShortPaymentSms({ tenantName, amount, date, principalAfter, loanLabel }) {
+export function buildShortPaymentSms({ tenantName, amount, date, principalAfter, loanLabel, balanceLabel = "Saldo capital" }) {
   // El nombre largo se corta a 25 para que quepan el pago y el saldo.
   const name = (toAscii(tenantName) || "CrediMaster").slice(0, 25).trim();
   const saldo = (label) => (principalAfter != null ? ` ${label}: C$${amountText(principalAfter)}.` : "");
@@ -35,9 +35,9 @@ export function buildShortPaymentSms({ tenantName, amount, date, principalAfter,
     `${n}: Pago C$${amountText(amount)} recibido ${shortDate(date)}.${saldo(label)}${withCred ? cred : ""}${thanks ? " Gracias!" : ""}`;
 
   const variants = [
-    { label: "Saldo capital", withCred: true, thanks: true },
-    { label: "Saldo capital", withCred: false, thanks: true },
-    { label: "Saldo capital", withCred: false, thanks: false },
+    { label: balanceLabel, withCred: true, thanks: true },
+    { label: balanceLabel, withCred: false, thanks: true },
+    { label: balanceLabel, withCred: false, thanks: false },
     { label: "Saldo", withCred: false, thanks: false },
   ];
   for (const v of variants) {

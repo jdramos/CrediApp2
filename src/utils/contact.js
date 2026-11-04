@@ -1,5 +1,7 @@
 import { Alert, Linking, Platform } from "react-native";
+import { captureRef } from "react-native-view-shot";
 import { money } from "./format";
+import { shareImage } from "./shareImage";
 
 // País por defecto para los números de 8 dígitos (Nicaragua). WhatsApp necesita
 // el número en formato internacional sin "+".
@@ -43,7 +45,10 @@ export const phoneOf = (c) => c?.cellphone || c?.telephone || "";
 const firstName = (full) => String(full || "").trim().split(/\s+/)[0] || "";
 
 // Texto del SMS/WhatsApp con el pago que acaba de recibir el cliente.
-export function buildPaymentMessage({ tenantName, amount, date, loanLabel, principal, interest, principalAfter, receiptNumber, usd }) {
+// `principalAfter` es el saldo que se le dice al cliente tras el pago y
+// `balanceLabel` cómo se llama: "Saldo capital" (sobre saldo) o "Saldo total" (flat:
+// capital + el interés que falta según el plan).
+export function buildPaymentMessage({ tenantName, amount, date, loanLabel, principal, interest, principalAfter, balanceLabel = "Saldo capital", receiptNumber, usd }) {
   const parts = [
     `${tenantName || "CrediMaster"}: recibimos su pago de ${money(amount)} el ${date} al crédito #${loanLabel}${receiptNumber ? ` (recibo ${receiptNumber})` : ""}.`,
   ];
@@ -51,7 +56,7 @@ export function buildPaymentMessage({ tenantName, amount, date, loanLabel, princ
   if (principal != null || interest != null) {
     parts.push(`Aplicado a capital ${money(Number(principal) || 0)} y a interés ${money(Number(interest) || 0)}.`);
   }
-  if (principalAfter != null) parts.push(`Saldo capital: ${money(principalAfter)}.`);
+  if (principalAfter != null) parts.push(`${balanceLabel}: ${money(principalAfter)}.`);
   parts.push("¡Gracias!");
   return parts.join(" ");
 }
@@ -101,6 +106,18 @@ export async function openWhatsApp(phone, body, meta) {
   } catch {
     Alert.alert("No se pudo abrir WhatsApp", "Verificá que WhatsApp esté instalado en este dispositivo.");
   }
+}
+
+// WhatsApp con la IMAGEN del comprobante (no texto). wa.me no puede adjuntar
+// archivos, así que se captura el comprobante y se abre la hoja de compartir del
+// sistema; el cobrador elige WhatsApp y el chat del cliente. Se reporta a la
+// oficina igual que el aviso de texto. `shotRef`: ref del ViewShot que envuelve
+// el comprobante. Lanza si no se pudo capturar/compartir.
+export async function sendReceiptImageWhatsApp(shotRef, phone, meta) {
+  const uri = await captureRef(shotRef, { format: "png", quality: 0.95 });
+  await shareImage(uri, "Comprobante de pago");
+  const digits = String(phone || "").replace(/\D/g, "");
+  reportManualNotice("MANUAL_WHATSAPP", digits || phone, "[Imagen del comprobante de pago]", meta);
 }
 
 export async function callPhone(phone) {

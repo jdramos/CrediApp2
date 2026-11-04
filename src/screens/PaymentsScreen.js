@@ -38,7 +38,7 @@ import { confirmAction } from "../utils/confirm";
 import { money, toNumber, formatAmountInput, usd as usdMoney, fxRate } from "../utils/format";
 import { loadUsdRate } from "../utils/usdRate";
 import { buildReceiptRows, formatReceiptNumber } from "../utils/receipt";
-import { buildPaymentMessage, openSms, openWhatsApp, phoneOf } from "../utils/contact";
+import { buildPaymentMessage, openSms, phoneOf, sendReceiptImageWhatsApp } from "../utils/contact";
 import { buildShortPaymentSms, sendAutoPaymentSms } from "../utils/paymentSms";
 import PaymentReceiptCard from "../components/PaymentReceiptCard";
 import { todayISO } from "../utils/date";
@@ -619,6 +619,15 @@ export default function PaymentsScreen({ route }) {
   // SMS automático (por defecto): al grabar el pago se manda solo, con el plan del
   // teléfono del cobrador, un texto corto con el pago y el saldo. Si falla, el pago
   // ya quedó grabado: se avisa y se puede reintentar.
+  // Saldo que se le dice al cliente en el aviso: crédito flat -> saldo total según el
+  // plan (capital + interés que falta); sobre saldo -> saldo de capital.
+  const noticeBalance = (r) => {
+    const flat = (r?.loan?.is_flat_plan ?? loan?.interest_type === "Flat") && r?.loan?.display_balance != null;
+    return flat
+      ? { principalAfter: r.loan.display_balance, balanceLabel: "Saldo total" }
+      : { principalAfter: r?.principal_balance_after, balanceLabel: "Saldo capital" };
+  };
+
   const runAutoSms = async (created) => {
     setAutoSms({ state: "sending" });
     const phone = await resolvePhone();
@@ -626,7 +635,7 @@ export default function PaymentsScreen({ route }) {
       tenantName: session?.tenant?.commercial_name || session?.tenant?.legal_name,
       amount: amountNio,
       date,
-      principalAfter: created?.principal_balance_after,
+      ...noticeBalance(created),
       loanLabel: loan?.credit_code || loan?.id || loan?.loan_id,
     });
     const res = await sendAutoPaymentSms({
@@ -653,7 +662,7 @@ export default function PaymentsScreen({ route }) {
           loanLabel: loan?.credit_code || loan?.id || loan?.loan_id,
           principal: applied ? Number(applied.principal) || 0 : undefined,
           interest: applied ? Number(applied.interest) || 0 : undefined,
-          principalAfter: result?.principal_balance_after,
+          ...noticeBalance(result),
           receiptNumber: formatReceiptNumber(result?.payment_id),
         }),
         { kind: "PAYMENT", paymentId: result?.payment_id, loanId: loan?.id || loan?.loan_id },
@@ -663,7 +672,22 @@ export default function PaymentsScreen({ route }) {
     }
   };
   const onSendSms = () => sendNotice(openSms);
-  const onSendWhatsApp = () => sendNotice(openWhatsApp);
+  // WhatsApp: se manda la imagen del comprobante, no un texto.
+  const onSendWhatsApp = async () => {
+    try {
+      setSmsBusy(true);
+      const phone = await resolvePhone();
+      await sendReceiptImageWhatsApp(receiptShotRef, phone, {
+        kind: "PAYMENT",
+        paymentId: result?.payment_id,
+        loanId: loan?.id || loan?.loan_id,
+      });
+    } catch (e) {
+      setError(e?.message ?? "No se pudo generar el comprobante para WhatsApp");
+    } finally {
+      setSmsBusy(false);
+    }
+  };
 
   const onPrintReceipt = () => {
     printReceipt(
@@ -1040,7 +1064,7 @@ export default function PaymentsScreen({ route }) {
               style={{ borderRadius: RADIUS.md }}
               contentStyle={{ height: 46 }}
             >
-              Compartir comprobante (WhatsApp, correo, etc.)
+              Compartir comprobante (correo, otras apps)
             </Button>
 
             {(autoSms?.state === "sending" || autoSms?.state === "sent" || autoSms?.state === "failed") && (
