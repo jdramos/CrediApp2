@@ -5,7 +5,8 @@ import { Text, Card, Button, ActivityIndicator, HelperText, Chip } from "react-n
 import { useFocusEffect } from "@react-navigation/native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SessionContext } from "../auth/SessionContext";
-import { getCustomer } from "../api/customerApi";
+import { getCustomer, getCustomerInfoUpdate } from "../api/customerApi";
+import InfoUpdateBanner from "../components/InfoUpdateBanner";
 import { getLoans } from "../api/loanApi";
 import { money } from "../utils/format";
 import { loanStage } from "../utils/loanStage";
@@ -57,6 +58,10 @@ export default function CustomerDetailScreen({ route, navigation }) {
     (p) => session?.permissions?.includes(p),
   );
 
+  // Expediente: plazo por nivel de riesgo, solo alerta (dueño, 2026-11-05).
+  const canUpdateInfo = ["clientes.expediente.actualizar", "clientes.editar"].some((p) => session?.permissions?.includes(p));
+  const [infoStatus, setInfoStatus] = useState(null);
+
   const [customer, setCustomer] = useState(null);
   const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -78,6 +83,10 @@ export default function CustomerDetailScreen({ route, navigation }) {
           if (alive) setLoading(false);
         }
       })();
+
+      getCustomerInfoUpdate(session.token, customerId)
+        .then((res) => alive && setInfoStatus(res?.data || null))
+        .catch(() => alive && setInfoStatus(null));
 
       if (canViewLoans) {
         (async () => {
@@ -122,6 +131,8 @@ export default function CustomerDetailScreen({ route, navigation }) {
 
         <HelperText type="error" visible={!!error}>{error}</HelperText>
 
+        <InfoUpdateBanner status={infoStatus} />
+
         <View style={styles.card}>
           <InfoRow icon="phone-outline" text={customer?.cellphone || customer?.telephone} />
           <InfoRow icon="home-outline" text={customer?.home_address} />
@@ -134,6 +145,16 @@ export default function CustomerDetailScreen({ route, navigation }) {
           >
             Ver / editar ubicación
           </Button>
+          {canUpdateInfo && (
+            <Button
+              mode={["OVERDUE", "DUE_SOON"].includes(infoStatus?.status) ? "contained" : "outlined"}
+              icon="account-edit-outline"
+              onPress={() => navigation.navigate("CustomerInfoUpdate", { customerId, customerName: customer?.customer_name })}
+              style={{ marginTop: SPACING.sm, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+            >
+              Actualizar expediente
+            </Button>
+          )}
           {canOpenFile && (
             <Button
               mode="outlined"

@@ -4,6 +4,7 @@ import CustomerSearchScreen from "../screens/CustomerSearchScreen";
 import CustomerDetailScreen from "../screens/CustomerDetailScreen";
 import CustomerLocationScreen from "../screens/CustomerLocationScreen";
 import CustomerFileScreen from "../screens/CustomerFileScreen";
+import CustomerInfoUpdateScreen from "../screens/CustomerInfoUpdateScreen";
 import LoanDetailScreen from "../screens/LoanDetailScreen";
 
 const Stack = createNativeStackNavigator();
@@ -33,6 +34,11 @@ export default function CustomerStackNavigator() {
         name="CustomerFile"
         component={CustomerFileScreen}
         options={{ title: "Expediente y garantías" }}
+      />
+      <Stack.Screen
+        name="CustomerInfoUpdate"
+        component={CustomerInfoUpdateScreen}
+        options={{ title: "Actualizar expediente" }}
       />
       <Stack.Screen
         name="LoanDetail"

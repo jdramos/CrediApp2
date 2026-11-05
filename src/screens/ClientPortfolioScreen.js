@@ -21,7 +21,7 @@ import * as Location from "expo-location";
 import { SessionContext } from "../auth/SessionContext";
 import { getAssignedLoans, logVisit, getMyLoanPayments } from "../api/collectionsApi";
 import { isNetworkError } from "../api/credimasterClient";
-import { getCustomer, saveCustomerLocation } from "../api/customerApi";
+import { getCustomer, saveCustomerLocation, getInfoUpdatesDue } from "../api/customerApi";
 import { confirmAction } from "../utils/confirm";
 import { enqueue } from "../offline/queue";
 import { useSync } from "../offline/SyncProvider";
@@ -168,6 +168,8 @@ export default function ClientPortfolioScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPromiseDatePicker, setShowPromiseDatePicker] = useState(false);
   const [cachedAt, setCachedAt] = useState(null);
+  // Expedientes vencidos / por vencer de la cartera (customer_id -> estado).
+  const [infoDue, setInfoDue] = useState(() => new Map());
 
   const canLogVisit = session?.permissions?.includes("cobranza.gestionar");
 
@@ -207,6 +209,13 @@ export default function ClientPortfolioScreen() {
       setLoans(res?.data || []);
       setMessage(res?.message || "");
       setCachedAt(stamp);
+      // Expedientes por actualizar (solo alerta): si falla, la cartera igual se muestra.
+      cachedFetch(`${session.user.id}:infoDue`, () => getInfoUpdatesDue(session.token))
+        .then((r) => {
+          const list = r?.data?.policy?.active ? r?.data?.data || [] : [];
+          setInfoDue(new Map(list.map((x) => [Number(x.customer_id), x.status])));
+        })
+        .catch(() => {});
     } catch (e) {
       setError(e?.message ?? "Error cargando tu cartera");
     } finally {
@@ -606,6 +615,16 @@ export default function ClientPortfolioScreen() {
                   {Number(item.due_today) === 1 && (
                     <Chip compact style={{ backgroundColor: COLORS.warningSoft }} textStyle={{ color: COLORS.warning, fontWeight: "700" }}>
                       Vence hoy
+                    </Chip>
+                  )}
+                  {["OVERDUE", "DUE_SOON"].includes(infoDue.get(Number(item.customer_id))) && (
+                    <Chip
+                      compact
+                      icon="file-alert-outline"
+                      style={{ backgroundColor: infoDue.get(Number(item.customer_id)) === "OVERDUE" ? COLORS.dangerSoft : COLORS.warningSoft }}
+                      textStyle={{ color: infoDue.get(Number(item.customer_id)) === "OVERDUE" ? COLORS.danger : COLORS.warning, fontWeight: "700" }}
+                    >
+                      {infoDue.get(Number(item.customer_id)) === "OVERDUE" ? "Expediente vencido" : "Expediente por vencer"}
                     </Chip>
                   )}
                   {inArrears ? (

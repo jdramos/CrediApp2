@@ -1,4 +1,4 @@
-import { credimasterGet, credimasterPut } from "./credimasterClient";
+import { credimasterGet, credimasterPost, credimasterPut } from "./credimasterClient";
 
 // Búsqueda liviana por nombre o identificación (GET /getCustomerList,
 // permiso clientes.ver) — pensada para autocompletar, no trae todos los
@@ -61,3 +61,19 @@ export const saveCustomerGuarantees = (token, customerId, fullCustomer, guarante
     { customer: fullCustomer, guarantees },
     token,
   );
+
+// Expediente del cliente (actualización periódica por nivel de riesgo, solo
+// alerta). GET trae el estado (vencido/por vencer/al día), los datos que se
+// revisan y el historial; POST guarda la actualización (permiso
+// clientes.expediente.actualizar o clientes.editar) — guardar sin cambios
+// también cuenta: quedan confirmados los datos. Ver backend
+// api/customer/customerInfoUpdate.js.
+export const getCustomerInfoUpdate = (token, customerId) =>
+  credimasterGet(`/api/customers/${customerId}/info-update`, token);
+
+export const saveCustomerInfoUpdate = (token, customerId, payload) =>
+  credimasterPost(`/api/customers/${customerId}/info-update`, { channel: "APP", ...payload }, token);
+
+// Expedientes vencidos o por vencer de la cartera del usuario (app=1).
+export const getInfoUpdatesDue = (token, status = "PENDING") =>
+  credimasterGet(`/api/customers/info-updates/due?app=1&status=${encodeURIComponent(status)}`, token);
