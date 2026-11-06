@@ -192,6 +192,15 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     getCollectorsByBranch(session.token, branchId).then((rows) => setCollectors(rows || [])).catch(() => setCollectors([]));
   }, [branchId, session.token]);
 
+  // Gestor por omisión = el del usuario (users.collector_id). Sin gestor el
+  // crédito no aparece en la cartera de la app del cobrador (JELDER, 2026-11-05:
+  // créditos de Ruta 3 registrados desde la app quedaron sin gestor).
+  const ownCollectorId = session?.user?.collector_id ?? null;
+  useEffect(() => {
+    if (vendorId != null || ownCollectorId == null) return;
+    if (collectors.some((c) => Number(c.id) === Number(ownCollectorId))) setVendorId(Number(ownCollectorId));
+  }, [collectors, ownCollectorId, vendorId]);
+
   useEffect(() => {
     if (!customer?.id) return;
     getCurrentEvaluation(session.token, customer.id).then(setEvaluation).catch(() => setEvaluation(null));
