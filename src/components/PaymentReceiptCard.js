@@ -22,7 +22,8 @@ const styles = StyleSheet.create({
 // Comprobante de pago (las dos tarjetas que se comparten como imagen): quién
 // pagó, a qué crédito y cómo se aplicó el monto. Lo usan el paso final de
 // "Registrar pago" y la reimpresión desde "Mis cobros". Se pone dentro de un
-// ViewShot para capturarlo. Los saldos son opcionales: un cobro antiguo no los
+// ViewShot para capturarlo. Con `flat` (interés flat) no se desglosa capital e
+// interés: saldo total anterior, monto pagado y nuevo saldo total. Los saldos son opcionales: un cobro antiguo no los
 // guarda y simplemente no se muestran.
 export default function PaymentReceiptCard({
   tenantName,
@@ -40,6 +41,8 @@ export default function PaymentReceiptCard({
   principalBefore,
   principalAfter,
   newBalance,
+  flat = false,
+  totalBefore,
 }) {
   const title = pendingOffline ? "COMPROBANTE (PENDIENTE DE SINCRONIZAR)" : copy ? "COMPROBANTE DE PAGO (COPIA)" : "COMPROBANTE DE PAGO";
   return (
@@ -66,6 +69,15 @@ export default function PaymentReceiptCard({
       </View>
 
       <View style={styles.card}>
+        {flat && totalBefore != null && (
+          <>
+            <View style={styles.breakdownRow}>
+              <Text style={{ color: COLORS.muted }}>Saldo total anterior</Text>
+              <Text style={{ color: COLORS.text, fontWeight: "700" }}>{money(totalBefore)}</Text>
+            </View>
+            <Divider style={{ marginVertical: SPACING.xs }} />
+          </>
+        )}
         <View style={styles.breakdownRow}>
           <Text style={{ color: COLORS.text, fontWeight: "800" }}>Monto pagado</Text>
           <Text style={{ color: COLORS.primary, fontWeight: "800", fontSize: 18 }}>{money(amount)}</Text>
@@ -86,7 +98,7 @@ export default function PaymentReceiptCard({
             ))}
           </>
         )}
-        {principalBefore != null && (
+        {!flat && principalBefore != null && (
           <>
             <Divider style={{ marginVertical: SPACING.xs }} />
             <View style={styles.breakdownRow}>

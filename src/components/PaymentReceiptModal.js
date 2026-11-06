@@ -5,7 +5,7 @@ import ViewShot, { captureRef } from "react-native-view-shot";
 import { SessionContext } from "../auth/SessionContext";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import PaymentReceiptCard from "./PaymentReceiptCard";
-import { appliedFromPaymentRow, buildReceiptRows, formatReceiptNumber } from "../utils/receipt";
+import { appliedFromPaymentRow, buildFlatReceiptRows, buildReceiptRows, formatReceiptNumber, totalBalanceBefore } from "../utils/receipt";
 import { buildPaymentMessage, openSms, phoneOf, sendReceiptImageWhatsApp } from "../utils/contact";
 import { printReceipt, buildPaymentReceiptLines } from "../utils/printer";
 import { shareImage } from "../utils/shareImage";
@@ -29,8 +29,9 @@ const styles = StyleSheet.create({
 
 // Comprobante de un cobro ya registrado (desde "Mis cobros"): se ve igual que
 // el del momento del pago y se puede reenviar como imagen, por SMS o por
-// WhatsApp al cliente, o imprimir. Los saldos de ese día no se guardan, así que
-// la copia muestra el monto y cómo se aplicó.
+// WhatsApp al cliente, o imprimir. La copia muestra el monto, cómo se aplicó y el
+// saldo total que le quedó al crédito después de ese pago (`balance_after`, lo
+// calcula el servidor; un servidor viejo no lo manda y simplemente no se muestra).
 export default function PaymentReceiptModal({ payment, onDismiss }) {
   const { session } = useContext(SessionContext);
   const logoUrl = useTenantLogo(session?.token);
@@ -73,11 +74,17 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
         principal: payment.principal_payment,
         interest: payment.interest_payment,
         receiptNumber: formatReceiptNumber(payment.id),
+        principalAfter: payment.balance_after,
+        balanceLabel: "Saldo total",
         usd: payment.usd_amount ? { foreign_amount: payment.usd_amount, fx_rate: payment.fx_rate } : null,
       })
     : "";
 
-  const rows = payment ? buildReceiptRows(appliedFromPaymentRow(payment)) : [];
+  // Interés flat: sin desglose de capital e interés; saldo total anterior, pago y nuevo saldo total.
+  const applied = payment ? appliedFromPaymentRow(payment) : null;
+  const flat = !!payment?.is_flat_plan && payment.balance_after != null;
+  const rows = payment ? (flat ? buildFlatReceiptRows(applied) : buildReceiptRows(applied)) : [];
+  const totalBefore = flat ? totalBalanceBefore(payment.balance_after, applied) : null;
 
   const onPrint = () => {
     printReceipt(
@@ -92,6 +99,9 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
         collectorName,
         amount: payment.amount,
         breakdownRows: rows,
+        newBalance: payment.balance_after,
+        flat,
+        totalBefore,
         receiptNumber: formatReceiptNumber(payment.id),
         usd: payment.usd_amount ? { foreign_amount: payment.usd_amount, fx_rate: payment.fx_rate } : null,
       }),
@@ -122,6 +132,9 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
                   usd={payment.usd_amount ? { foreign_amount: payment.usd_amount, fx_rate: payment.fx_rate } : null}
                   amount={payment.amount}
                   rows={rows}
+                  newBalance={payment.balance_after}
+                  flat={flat}
+                  totalBefore={totalBefore}
                 />
               </ViewShot>
             </ScrollView>

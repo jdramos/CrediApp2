@@ -37,7 +37,7 @@ import BusinessDayBanner from "../components/BusinessDayBanner";
 import { confirmAction } from "../utils/confirm";
 import { money, toNumber, formatAmountInput, usd as usdMoney, fxRate } from "../utils/format";
 import { loadUsdRate } from "../utils/usdRate";
-import { buildReceiptRows, formatReceiptNumber } from "../utils/receipt";
+import { buildFlatReceiptRows, buildReceiptRows, formatReceiptNumber, totalBalanceBefore } from "../utils/receipt";
 import { buildPaymentMessage, openSms, phoneOf, sendReceiptImageWhatsApp } from "../utils/contact";
 import { buildShortPaymentSms, sendAutoPaymentSms } from "../utils/paymentSms";
 import PaymentReceiptCard from "../components/PaymentReceiptCard";
@@ -705,6 +705,8 @@ export default function PaymentsScreen({ route }) {
         principalBalanceBefore: result?.principal_balance_before,
         principalBalanceAfter: result?.principal_balance_after,
         newBalance: result?.loan?.display_balance ?? result?.loan?.current_balance,
+        flat: flatReceipt,
+        totalBefore: receiptTotalBefore,
         receiptNumber: formatReceiptNumber(result?.payment_id),
       }),
     );
@@ -733,7 +735,15 @@ export default function PaymentsScreen({ route }) {
   };
 
   const breakdownRows = useMemo(() => buildBreakdownRows(breakdown?.applied || breakdown), [breakdown]);
-  const receiptRows = useMemo(() => buildReceiptRows(result?.applied), [result]);
+  // Interés flat: el comprobante no desglosa capital e interés (saldo total anterior,
+  // pago y nuevo saldo total). Sin la respuesta del servidor (pago sin conexión) no hay
+  // saldos y se muestra como siempre.
+  const flatReceipt = !!(result?.loan?.is_flat_plan ?? loan?.interest_type === "Flat") && result?.loan?.display_balance != null;
+  const receiptRows = useMemo(
+    () => (flatReceipt ? buildFlatReceiptRows(result?.applied) : buildReceiptRows(result?.applied)),
+    [result, flatReceipt],
+  );
+  const receiptTotalBefore = flatReceipt ? totalBalanceBefore(result?.loan?.display_balance, result?.applied) : null;
 
   if (!canView && !canCreate) {
     return (
@@ -1023,6 +1033,8 @@ export default function PaymentsScreen({ route }) {
                 principalBefore={result?.principal_balance_before}
                 principalAfter={result?.principal_balance_after}
                 newBalance={result?.loan?.display_balance ?? result?.loan?.current_balance}
+                flat={flatReceipt}
+                totalBefore={receiptTotalBefore}
               />
             </ViewShot>
 

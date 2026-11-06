@@ -119,6 +119,8 @@ export function buildPaymentReceiptLines({
   newBalance,
   receiptNumber,
   usd,
+  flat = false,
+  totalBefore,
 }) {
   const lines = [
     center((tenantName || "CrediMaster").toUpperCase()),
@@ -134,13 +136,14 @@ export function buildPaymentReceiptLines({
   lines.push(`Fecha: ${date || ""}`);
   if (collectorName) lines.push(`Cobrado por: ${collectorName}`);
   lines.push(divider());
+  if (flat && totalBefore != null) lines.push(twoCol("Saldo total anterior", money(totalBefore)));
   lines.push(twoCol("Monto pagado", money(amount)));
   if (usd) {
     lines.push(`Recibido: US$ ${Number(usd.foreign_amount).toFixed(2)}`);
     lines.push(`TC de compra: C$ ${Number(usd.fx_rate).toFixed(2)}`);
   }
   (breakdownRows || []).forEach((r) => lines.push(twoCol(r.label, money(r.value))));
-  if (principalBalanceBefore != null) {
+  if (!flat && principalBalanceBefore != null) {
     lines.push(divider());
     lines.push(twoCol("Saldo capital anterior", money(principalBalanceBefore)));
     lines.push(twoCol("Saldo capital nuevo", money(principalBalanceAfter)));

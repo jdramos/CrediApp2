@@ -18,6 +18,28 @@ export function buildReceiptRows(applied) {
     .map(([key, label]) => ({ label, value: Number(applied[key]) || 0 }));
 }
 
+// Crédito con interés flat: el comprobante no desglosa capital e interés; muestra
+// saldo total anterior, pago y nuevo saldo total (dueño, 2026-11-06). Solo se
+// aclara el interés moratorio, que no baja el saldo del plan.
+export function buildFlatReceiptRows(applied) {
+  return applied && Number(applied.default_interest) > 0
+    ? [{ label: "Interés moratorio", value: Number(applied.default_interest) }]
+    : [];
+}
+
+// Lo que el pago bajó del saldo total del plan flat (todo menos el moratorio).
+export function planAppliedTotal(applied) {
+  if (!applied) return 0;
+  const sum = ["principal", "interest", "insurance", "fee", "other"].reduce((a, k) => a + (Number(applied[k]) || 0), 0);
+  return Math.round(sum * 100) / 100;
+}
+
+// Saldo total ANTES del pago = el nuevo saldo + lo que el pago bajó del plan.
+export function totalBalanceBefore(newBalance, applied) {
+  if (newBalance == null || !Number.isFinite(Number(newBalance))) return null;
+  return Math.round((Number(newBalance) + planAppliedTotal(applied)) * 100) / 100;
+}
+
 // Convierte una fila de "Mis cobros" (campos *_payment) a la forma `applied`.
 export function appliedFromPaymentRow(p) {
   return {
