@@ -92,6 +92,8 @@ export function SessionProvider({ children }) {
         collector_id: res.collector_id ?? null,
         // Excepción a la ubicación obligatoria (se administra desde la web).
         location_exempt: !!res.location_exempt,
+        // Horario de uso de la app (se administra desde la web): { restricted, allowed, windows }.
+        app_schedule: res.app_schedule || null,
         branches: res.branches || [],
       },
       tenant: res.tenant,

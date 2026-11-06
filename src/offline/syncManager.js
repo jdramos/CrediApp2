@@ -4,7 +4,7 @@ import { uploadCustomerDocument } from "../api/customerDocumentApi";
 import { saveCustomerLocation, saveCustomerInfoUpdate } from "../api/customerApi";
 import { logVisit } from "../api/collectionsApi";
 import { uploadPaymentEvidence } from "../api/paymentEvidenceApi";
-import { isNetworkError } from "../api/credimasterClient";
+import { isNetworkError, setOfflineSyncMode } from "../api/credimasterClient";
 import { listQueue, removeFromQueue, updateQueueItem, clearQueue } from "./queue";
 import { deletePersistedFile } from "./filePersist";
 
@@ -53,6 +53,9 @@ function processItem(token, item) {
 export async function flushQueue(token, { onProgress } = {}) {
   if (syncing || !token) return { synced: 0, failed: 0 };
   syncing = true;
+  // Marca las llamadas como "envío de pendientes": el servidor las deja pasar aun fuera
+  // del horario de uso de la app (lo cobrado sin señal no se pierde por la hora).
+  setOfflineSyncMode(true);
   let synced = 0;
   let failed = 0;
   try {
@@ -70,6 +73,10 @@ export async function flushQueue(token, { onProgress } = {}) {
         if (isNetworkError(e)) {
           break;
         }
+        // Fuera del horario de uso de la app: no es un error del ítem, se reintenta en el horario.
+        if (e?.status === 403 && e?.data?.code === "OUTSIDE_SCHEDULE") {
+          break;
+        }
         failed += 1;
         await updateQueueItem(item.id, {
           status: "FAILED",
@@ -81,6 +88,7 @@ export async function flushQueue(token, { onProgress } = {}) {
     }
   } finally {
     syncing = false;
+    setOfflineSyncMode(false);
   }
   return { synced, failed };
 }

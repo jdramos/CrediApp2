@@ -19,11 +19,34 @@ function checkUnauthorized(status, hadToken) {
   if (status === 401 && hadToken) onUnauthorized?.();
 }
 
+// Fuera del horario de uso de la app (se configura en la web) el servidor responde
+// 403 con code OUTSIDE_SCHEDULE; ScheduleGate registra aquí qué hacer (tapar la app
+// con el aviso). Es un 403 como cualquier otro para quien llamó: el error sigue su camino.
+let onOutsideSchedule = null;
+export function setOutsideScheduleHandler(fn) {
+  onOutsideSchedule = fn;
+}
+function checkOutsideSchedule(status, data) {
+  if (status === 403 && data?.code === "OUTSIDE_SCHEDULE") onOutsideSchedule?.(data);
+}
+
+// Identifica a la app ante el servidor (el horario de uso solo aplica a la app, no a
+// la web) y marca el envío de lo pendiente sin señal, que se permite fuera de horario.
+let offlineSyncMode = false;
+export function setOfflineSyncMode(on) {
+  offlineSyncMode = !!on;
+}
+function appHeaders(headers) {
+  headers["X-Client-App"] = "crediapp";
+  if (offlineSyncMode) headers["X-Offline-Sync"] = "1";
+  return headers;
+}
+
 // Cliente HTTP para el backend real de CrediMaster (Node/Express, JWT).
 async function request(method, path, { body, token } = {}) {
   if (!BASE_URL) throw new Error("Falta EXPO_PUBLIC_CREDIMASTER_API_URL en .env");
 
-  const headers = { "Content-Type": "application/json" };
+  const headers = appHeaders({ "Content-Type": "application/json" });
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const response = await fetch(`${BASE_URL}${path}`, {
@@ -42,6 +65,7 @@ async function request(method, path, { body, token } = {}) {
 
   if (!response.ok) {
     checkUnauthorized(response.status, !!token);
+    checkOutsideSchedule(response.status, data);
     // Algunos controladores del backend responden { error } (aprobaciones, por
     // ejemplo) y otros { message }: se muestra el motivo real en cualquier caso.
     const message = data?.message || data?.error || `Error HTTP ${response.status}`;
@@ -73,7 +97,7 @@ export const credimasterPut = (path, body, token) => request("PUT", path, { body
 export async function credimasterUpload(path, formData, token, method = "POST") {
   if (!BASE_URL) throw new Error("Falta EXPO_PUBLIC_CREDIMASTER_API_URL en .env");
 
-  const headers = {};
+  const headers = appHeaders({});
   if (token) headers.Authorization = `Bearer ${token}`;
 
   // Web: convierte el archivo anotado por buildImageFormData en un Blob real.
@@ -107,6 +131,7 @@ export async function credimasterUpload(path, formData, token, method = "POST") 
 
   if (!response.ok) {
     checkUnauthorized(response.status, !!token);
+    checkOutsideSchedule(response.status, data);
     // Algunos controladores del backend responden { error } (aprobaciones, por
     // ejemplo) y otros { message }: se muestra el motivo real en cualquier caso.
     const message = data?.message || data?.error || `Error HTTP ${response.status}`;

@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useRef } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import * as Notifications from "expo-notifications";
@@ -16,6 +16,7 @@ import CollectorDetailScreen from "../screens/CollectorDetailScreen";
 import GlobalSearchScreen from "../screens/GlobalSearchScreen";
 import AppTabs from "./AppTabs";
 import LocationGate from "../components/LocationGate";
+import ScheduleGate from "../components/ScheduleGate";
 import { ActivityIndicator } from "react-native-paper";
 import { View } from "react-native";
 import { COLORS } from "../theme/colors";
@@ -28,6 +29,8 @@ export const navigationRef = createNavigationContainerRef();
 export default function AppNavigator() {
   const { loadingBoot, session } = useContext(SessionContext);
   const responseListener = useRef();
+  // Pantalla actual: ScheduleGate deja usar solo algunas fuera del horario de la app.
+  const [routeName, setRouteName] = useState(null);
 
   useEffect(() => {
     responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
@@ -46,7 +49,11 @@ export default function AppNavigator() {
 
   return (
     <>
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={() => setRouteName(navigationRef.getCurrentRoute()?.name ?? null)}
+      onStateChange={() => setRouteName(navigationRef.getCurrentRoute()?.name ?? null)}
+    >
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {session ? (
           <>
@@ -69,6 +76,8 @@ export default function AppNavigator() {
     </NavigationContainer>
     {/* Sin ubicación activa no se puede operar: bloquea toda la app (no el login). */}
     {session ? <LocationGate /> : null}
+    {/* Fuera del horario de uso de la app (lo define la oficina): solo pendientes y cierre del día. */}
+    {session ? <ScheduleGate routeName={routeName} onOpenRoute={(name) => navigationRef.isReady() && navigationRef.navigate(name)} /> : null}
     </>
   );
 }
