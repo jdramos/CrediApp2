@@ -5,7 +5,7 @@ import ViewShot, { captureRef } from "react-native-view-shot";
 import { SessionContext } from "../auth/SessionContext";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import PaymentReceiptCard from "./PaymentReceiptCard";
-import { appliedFromPaymentRow, buildFlatReceiptRows, buildReceiptRows, formatReceiptNumber, totalBalanceBefore } from "../utils/receipt";
+import { appliedFromPaymentRow, buildFlatReceiptRows, buildReceiptRows, formatReceiptNumber, installmentDetailRows, totalBalanceBefore } from "../utils/receipt";
 import { buildPaymentMessage, openSms, phoneOf, sendReceiptImageWhatsApp } from "../utils/contact";
 import { printReceipt, buildPaymentReceiptLines } from "../utils/printer";
 import { shareImage } from "../utils/shareImage";
@@ -102,6 +102,7 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
         newBalance: payment.balance_after,
         flat,
         totalBefore,
+        installmentDetail: installmentDetailRows(payment.installments),
         receiptNumber: formatReceiptNumber(payment.id),
         usd: payment.usd_amount ? { foreign_amount: payment.usd_amount, fx_rate: payment.fx_rate } : null,
       }),
@@ -135,6 +136,7 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
                   newBalance={payment.balance_after}
                   flat={flat}
                   totalBefore={totalBefore}
+                  installmentDetail={installmentDetailRows(payment.installments)}
                 />
               </ViewShot>
             </ScrollView>

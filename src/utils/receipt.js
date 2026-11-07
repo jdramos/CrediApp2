@@ -52,6 +52,32 @@ export function appliedFromPaymentRow(p) {
   };
 }
 
+// Detalle de las cuotas que cubrió el pago, una fila por cuota: número, lo que ESTE
+// pago le aplicó y si quedó pagada o fue un abono, con los días de atraso con que se
+// pagó (0 = a tiempo). `installments` viene del servidor.
+export const lateText = (days) => {
+  const d = Number(days) || 0;
+  return d > 0 ? `${d} día${d === 1 ? "" : "s"} de atraso` : "";
+};
+export function installmentDetailRows(installments) {
+  return (Array.isArray(installments) ? installments : []).map((i) => {
+    const paid = !!i.paid;
+    const late = lateText(i.days_late);
+    const scheduled = Number(i.scheduled) || 0;
+    return {
+      key: String(i.n),
+      label: `Cuota ${i.n}`,
+      amount: Number(i.applied) || 0,
+      paid,
+      late: Number(i.days_late) > 0,
+      status: paid
+        ? late ? `Pagada con ${late}` : "Pagada a tiempo"
+        : `Abono${late ? ` (${late})` : ""}`,
+      scheduled,
+    };
+  });
+}
+
 // Nº de recibo: es el id del pago (único y consecutivo en la empresa), con 6
 // cifras: 5366 -> "005366". Es el mismo número que el ID de la lista de pagos
 // de la plataforma web, así la oficina lo encuentra directo. Un pago guardado

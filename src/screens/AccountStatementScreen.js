@@ -13,6 +13,7 @@ import PayoffModal from "../components/PayoffModal";
 import { money } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { printReceipt, buildAccountStatementReceiptLines, summarizeMovements } from "../utils/printer";
+import { formatReceiptNumber, installmentDetailRows } from "../utils/receipt";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
@@ -60,6 +61,12 @@ export default function AccountStatementScreen({ route }) {
   const [showPayoff, setShowPayoff] = useState(false);
   const [error, setError] = useState("");
   const [showDetail, setShowDetail] = useState(false);
+  // Pagos recibidos que se ven en pantalla (de 5 en 5 con "Ver más"). Al compartir la
+  // imagen se arma con TODO el detalle: todas las cuotas y todos los pagos.
+  const PAGE = 5;
+  const [visiblePayments, setVisiblePayments] = useState(PAGE);
+  const [visibleMoves, setVisibleMoves] = useState(10);
+  const [capturing, setCapturing] = useState(false);
 
   // Resumen a partir de las cuotas (no de capital/interés sueltos): lo que
   // el cobrador necesita ver de un vistazo es cuánto está atrasado, cuánto
@@ -81,7 +88,7 @@ export default function AccountStatementScreen({ route }) {
         // se aplanan en un solo objeto porque toda la pantalla lee los
         // campos de "header" (customer_name, capital_balance, etc.) al
         // nivel raíz de `statement`.
-        setStatement(res?.header ? { ...res.header, movements: res.movements } : null);
+        setStatement(res?.header ? { ...res.header, movements: res.movements, payments: res.payments || [] } : null);
       } catch (e) {
         setError(e?.message ?? "Error cargando el estado de cuenta");
       } finally {
@@ -93,11 +100,15 @@ export default function AccountStatementScreen({ route }) {
   const onShare = async () => {
     try {
       setSharing(true);
+      setCapturing(true);
+      // Deja que se dibuje el detalle completo antes de capturar.
+      await new Promise((resolve) => setTimeout(resolve, 400));
       const uri = await captureRef(shotRef, { format: "png", quality: 0.95 });
       await shareImage(uri, "Estado de cuenta");
     } catch (e) {
       setError(e?.message ?? "No se pudo generar la imagen para compartir");
     } finally {
+      setCapturing(false);
       setSharing(false);
     }
   };
@@ -198,6 +209,12 @@ export default function AccountStatementScreen({ route }) {
               <Text style={{ color: COLORS.text, fontWeight: "800" }}>Total adeudado</Text>
               <Text style={{ color: COLORS.primary, fontWeight: "800", fontSize: 18 }}>{money(summary.totalBalance)}</Text>
             </View>
+            {statement.total_paid != null && (
+              <View style={styles.balanceRow}>
+                <Text style={{ color: COLORS.muted }}>Monto total pagado</Text>
+                <Text style={{ color: COLORS.success, fontWeight: "700" }}>{money(statement.total_paid)}</Text>
+              </View>
+            )}
             {!!summary.overdueSinceDate && (
               <Text style={{ color: COLORS.danger, marginTop: SPACING.sm, fontSize: 12 }}>
                 En mora desde el {String(summary.overdueSinceDate).slice(0, 10)}
@@ -213,7 +230,7 @@ export default function AccountStatementScreen({ route }) {
                   {showDetail ? "Ocultar" : "Ver detalle"}
                 </Button>
               </View>
-              {showDetail && statement.movements.map((m, idx) => (
+              {(showDetail || capturing) && (capturing ? statement.movements : statement.movements.slice(0, visibleMoves)).map((m, idx) => (
                 <View key={m.payment_number ?? idx}>
                   {idx > 0 && <Divider />}
                   <View style={styles.moveRow}>
@@ -230,6 +247,51 @@ export default function AccountStatementScreen({ route }) {
                   </View>
                 </View>
               ))}
+              {showDetail && !capturing && statement.movements.length > visibleMoves && (
+                <Button compact mode="text" onPress={() => setVisibleMoves((v) => v + 20)}>
+                  {`Ver más (${statement.movements.length - visibleMoves} restantes)`}
+                </Button>
+              )}
+            </View>
+          )}
+
+          {Array.isArray(statement.payments) && statement.payments.length > 0 && (
+            <View style={styles.card}>
+              <Text style={{ fontWeight: "800", color: COLORS.text, marginBottom: SPACING.xs }}>
+                Pagos recibidos ({statement.payments.length})
+              </Text>
+              {(capturing ? statement.payments : statement.payments.slice(0, visiblePayments)).map((p, idx) => (
+                <View key={p.payment_id}>
+                  {idx > 0 && <Divider style={{ marginVertical: SPACING.sm }} />}
+                  <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                    {p.payment_date} · Recibo {formatReceiptNumber(p.payment_id)}
+                  </Text>
+                  <View style={styles.balanceRow}>
+                    <Text style={{ color: COLORS.text, fontWeight: "800" }}>Pago recibido</Text>
+                    <Text style={{ color: COLORS.primary, fontWeight: "800", fontSize: 16 }}>{money(p.payment_total)}</Text>
+                  </View>
+                  {installmentDetailRows(p.installments).length > 0 && (
+                    <>
+                      <Text style={{ color: COLORS.text, fontWeight: "700", marginBottom: 2 }}>Cuotas cubiertas</Text>
+                      {installmentDetailRows(p.installments).map((d) => (
+                        <View key={d.key} style={{ marginLeft: SPACING.md, paddingVertical: 3 }}>
+                          <Text style={{ color: COLORS.text }}>
+                            {d.label}: <Text style={{ fontWeight: "700" }}>{money(d.amount)}</Text>
+                          </Text>
+                          <Text style={{ color: d.late || !d.paid ? COLORS.warning : COLORS.success, fontSize: 12 }}>
+                            {d.status}{d.paid ? "" : `, la cuota es de ${money(d.scheduled)}`}
+                          </Text>
+                        </View>
+                      ))}
+                    </>
+                  )}
+                </View>
+              ))}
+              {!capturing && statement.payments.length > visiblePayments && (
+                <Button compact mode="text" onPress={() => setVisiblePayments((v) => v + 10)}>
+                  {`Ver más (${statement.payments.length - visiblePayments} restantes)`}
+                </Button>
+              )}
             </View>
           )}
         </ViewShot>

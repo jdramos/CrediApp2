@@ -43,6 +43,7 @@ export default function PaymentReceiptCard({
   newBalance,
   flat = false,
   totalBefore,
+  installmentDetail = [],
 }) {
   const title = pendingOffline ? "COMPROBANTE (PENDIENTE DE SINCRONIZAR)" : copy ? "COMPROBANTE DE PAGO (COPIA)" : "COMPROBANTE DE PAGO";
   return (
@@ -79,13 +80,29 @@ export default function PaymentReceiptCard({
           </>
         )}
         <View style={styles.breakdownRow}>
-          <Text style={{ color: COLORS.text, fontWeight: "800" }}>Monto pagado</Text>
+          <Text style={{ color: COLORS.text, fontWeight: "800" }}>Pago recibido</Text>
           <Text style={{ color: COLORS.primary, fontWeight: "800", fontSize: 18 }}>{money(amount)}</Text>
         </View>
         {!!usd && (
           <Text style={{ color: COLORS.muted, fontSize: 12 }}>
             Recibido en dólares: {usdMoney(usd.foreign_amount)} al tipo de cambio de compra C$ {fxRate(usd.fx_rate)}
           </Text>
+        )}
+        {installmentDetail.length > 0 && (
+          <>
+            <Divider style={{ marginVertical: SPACING.xs }} />
+            <Text style={{ color: COLORS.text, fontWeight: "700", marginBottom: 2 }}>Cuotas cubiertas por este pago</Text>
+            {installmentDetail.map((d) => (
+              <View key={d.key} style={{ marginLeft: SPACING.md, paddingVertical: 3 }}>
+                <Text style={{ color: COLORS.text }}>
+                  {d.label}: <Text style={{ fontWeight: "700" }}>{money(d.amount)}</Text>
+                </Text>
+                <Text style={{ color: d.late || !d.paid ? COLORS.warning : COLORS.success, fontSize: 12 }}>
+                  {d.status}{d.paid ? "" : `, la cuota es de ${money(d.scheduled)}`}
+                </Text>
+              </View>
+            ))}
+          </>
         )}
         {rows.length > 0 && (
           <>

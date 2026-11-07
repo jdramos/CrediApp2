@@ -35,6 +35,25 @@ export const getLoans = (token, params = {}) => {
   return credimasterGet(`/api/loans${qs ? `?${qs}` : ""}`, token);
 };
 
+// Todos los créditos que cumplen el filtro, no solo la primera página: pide de
+// a 500 (el máximo del servidor) hasta completar el total. Puede tardar si hay
+// muchos, pero la lista queda completa (regla del dueño: se pueden ver todos
+// aunque cargue lento). `total` sigue siendo el del servidor.
+export const getAllLoans = async (token, params = {}) => {
+  const PAGE = 500;
+  const MAX_PAGES = 40; // tope de seguridad: 20,000 créditos
+  const first = await getLoans(token, { ...params, page: 1, limit: PAGE });
+  const rows = [...(first?.data || [])];
+  const total = Number(first?.total ?? rows.length);
+  for (let page = 2; rows.length < total && page <= MAX_PAGES; page += 1) {
+    const next = await getLoans(token, { ...params, page, limit: PAGE });
+    const chunk = next?.data || [];
+    if (!chunk.length) break;
+    rows.push(...chunk);
+  }
+  return { ...first, data: rows, total };
+};
+
 // Estado de cuenta completo (saldo capital/interés/seguro/cargos, mora,
 // y el detalle de cada cuota) — permiso creditos.estado_cuenta.ver.
 export const getAccountStatement = (token, loanId, date) =>

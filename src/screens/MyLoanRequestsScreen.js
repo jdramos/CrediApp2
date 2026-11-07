@@ -5,7 +5,7 @@ import { Text, TextInput, Card, Chip, ActivityIndicator, HelperText, IconButton,
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getAccessibleBranches } from "../api/branchApi";
-import { getLoans } from "../api/loanApi";
+import { getAllLoans, getLoans } from "../api/loanApi";
 import { money } from "../utils/format";
 import { periodRange } from "../utils/date";
 import { loanStage } from "../utils/loanStage";
@@ -96,7 +96,7 @@ export default function MyLoanRequestsScreen() {
         else setLoading(true);
         setError("");
         const range = period === "all" ? null : periodRange(period);
-        const res = await getLoans(session.token, {
+        const res = await getAllLoans(session.token, {
           status,
           search: search.trim() || undefined,
           branch_id: branchId,
@@ -105,7 +105,6 @@ export default function MyLoanRequestsScreen() {
           endDate: range?.to,
           sortBy: "a.id",
           sortOrder: "DESC",
-          limit: 100,
         });
         setLoans(res?.data || []);
         setTotal(res?.total ?? (res?.data || []).length);

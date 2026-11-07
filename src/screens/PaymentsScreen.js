@@ -37,7 +37,7 @@ import BusinessDayBanner from "../components/BusinessDayBanner";
 import { confirmAction } from "../utils/confirm";
 import { money, toNumber, formatAmountInput, usd as usdMoney, fxRate } from "../utils/format";
 import { loadUsdRate } from "../utils/usdRate";
-import { buildFlatReceiptRows, buildReceiptRows, formatReceiptNumber, totalBalanceBefore } from "../utils/receipt";
+import { buildFlatReceiptRows, buildReceiptRows, formatReceiptNumber, installmentDetailRows, totalBalanceBefore } from "../utils/receipt";
 import { buildPaymentMessage, openSms, phoneOf, sendReceiptImageWhatsApp } from "../utils/contact";
 import { buildShortPaymentSms, sendAutoPaymentSms } from "../utils/paymentSms";
 import PaymentReceiptCard from "../components/PaymentReceiptCard";
@@ -707,6 +707,7 @@ export default function PaymentsScreen({ route }) {
         newBalance: result?.loan?.display_balance ?? result?.loan?.current_balance,
         flat: flatReceipt,
         totalBefore: receiptTotalBefore,
+        installmentDetail: installmentDetailRows(result?.installments),
         receiptNumber: formatReceiptNumber(result?.payment_id),
       }),
     );
@@ -1035,6 +1036,7 @@ export default function PaymentsScreen({ route }) {
                 newBalance={result?.loan?.display_balance ?? result?.loan?.current_balance}
                 flat={flatReceipt}
                 totalBefore={receiptTotalBefore}
+                installmentDetail={installmentDetailRows(result?.installments)}
               />
             </ViewShot>
 

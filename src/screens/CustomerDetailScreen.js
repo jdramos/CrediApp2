@@ -7,7 +7,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SessionContext } from "../auth/SessionContext";
 import { getCustomer, getCustomerInfoUpdate } from "../api/customerApi";
 import InfoUpdateBanner from "../components/InfoUpdateBanner";
-import { getLoans } from "../api/loanApi";
+import { getAllLoans } from "../api/loanApi";
 import { money } from "../utils/format";
 import { loanStage } from "../utils/loanStage";
 import { COLORS } from "../theme/colors";
@@ -96,11 +96,10 @@ export default function CustomerDetailScreen({ route, navigation }) {
             // resumen de "activos con saldo" (ese solo trae DISBURSED,
             // pensado para elegir a cuál pagarle, no para ver el estado
             // general del cliente).
-            const res = await getLoans(session.token, {
+            const res = await getAllLoans(session.token, {
               customer_id: customerId,
               sortBy: "a.date",
               sortOrder: "DESC",
-              limit: 50,
             });
             if (alive) setLoans(res?.data || []);
           } catch {

@@ -53,10 +53,8 @@ export function buildPaymentMessage({ tenantName, amount, date, loanLabel, princ
     `${tenantName || "CrediMaster"}: recibimos su pago de ${money(amount)} el ${date} al crédito #${loanLabel}${receiptNumber ? ` (recibo ${receiptNumber})` : ""}.`,
   ];
   if (usd) parts.push(`Lo recibimos en dólares: US$ ${Number(usd.foreign_amount).toFixed(2)} al tipo de cambio de compra C$ ${Number(usd.fx_rate).toFixed(2)}.`);
-  if (principal != null || interest != null) {
-    parts.push(`Aplicado a capital ${money(Number(principal) || 0)} y a interés ${money(Number(interest) || 0)}.`);
-  }
-  if (principalAfter != null) parts.push(`${balanceLabel}: ${money(principalAfter)}.`);
+  // Solo el total pagado y el nuevo saldo, sin detalle de capital, interés ni cuotas.
+  if (principalAfter != null) parts.push(`Nuevo ${String(balanceLabel).toLowerCase()}: ${money(principalAfter)}.`);
   parts.push("¡Gracias!");
   return parts.join(" ");
 }

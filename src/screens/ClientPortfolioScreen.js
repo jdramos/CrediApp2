@@ -156,6 +156,24 @@ export default function ClientPortfolioScreen() {
     }
   };
 
+  // "Ver todos los pagos": trae el historial completo del crédito (puede tardar).
+  const showAllHistory = async (loanId) => {
+    setHistory((h) => ({ ...h, [loanId]: { ...(h[loanId] || { rows: [], total: 0 }), loading: true, error: "" } }));
+    try {
+      const res = await getMyLoanPayments(session.token, loanId, { limit: 500 });
+      setHistory((h) => ({ ...h, [loanId]: { loading: false, rows: res?.data || [], total: res?.total || 0, error: "" } }));
+    } catch (e) {
+      setHistory((h) => ({
+        ...h,
+        [loanId]: {
+          ...(h[loanId] || { rows: [], total: 0 }),
+          loading: false,
+          error: isNetworkError(e) ? "Sin conexión: el historial necesita señal." : e?.message || "No se pudo cargar el historial",
+        },
+      }));
+    }
+  };
+
   // Guardar la ubicación (casa o negocio) de un cliente que aún no la tiene.
   const [placeItem, setPlaceItem] = useState(null);
   const [placeBusy, setPlaceBusy] = useState(false);
@@ -764,9 +782,20 @@ export default function ClientPortfolioScreen() {
                       </Pressable>
                     ))}
                     {history[item.loan_id]?.total > (history[item.loan_id]?.rows || []).length && (
-                      <Text style={{ color: COLORS.muted, fontSize: 11 }}>
-                        Mostrando {(history[item.loan_id]?.rows || []).length} de {history[item.loan_id].total} pagos. Tocá la tarjeta para ver el estado de cuenta completo.
-                      </Text>
+                      <View>
+                        <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                          Mostrando {(history[item.loan_id]?.rows || []).length} de {history[item.loan_id].total} pagos.
+                        </Text>
+                        <Button
+                          compact
+                          mode="text"
+                          icon="format-list-bulleted"
+                          disabled={!!history[item.loan_id]?.loading}
+                          onPress={() => showAllHistory(item.loan_id)}
+                        >
+                          Ver todos los pagos
+                        </Button>
+                      </View>
                     )}
                   </View>
                 )}

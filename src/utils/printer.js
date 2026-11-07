@@ -121,6 +121,7 @@ export function buildPaymentReceiptLines({
   usd,
   flat = false,
   totalBefore,
+  installmentDetail = [],
 }) {
   const lines = [
     center((tenantName || "CrediMaster").toUpperCase()),
@@ -137,7 +138,16 @@ export function buildPaymentReceiptLines({
   if (collectorName) lines.push(`Cobrado por: ${collectorName}`);
   lines.push(divider());
   if (flat && totalBefore != null) lines.push(twoCol("Saldo total anterior", money(totalBefore)));
-  lines.push(twoCol("Monto pagado", money(amount)));
+  lines.push(twoCol("Pago recibido", money(amount)));
+  if ((installmentDetail || []).length) {
+    lines.push(divider());
+    lines.push("Cuotas cubiertas por este pago:");
+    installmentDetail.forEach((d) => {
+      lines.push(`  Cuota ${d.key}: ${money(d.amount)}`);
+      lines.push(`    ${d.status}${d.paid ? "" : `, la cuota es de ${money(d.scheduled)}`}`);
+    });
+    lines.push(divider());
+  }
   if (usd) {
     lines.push(`Recibido: US$ ${Number(usd.foreign_amount).toFixed(2)}`);
     lines.push(`TC de compra: C$ ${Number(usd.fx_rate).toFixed(2)}`);
