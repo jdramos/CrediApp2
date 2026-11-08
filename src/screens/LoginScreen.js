@@ -1,10 +1,11 @@
-import React, { useContext, useRef, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import { View, StyleSheet, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Button, HelperText, Checkbox } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeInDown, FadeIn, ZoomIn } from "react-native-reanimated";
 import { SessionContext } from "../auth/SessionContext";
+import { loadRememberedUser, saveRememberedUser } from "../storage/session";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
@@ -61,7 +62,28 @@ export default function LoginScreen() {
   const [mfaCode, setMfaCode] = useState("");
   const [remember, setRemember] = useState(true);
 
+  // "Recordar usuario" (solo el usuario, nunca la contraseña) y ojito para
+  // ver la contraseña.
+  const [rememberUser, setRememberUser] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+
   const passRef = useRef(null);
+
+  useEffect(() => {
+    let alive = true;
+    loadRememberedUser().then((v) => {
+      if (!alive) return;
+      setRememberUser(v.remember);
+      if (v.username) {
+        setUsername((cur) => cur || v.username);
+        // Con el usuario ya puesto, el cursor va directo a la contraseña.
+        setTimeout(() => passRef.current?.focus?.(), 400);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const onSubmit = async () => {
     setError("");
@@ -76,6 +98,7 @@ export default function LoginScreen() {
     try {
       setLoading(true);
       await signIn({ username: u, password: p });
+      await saveRememberedUser(rememberUser, u);
     } catch (e) {
       if (e?.data?.code === "MFA_REQUIRED" && e.data.mfa_token) {
         setMfaToken(e.data.mfa_token);
@@ -101,6 +124,7 @@ export default function LoginScreen() {
     try {
       setLoading(true);
       await signInWithMfa({ username: username.trim(), mfa_token: mfaToken, code, remember_device: remember });
+      await saveRememberedUser(rememberUser, username);
     } catch (e) {
       if (e?.data?.code === "MFA_TOKEN_EXPIRED") {
         // El paso venció: hay que volver a poner usuario y contraseña.
@@ -209,7 +233,7 @@ export default function LoginScreen() {
                     label="Contraseña"
                     value={password}
                     onChangeText={setPassword}
-                    secureTextEntry
+                    secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     autoCorrect={false}
                     mode="outlined"
@@ -218,8 +242,25 @@ export default function LoginScreen() {
                     returnKeyType="done"
                     onSubmitEditing={onSubmit}
                     left={<TextInput.Icon icon="lock-outline" />}
+                    right={
+                      <TextInput.Icon
+                        icon={showPassword ? "eye-off-outline" : "eye-outline"}
+                        onPress={() => setShowPassword((v) => !v)}
+                        forceTextInputFocus={false}
+                        accessibilityLabel={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                      />
+                    }
                   />
-    
+
+                  <Checkbox.Item
+                    label="Recordar usuario"
+                    status={rememberUser ? "checked" : "unchecked"}
+                    onPress={() => setRememberUser(!rememberUser)}
+                    position="leading"
+                    style={{ paddingHorizontal: 0, paddingVertical: 0 }}
+                    labelStyle={{ textAlign: "left", color: COLORS.text }}
+                  />
+
                   <HelperText type="error" visible={!!error}>
                     {error}
                   </HelperText>

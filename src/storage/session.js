@@ -49,6 +49,34 @@ export async function clearSession() {
   await AsyncStorage.removeItem(LEGACY_KEY);
 }
 
+// "Recordar usuario" del login: solo se guarda el nombre de usuario (nunca la
+// contraseña) para no tener que escribirlo cada vez. No es un secreto, va en
+// AsyncStorage, y NO se borra al cerrar sesión (si no, no serviría).
+const REMEMBER_USER_KEY = "APP_REMEMBERED_USER_V1";
+
+export async function loadRememberedUser() {
+  try {
+    const raw = await AsyncStorage.getItem(REMEMBER_USER_KEY);
+    if (!raw) return { remember: true, username: "" };
+    const v = JSON.parse(raw);
+    return { remember: v?.remember !== false, username: String(v?.username || "") };
+  } catch {
+    return { remember: true, username: "" };
+  }
+}
+
+// remember=false borra el usuario guardado.
+export async function saveRememberedUser(remember, username) {
+  try {
+    await AsyncStorage.setItem(
+      REMEMBER_USER_KEY,
+      JSON.stringify({ remember: !!remember, username: remember ? String(username || "").trim() : "" }),
+    );
+  } catch {
+    // sin almacenamiento: se escribirá el usuario la próxima vez
+  }
+}
+
 // "Recordar este dispositivo" (2FA): tras verificar el código una vez, el
 // servidor entrega un token que, enviado en el login, evita pedir el código de
 // nuevo durante unos días. Es una credencial, así que va en el mismo almacén
