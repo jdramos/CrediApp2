@@ -679,7 +679,8 @@ export default function ClientPortfolioScreen() {
                   </View>
                 </View>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
-                  <CopyableId label="Código: " value={item.customer_identification} textStyle={styles.muted} />
+                  {!!item.customer_code && <Text style={styles.muted}>Código: {item.customer_code} · </Text>}
+                  <CopyableId label="Cédula: " value={item.customer_identification} textStyle={styles.muted} />
                   <Text style={styles.muted}> · Crédito #{item.credit_code || item.loan_id}</Text>
                 </View>
                 <AddressLines customer={item} />
