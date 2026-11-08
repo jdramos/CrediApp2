@@ -10,6 +10,7 @@ import { getLoanApprovalHistory } from "../api/approvalApi";
 import { money } from "../utils/format";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -103,7 +104,7 @@ export default function LoanDetailScreen({ route }) {
           style={{ margin: 0, marginLeft: -SPACING.sm, marginBottom: -SPACING.xs }}
         />
         <Text variant="headlineSmall" style={styles.title}>Crédito #{loanId}</Text>
-        <Text style={styles.sub}>{loan?.customer_name || "-"}</Text>
+        <Text style={styles.sub}>{loan?.customer_name ? withCode(loan.customer_name, loan.customer_code) : "-"}</Text>
         <Text style={styles.balance}>{money(loan?.display_balance ?? loan?.current_balance)}</Text>
         <Text style={styles.sub}>Saldo pendiente</Text>
         <View style={styles.metaRow}>

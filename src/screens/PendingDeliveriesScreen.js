@@ -12,6 +12,7 @@ import { money } from "../utils/format";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
 const IMAGE_REQUIRED_TRUE = ["true", "1", "si", "sí"];
@@ -158,7 +159,7 @@ export default function PendingDeliveriesScreen() {
           renderItem={({ item }) => (
             <Card style={styles.row}>
               <View style={styles.rowTop}>
-                <Text style={styles.name}>{item.customer_name || "Cliente"}</Text>
+                <Text style={styles.name}>{withCode(item.customer_name, item.customer_code)}</Text>
                 <Text style={styles.amount}>{money(item.amount)}</Text>
               </View>
               <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
@@ -188,7 +189,7 @@ export default function PendingDeliveriesScreen() {
             <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text }}>
               Confirmar entrega
             </Text>
-            <Text style={{ color: COLORS.muted, marginTop: 2 }}>{active?.customer_name}</Text>
+            <Text style={{ color: COLORS.muted, marginTop: 2 }}>{withCode(active?.customer_name, active?.customer_code)}</Text>
             <Text style={{ color: COLORS.muted }}>
               {money(active?.amount)} ·{" "}
               {(active && sourceLabel(active)) || METHOD_LABEL[active?.disbursement_method] || active?.disbursement_method}

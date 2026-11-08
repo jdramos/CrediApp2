@@ -10,6 +10,7 @@ import { shareImage } from "../utils/shareImage";
 import { money } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { COLORS } from "../theme/colors";
+import { withCode } from "../utils/customerLabel";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
 const styles = StyleSheet.create({
@@ -99,7 +100,7 @@ export default function PayoffModal({ loan, onDismiss }) {
                     logoUrl={logoUrl}
                     tenantName={tenantName}
                     title="Saldo para cancelar"
-                    lines={[loan.customer_name, `Crédito #${loan.credit_code || loan.loan_id}`, `Al ${todayISO()}`]}
+                    lines={[withCode(loan.customer_name, loan.customer_code), `Crédito #${loan.credit_code || loan.loan_id}`, `Al ${todayISO()}`]}
                   />
                   <View style={styles.card}>
                     <Text style={styles.bigLabel}>Para cancelar el crédito hoy</Text>

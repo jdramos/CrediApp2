@@ -19,6 +19,7 @@ import { usePendingPayments } from "../offline/pendingPayments";
 import { todayISO } from "../utils/date";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -275,7 +276,7 @@ export default function ProductivityScreen() {
               {agenda.due_today.map((r) => (
                 <AgendaItem
                   key={`due-${r.loan_id}`}
-                  title={r.customer_name || `Crédito #${r.credit_code}`}
+                  title={r.customer_name ? withCode(r.customer_name, r.customer_code) : `Crédito #${r.credit_code}`}
                   subtitle={`Crédito #${r.credit_code}`}
                   amount={r.amount}
                   onPress={() => openLoan(r.loan_id)}
@@ -289,7 +290,7 @@ export default function ProductivityScreen() {
               {agenda.promises.map((r) => (
                 <AgendaItem
                   key={`prom-${r.id}`}
-                  title={r.customer_name || `Crédito #${r.credit_code}`}
+                  title={r.customer_name ? withCode(r.customer_name, r.customer_code) : `Crédito #${r.credit_code}`}
                   subtitle={`Promete para el ${shortDate(r.promised_date)}`}
                   amount={r.promised_amount}
                   onPress={() => openLoan(r.loan_id)}
@@ -307,7 +308,7 @@ export default function ProductivityScreen() {
               {agenda.no_follow_up.map((r) => (
                 <AgendaItem
                   key={`nofu-${r.loan_id}`}
-                  title={r.customer_name || `Crédito #${r.credit_code}`}
+                  title={r.customer_name ? withCode(r.customer_name, r.customer_code) : `Crédito #${r.credit_code}`}
                   subtitle={`${r.classification ? `Cat. ${r.classification} · ` : ""}${r.days_overdue} días de mora · ${
                     r.last_action_date ? `última gestión ${shortDate(r.last_action_date)}` : "sin gestiones"
                   }`}

@@ -7,6 +7,7 @@ import { paperTheme } from './src/theme/paperTheme';
 import AppNavigator from "./src/navigation/AppNavigator";
 import { SessionProvider } from "./src/auth/SessionContext";
 import { SyncProvider } from "./src/offline/SyncProvider";
+import PrinterHost from "./src/components/PrinterHost";
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
           <SessionProvider>
             <SyncProvider>
               <AppNavigator />
+              <PrinterHost />
             </SyncProvider>
           </SessionProvider>
         </PaperProvider>

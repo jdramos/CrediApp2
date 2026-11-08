@@ -8,6 +8,7 @@ import AddressLines from "../components/AddressLines";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg, padding: SPACING.lg },
@@ -112,6 +113,7 @@ export default function CustomerSearchScreen({ navigation }) {
             onPress={() => navigation.navigate("CustomerDetail", { customerId: item.id })}
           >
             <Text style={styles.name}>{item.customer_name}</Text>
+            {!!item.customer_code && <Text style={styles.id}>Código: {item.customer_code}</Text>}
             <CopyableId label="Cédula: " value={item.identification} textStyle={styles.id} />
             <AddressLines customer={item} />
           </Card>

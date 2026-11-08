@@ -11,6 +11,7 @@ import { todayISO, shiftDay } from "../utils/date";
 import { resultLabel } from "../utils/collectionsCatalog";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 
 const KIND_COLOR = {
   start: "#16A34A",
@@ -115,7 +116,7 @@ export default function RouteMapScreen() {
         key: `visit-${v.id}`,
         t: v.t_ms,
         kind: "visit",
-        title: `Visita: ${v.customer_name || `Crédito ${v.credit_code}`}`,
+        title: `Visita: ${v.customer_name ? withCode(v.customer_name, v.customer_code) : `Crédito ${v.credit_code}`}`,
         subtitle: resultLabel(v.result) || "",
         lat: v.lat,
         lng: v.lng,
@@ -126,7 +127,7 @@ export default function RouteMapScreen() {
         key: `pay-${p.id}`,
         t: p.t_ms,
         kind: "payment",
-        title: `Pago ${money(p.amount)}: ${p.customer_name || `Crédito ${p.credit_code}`}`,
+        title: `Pago ${money(p.amount)}: ${p.customer_name ? withCode(p.customer_name, p.customer_code) : `Crédito ${p.credit_code}`}`,
         subtitle: p.lat == null ? "Sin ubicación en la ruta a esa hora" : "",
         lat: p.lat,
         lng: p.lng,

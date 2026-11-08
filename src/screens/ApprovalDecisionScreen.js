@@ -10,6 +10,7 @@ import { money } from "../utils/format";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
 const styles = StyleSheet.create({
@@ -105,7 +106,7 @@ export default function ApprovalDecisionScreen() {
       </View>
       <KeyboardAwareScroll contentContainerStyle={styles.content}>
         <Animated.View entering={FadeIn}>
-          <Text variant="headlineSmall" style={styles.header}>{item.customer_name || "Cliente"}</Text>
+          <Text variant="headlineSmall" style={styles.header}>{withCode(item.customer_name, item.customer_code)}</Text>
           <Text style={styles.amount}>{money(item.requested_amount)}</Text>
 
           <View style={styles.chipsRow}>

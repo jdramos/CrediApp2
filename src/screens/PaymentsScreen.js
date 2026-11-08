@@ -46,6 +46,7 @@ import { printReceipt, buildPaymentReceiptLines } from "../utils/printer";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
 const BREAKDOWN_MAP = [
@@ -311,6 +312,7 @@ export default function PaymentsScreen({ route }) {
     setCustomer({
       id: prefill.customerId,
       customer_name: prefill.customerName,
+      customer_code: prefill.customerCode,
       identification: prefill.customerIdentification,
       home_address: prefill.homeAddress,
       business_address: prefill.businessAddress,
@@ -694,6 +696,7 @@ export default function PaymentsScreen({ route }) {
       buildPaymentReceiptLines({
         tenantName: session?.tenant?.commercial_name || session?.tenant?.legal_name,
         customerName: customer?.customer_name,
+        customerCode: customer?.customer_code,
         customerIdentification: customer?.identification,
         customerHomeAddress: customer?.home_address,
         customerBusinessAddress: customer?.business_address,
@@ -800,6 +803,7 @@ export default function PaymentsScreen({ route }) {
               renderItem={({ item, index }) => (
                 <Card style={styles.row} onPress={() => pickCustomer(item)}>
                   <Text style={styles.name}>{item.customer_name}</Text>
+                  {!!item.customer_code && <Text style={styles.muted}>Código: {item.customer_code}</Text>}
                   <CopyableId label="Cédula: " value={item.identification} textStyle={styles.muted} />
                   <AddressLines customer={item} />
                   {index < MAX_PREVIEW_CUSTOMERS && <CustomerLoansPreview loans={loansByCustomer[item.id]} />}
@@ -811,7 +815,7 @@ export default function PaymentsScreen({ route }) {
 
         {step === 1 && (
           <Animated.View entering={FadeInDown} exiting={FadeOut}>
-            <StepHeader step={1} title={customer?.customer_name || "Créditos"} onBack={() => setStep(0)} />
+            <StepHeader step={1} title={customer?.customer_name ? withCode(customer.customer_name, customer.customer_code) : "Créditos"} onBack={() => setStep(0)} />
             <HelperText type="error" visible={!!error}>{error}</HelperText>
             {loadingLoans && <ActivityIndicator style={{ marginTop: SPACING.md }} />}
             {!loadingLoans && loans.length === 0 && !error && (

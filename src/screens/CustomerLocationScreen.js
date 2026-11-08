@@ -17,6 +17,7 @@ import PlaceMap from "../components/PlaceMap";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -295,7 +296,7 @@ export default function CustomerLocationScreen({ route }) {
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text variant="headlineSmall" style={styles.header}>
-          {customer?.customer_name || "Cliente"}
+          {withCode(customer?.customer_name, customer?.customer_code)}
         </Text>
         <CopyableId label="Cédula: " value={customer?.identification} textStyle={styles.sub} />
 

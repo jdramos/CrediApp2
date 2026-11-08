@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState } from "react";
-import { View, StyleSheet, FlatList, Alert } from "react-native";
+import { View, StyleSheet, FlatList, Alert, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Card, Button, Chip, ActivityIndicator, HelperText, IconButton, Checkbox, Portal, Modal } from "react-native-paper";
 import Animated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
@@ -8,13 +8,14 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { SessionContext } from "../auth/SessionContext";
 import { searchCustomers, getCustomer, saveCustomerGuarantees } from "../api/customerApi";
 import { getAccessibleBranches } from "../api/branchApi";
-import { createLoanRequest } from "../api/loanApi";
+import { createLoanRequest, simulateLoan } from "../api/loanApi";
+import { summarizeSchedule } from "../utils/loanSimulation";
 import { getLoanCatalogs } from "../api/conamiApi";
 import { getFrecuencies } from "../api/frecuencyApi";
 import { getPromotersByBranch } from "../api/promoterApi";
 import { getCollectorsByBranch } from "../api/collectorApi";
 import { getCustomerGuarantees } from "../api/guaranteesApi";
-import { uploadGuaranteePhoto } from "../api/guaranteePhotoApi";
+import { uploadGuaranteePhoto, listGuaranteePhotos } from "../api/guaranteePhotoApi";
 import { getCustomerChecklist, uploadCustomerDocument } from "../api/customerDocumentApi";
 import { getCurrentEvaluation } from "../api/customerEvaluationApi";
 import { getCreditPolicies } from "../api/creditPolicyApi";
@@ -32,6 +33,7 @@ import { todayISO } from "../utils/date";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 
 const STEPS = ["Cliente", "Crédito", "Garantías", "Confirmar", "Listo"];
@@ -99,6 +101,53 @@ function StepHeader({ step, onBack, title }) {
 
 const money2 = (n) => (n ? money(n) : null);
 
+// Cuota estimada de la solicitud (misma tabla de amortización que el
+// simulador: el servidor aplica el tipo de interés de la empresa). Es una
+// ayuda para que el cliente sepa cuánto pagará; no cambia lo que se envía.
+function QuoteCard({ quote, frequency, showHint }) {
+  if (!quote) {
+    if (!showHint) return null;
+    return (
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Cuota estimada</Text>
+        <Text style={{ color: COLORS.muted }}>Completá monto, plazo, frecuencia y tasa de interés para ver la cuota.</Text>
+      </View>
+    );
+  }
+  const s = quote.summary;
+  return (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>Cuota estimada</Text>
+      {quote.loading && !s ? (
+        <ActivityIndicator style={{ alignSelf: "flex-start" }} />
+      ) : quote.error || !s ? (
+        <Text style={{ color: COLORS.muted }}>No se pudo calcular la cuota con estos datos.</Text>
+      ) : (
+        <View style={{ opacity: quote.loading ? 0.5 : 1 }}>
+          <Text style={{ color: COLORS.primary, fontWeight: "800", fontSize: 26 }}>{money(s.installment)}</Text>
+          <Text style={{ color: COLORS.muted }}>
+            {s.installments} cuota{s.installments === 1 ? "" : "s"}{frequency?.name ? ` · ${frequency.name}` : ""}
+          </Text>
+          {Math.abs(s.lastInstallment - s.installment) >= 0.01 && (
+            <Text style={{ color: COLORS.muted, fontSize: 12 }}>Última cuota: {money(s.lastInstallment)}</Text>
+          )}
+          <View style={styles.summaryRow}>
+            <Text style={{ color: COLORS.muted }}>Total a pagar</Text>
+            <Text style={{ color: COLORS.text, fontWeight: "700" }}>{money(s.total)}</Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text style={{ color: COLORS.muted }}>Primera cuota</Text>
+            <Text style={{ color: COLORS.text, fontWeight: "600" }}>{s.firstDate}</Text>
+          </View>
+          <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: SPACING.xs }}>
+            Cálculo estimado: la cuota final la define el sistema al aprobar el crédito.
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function NewLoanRequestScreen({ route, navigation }) {
   // Datos que trae el simulador de crédito (opcional): precargan el paso del crédito.
   const sim = route?.params?.sim;
@@ -151,6 +200,11 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   const [newValue, setNewValue] = useState("");
   const [savingGuarantee, setSavingGuarantee] = useState(false);
   const [uploadingGuaranteeId, setUploadingGuaranteeId] = useState(null);
+  // Fotos de la garantía que se está creando (aún sin guardar: se pueden
+  // cambiar o quitar) y fotos ya subidas de cada garantía ({ [id]: [{ id, url }] }).
+  const [newPhotos, setNewPhotos] = useState([]);
+  const [guaranteePhotos, setGuaranteePhotos] = useState({});
+  const MAX_NEW_PHOTOS = 6;
 
   // Documentos del cliente
   const [checklist, setChecklist] = useState([]);
@@ -274,6 +328,8 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     setShowExtra(false);
     setSelectedGuaranteeIds([]);
     setGuarantees([]);
+    setNewPhotos([]);
+    setGuaranteePhotos({});
     setChecklist([]);
     setShowAddGuarantee(false);
     setNewArticle(""); setNewSeries(""); setNewBrand(""); setNewValue("");
@@ -311,9 +367,33 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       };
       await saveCustomerGuarantees(session.token, customer.id, fullCustomer, [...existingPayload, newPayload]);
       const rows = await getCustomerGuarantees(session.token, customer.id);
+
+      // Las fotos se suben a la garantía recién creada (la que no estaba antes).
+      // La garantía ya quedó guardada: si una foto falla NO se vuelve a crear; se
+      // avisa y se puede subir desde su tarjeta con "Agregar foto".
+      let photoProblem = "";
+      if (newPhotos.length && canPhotoGuarantee) {
+        const knownIds = new Set(guarantees.map((g) => g.id));
+        const created = (Array.isArray(rows) ? rows : []).filter((g) => !knownIds.has(g.id)).sort((a, b) => b.id - a.id)[0];
+        if (!created) {
+          photoProblem = "La garantía se guardó, pero no se encontró para subirle las fotos. Agregalas desde su tarjeta.";
+        } else {
+          for (const file of newPhotos) {
+            const outcome = await uploadOrQueueGuaranteePhoto(created.id, file);
+            if (!outcome) {
+              photoProblem = "La garantía se guardó, pero una foto no se pudo subir. Agregala desde la tarjeta de la garantía.";
+              break;
+            }
+          }
+          refreshGuaranteePhotos(created.id);
+        }
+      }
+
       setGuarantees(rows || []);
       setNewArticle(""); setNewSeries(""); setNewBrand(""); setNewValue("");
+      setNewPhotos([]);
       setShowAddGuarantee(false);
+      if (photoProblem) setError(photoProblem);
     } catch (e) {
       setError(e?.message ?? "No se pudo agregar la garantía");
     } finally {
@@ -333,6 +413,108 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     );
   };
 
+  // Fotos ya subidas de las garantías (miniaturas en la lista). Necesita garantias.ver.
+  const canSeeGuaranteePhotos = session?.permissions?.includes("garantias.ver");
+  const refreshGuaranteePhotos = async (guaranteeId) => {
+    if (!canSeeGuaranteePhotos) return;
+    try {
+      const r = await listGuaranteePhotos(session.token, guaranteeId);
+      setGuaranteePhotos((prev) => ({ ...prev, [guaranteeId]: r?.data || [] }));
+    } catch {
+      // las miniaturas son un extra: si no cargan, la lista sigue funcionando
+    }
+  };
+
+  useEffect(() => {
+    if (!canSeeGuaranteePhotos || guarantees.length === 0) {
+      setGuaranteePhotos({});
+      return;
+    }
+    let alive = true;
+    Promise.all(
+      guarantees.map((g) =>
+        listGuaranteePhotos(session.token, g.id)
+          .then((r) => [g.id, r?.data || []])
+          .catch(() => [g.id, []]),
+      ),
+    ).then((entries) => {
+      if (alive) setGuaranteePhotos(Object.fromEntries(entries));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [guarantees, canSeeGuaranteePhotos, session.token]);
+
+  // Cuota estimada: se recalcula (con una pausa al escribir) cada vez que cambian
+  // los datos del crédito. Pide creditos.amortizacion.ver; sin ese permiso, o si
+  // el cálculo falla, simplemente no se muestra y la solicitud sigue igual.
+  const canQuote = session?.permissions?.includes("creditos.amortizacion.ver");
+  const [quote, setQuote] = useState(null); // { loading, summary, error }
+  const quoteTag = selectedFrequency?.tag;
+  useEffect(() => {
+    if (!canQuote) return undefined;
+    const amt = toNumber(amount);
+    const months = Number(term);
+    const rate = Number(String(interestRate).replace(",", "."));
+    if (!(amt > 0) || !(months > 0) || !(rate > 0) || !quoteTag || !branchId) {
+      setQuote(null);
+      return undefined;
+    }
+    let alive = true;
+    setQuote((q) => ({ loading: true, summary: q?.summary || null }));
+    const timer = setTimeout(() => {
+      simulateLoan(session.token, {
+        amount: amt,
+        interest_rate: rate,
+        term: months,
+        requestDate,
+        fee: toNumber(fee),
+        insurance: toNumber(insurance),
+        other_charges: toNumber(otherCharges),
+        frequency_id: quoteTag,
+        branch_id: branchId,
+      })
+        .then((table) => {
+          if (alive) setQuote({ loading: false, summary: summarizeSchedule(table) });
+        })
+        .catch(() => {
+          if (alive) setQuote({ loading: false, summary: null, error: true });
+        });
+    }, 600);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [canQuote, amount, term, interestRate, quoteTag, branchId, requestDate, fee, insurance, otherCharges, session.token]);
+
+  // Sube una foto a la garantía; sin señal la deja en la cola para enviarla sola
+  // después. Devuelve "ok", "queued" o null si falló (el error queda en pantalla).
+  const uploadOrQueueGuaranteePhoto = async (guaranteeId, file) => {
+    try {
+      await uploadGuaranteePhoto(session.token, guaranteeId, file);
+      return "ok";
+    } catch (e) {
+      if (isNetworkError(e)) {
+        try {
+          const stableUri = await persistLocalFile(file.uri, file.name);
+          await enqueue({
+            type: "GUARANTEE_PHOTO",
+            label: `Foto de garantía #${guaranteeId}`,
+            payload: { guaranteeId, file: { ...file, uri: stableUri } },
+          });
+          refreshPendingCount();
+          Alert.alert("Sin conexión", "La foto se guardó en el equipo y se subirá sola cuando vuelva la señal.");
+          return "queued";
+        } catch (queueErr) {
+          setError(queueErr?.message ?? "No se pudo guardar la foto para enviarla después");
+          return null;
+        }
+      }
+      setError(e?.message ?? "No se pudo subir la foto de la garantía");
+      return null;
+    }
+  };
+
   const captureGuaranteePhoto = async (guaranteeId) => {
     let file;
     try {
@@ -346,28 +528,31 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     setUploadingGuaranteeId(guaranteeId);
     setError("");
     try {
-      await uploadGuaranteePhoto(session.token, guaranteeId, file);
-    } catch (e) {
-      if (isNetworkError(e)) {
-        try {
-          const stableUri = await persistLocalFile(file.uri, file.name);
-          await enqueue({
-            type: "GUARANTEE_PHOTO",
-            label: `Foto de garantía #${guaranteeId}`,
-            payload: { guaranteeId, file: { ...file, uri: stableUri } },
-          });
-          refreshPendingCount();
-          Alert.alert("Sin conexión", "La foto se guardó en el equipo y se subirá sola cuando vuelva la señal.");
-        } catch (queueErr) {
-          setError(queueErr?.message ?? "No se pudo guardar la foto para enviarla después");
-        }
-      } else {
-        setError(e?.message ?? "No se pudo subir la foto de la garantía");
-      }
+      const outcome = await uploadOrQueueGuaranteePhoto(guaranteeId, file);
+      if (outcome === "ok") await refreshGuaranteePhotos(guaranteeId);
     } finally {
       setUploadingGuaranteeId(null);
     }
   };
+
+  // Fotos de la garantía que se está creando.
+  const addNewPhoto = async () => {
+    try {
+      const file = await pickImage();
+      if (file) setNewPhotos((list) => (list.length < MAX_NEW_PHOTOS ? [...list, file] : list));
+    } catch (e) {
+      setError(e?.message ?? "No se pudo abrir la cámara/galería");
+    }
+  };
+  const replaceNewPhoto = async (index) => {
+    try {
+      const file = await pickImage();
+      if (file) setNewPhotos((list) => list.map((f, i) => (i === index ? file : f)));
+    } catch (e) {
+      setError(e?.message ?? "No se pudo abrir la cámara/galería");
+    }
+  };
+  const removeNewPhoto = (index) => setNewPhotos((list) => list.filter((_, i) => i !== index));
 
   const captureDocument = async (item) => {
     let file;
@@ -585,6 +770,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
               renderItem={({ item }) => (
                 <Card style={styles.row} onPress={() => pickCustomer(item)}>
                   <Text style={styles.name}>{item.customer_name}</Text>
+                  {!!item.customer_code && <Text style={styles.muted}>Código: {item.customer_code}</Text>}
                   <CopyableId label="Cédula: " value={item.identification} textStyle={styles.muted} />
                 </Card>
               )}
@@ -594,7 +780,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
 
         {step === 1 && (
           <Animated.View entering={FadeInDown} exiting={FadeOut}>
-            <StepHeader step={1} title={customer?.customer_name} onBack={() => setStep(0)} />
+            <StepHeader step={1} title={withCode(customer?.customer_name, customer?.customer_code)} onBack={() => setStep(0)} />
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Sucursal</Text>
@@ -770,6 +956,8 @@ export default function NewLoanRequestScreen({ route, navigation }) {
               />
             </View>
 
+            {canQuote && <QuoteCard quote={quote} frequency={selectedFrequency} showHint />}
+
             {COMPLEMENTARY_FIELDS.some(({ catalogKey }) => (loanCatalogs[catalogKey] || []).length > 0) && (
               <View style={styles.card}>
                 <Button
@@ -836,6 +1024,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                 style={{ marginTop: SPACING.md }}
                 renderItem={({ item }) => {
                   const checked = selectedGuaranteeIds.includes(item.id);
+                  const photoList = guaranteePhotos[item.id] || [];
                   return (
                     <Card style={styles.row}>
                       <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -844,15 +1033,32 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                           <Text style={styles.name}>{item.article}{item.brand ? ` · ${item.brand}` : ""}</Text>
                           <Text style={styles.muted}>{money2(item.available_value) || "Sin valor registrado"}</Text>
                         </View>
-                        {canPhotoGuarantee && (
-                          <IconButton
-                            icon="camera-outline"
-                            onPress={() => captureGuaranteePhoto(item.id)}
-                            loading={uploadingGuaranteeId === item.id}
-                            disabled={uploadingGuaranteeId !== null}
-                          />
-                        )}
                       </View>
+                      {photoList.length > 0 && (
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginTop: SPACING.xs }}>
+                          {photoList.map((p) => (
+                            <Image
+                              key={p.id}
+                              source={{ uri: p.url }}
+                              style={{ width: 56, height: 56, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, backgroundColor: "#fff" }}
+                              resizeMode="cover"
+                            />
+                          ))}
+                        </View>
+                      )}
+                      {canPhotoGuarantee && (
+                        <Button
+                          compact
+                          mode="outlined"
+                          icon="camera-plus-outline"
+                          onPress={() => captureGuaranteePhoto(item.id)}
+                          loading={uploadingGuaranteeId === item.id}
+                          disabled={uploadingGuaranteeId !== null}
+                          style={{ marginTop: SPACING.xs, alignSelf: "flex-start", borderRadius: RADIUS.md }}
+                        >
+                          {photoList.length > 0 ? `Agregar otra foto (${photoList.length})` : "Agregar foto"}
+                        </Button>
+                      )}
                     </Card>
                   );
                 }}
@@ -953,6 +1159,40 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                 outlineStyle={{ borderRadius: RADIUS.md }}
                 left={<TextInput.Icon icon="cash" />}
               />
+              {canPhotoGuarantee && (
+                <View style={{ marginTop: SPACING.md }}>
+                  <Text style={styles.name}>Fotos de la garantía (opcional)</Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm, marginTop: SPACING.xs }}>
+                    {newPhotos.map((f, i) => (
+                      <View key={`${f.uri}-${i}`} style={{ width: 104 }}>
+                        <Image source={{ uri: f.uri }} style={{ width: 104, height: 104, borderRadius: RADIUS.md, backgroundColor: COLORS.bg }} resizeMode="cover" />
+                        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                          <Button compact onPress={() => replaceNewPhoto(i)} disabled={savingGuarantee} labelStyle={{ fontSize: 11 }}>
+                            Cambiar
+                          </Button>
+                          <Button compact textColor={COLORS.danger} onPress={() => removeNewPhoto(i)} disabled={savingGuarantee} labelStyle={{ fontSize: 11 }}>
+                            Quitar
+                          </Button>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                  {newPhotos.length < MAX_NEW_PHOTOS && (
+                    <Button
+                      mode="outlined"
+                      icon="camera-plus-outline"
+                      onPress={addNewPhoto}
+                      disabled={savingGuarantee}
+                      style={{ marginTop: SPACING.xs, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+                    >
+                      {newPhotos.length ? "Agregar otra foto" : "Agregar foto"}
+                    </Button>
+                  )}
+                  <Text style={[styles.muted, { marginTop: SPACING.xs, fontSize: 12 }]}>
+                    Las fotos se pueden cambiar o quitar mientras no guardes. Ya guardada la garantía quedan definitivas: no se pueden reemplazar ni eliminar desde la app.
+                  </Text>
+                </View>
+              )}
               <Button
                 mode="contained"
                 onPress={addGuarantee}
@@ -973,6 +1213,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>{customer?.customer_name}</Text>
+              {!!customer?.customer_code && <Text style={styles.muted}>Código: {customer.customer_code}</Text>}
               <CopyableId label="Cédula: " value={customer?.identification} textStyle={styles.muted} />
 
               <View style={{ marginTop: SPACING.md }}>
@@ -1012,6 +1253,8 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                 )}
               </View>
             </View>
+
+            {canQuote && <QuoteCard quote={quote} frequency={selectedFrequency} />}
 
             <HelperText type="error" visible={!!error}>{error}</HelperText>
 

@@ -12,7 +12,7 @@ import AddressLines from "../components/AddressLines";
 import PayoffModal from "../components/PayoffModal";
 import { money } from "../utils/format";
 import { todayISO } from "../utils/date";
-import { printReceipt, buildAccountStatementReceiptLines, summarizeMovements } from "../utils/printer";
+import { printReceipt, buildAccountStatementReceiptLines, summarizeMovements, initialBalanceOf } from "../utils/printer";
 import { formatReceiptNumber, installmentDetailRows } from "../utils/receipt";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
@@ -129,6 +129,7 @@ export default function AccountStatementScreen({ route }) {
         prefill: {
           customerId: statement.customer_id,
           customerName: statement.customer_name,
+          customerCode: statement.customer_code,
           customerIdentification: statement.customer_identification,
           loanId: statement.loan_id ?? loanId,
         },
@@ -153,6 +154,7 @@ export default function AccountStatementScreen({ route }) {
   }
 
   const inArrears = Number(statement.defaulted_days || 0) > 0;
+  const initialBalance = initialBalanceOf(statement);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -174,6 +176,7 @@ export default function AccountStatementScreen({ route }) {
               </Text>
             )}
             <Text variant="titleLarge" style={styles.name}>{statement.customer_name}</Text>
+            {!!statement.customer_code && <Text style={styles.muted}>Código: {statement.customer_code}</Text>}
             <CopyableId label="Cédula: " value={statement.customer_identification} textStyle={styles.muted} />
             <AddressLines
               customer={{
@@ -197,24 +200,30 @@ export default function AccountStatementScreen({ route }) {
 
           <View style={styles.card}>
             <Text style={{ fontWeight: "800", color: COLORS.text, marginBottom: SPACING.xs }}>Resumen de saldo</Text>
-            <View style={styles.balanceRow}>
-              <Text style={{ color: COLORS.danger, fontWeight: "600" }}>Saldo atrasado</Text>
-              <Text style={{ color: COLORS.danger, fontWeight: "700" }}>{money(summary.overdueBalance)}</Text>
-            </View>
-            <View style={styles.balanceRow}>
-              <Text style={{ color: COLORS.muted }}>Saldo vigente</Text>
-              <Text style={{ color: COLORS.text, fontWeight: "600" }}>{money(summary.currentBalance)}</Text>
-            </View>
-            <View style={styles.totalRow}>
-              <Text style={{ color: COLORS.text, fontWeight: "800" }}>Total adeudado</Text>
-              <Text style={{ color: COLORS.primary, fontWeight: "800", fontSize: 18 }}>{money(summary.totalBalance)}</Text>
-            </View>
+            {initialBalance > 0 && (
+              <View style={styles.balanceRow}>
+                <Text style={{ color: COLORS.muted }}>Saldo inicial</Text>
+                <Text style={{ color: COLORS.text, fontWeight: "600" }}>{money(initialBalance)}</Text>
+              </View>
+            )}
             {statement.total_paid != null && (
               <View style={styles.balanceRow}>
-                <Text style={{ color: COLORS.muted }}>Monto total pagado</Text>
+                <Text style={{ color: COLORS.muted }}>Total pagado</Text>
                 <Text style={{ color: COLORS.success, fontWeight: "700" }}>{money(statement.total_paid)}</Text>
               </View>
             )}
+            <View style={styles.totalRow}>
+              <Text style={{ color: COLORS.text, fontWeight: "800" }}>Saldo actual</Text>
+              <Text style={{ color: COLORS.primary, fontWeight: "800", fontSize: 18 }}>{money(summary.totalBalance)}</Text>
+            </View>
+            <View style={styles.balanceRow}>
+              <Text style={{ color: COLORS.danger, fontSize: 12 }}>De ese saldo, atrasado</Text>
+              <Text style={{ color: COLORS.danger, fontWeight: "600", fontSize: 12 }}>{money(summary.overdueBalance)}</Text>
+            </View>
+            <View style={styles.balanceRow}>
+              <Text style={{ color: COLORS.muted, fontSize: 12 }}>De ese saldo, vigente</Text>
+              <Text style={{ color: COLORS.text, fontSize: 12 }}>{money(summary.currentBalance)}</Text>
+            </View>
             {!!summary.overdueSinceDate && (
               <Text style={{ color: COLORS.danger, marginTop: SPACING.sm, fontSize: 12 }}>
                 En mora desde el {String(summary.overdueSinceDate).slice(0, 10)}
@@ -347,7 +356,7 @@ export default function AccountStatementScreen({ route }) {
       <PayoffModal
         loan={
           showPayoff
-            ? { loan_id: statement.loan_id ?? loanId, customer_name: statement.customer_name, credit_code: statement.credit_code }
+            ? { loan_id: statement.loan_id ?? loanId, customer_name: statement.customer_name, customer_code: statement.customer_code, credit_code: statement.credit_code }
             : null
         }
         onDismiss={() => setShowPayoff(false)}

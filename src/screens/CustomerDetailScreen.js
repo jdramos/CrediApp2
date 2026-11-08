@@ -13,6 +13,7 @@ import { loanStage } from "../utils/loanStage";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -125,7 +126,7 @@ export default function CustomerDetailScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text variant="headlineSmall" style={styles.header}>{customer?.customer_name || "Cliente"}</Text>
+        <Text variant="headlineSmall" style={styles.header}>{withCode(customer?.customer_name, customer?.customer_code)}</Text>
         <CopyableId label="Cédula: " value={customer?.identification} textStyle={styles.sub} />
 
         <HelperText type="error" visible={!!error}>{error}</HelperText>

@@ -20,6 +20,7 @@ import { money } from "../utils/format";
 import { todayISO, shiftDay } from "../utils/date";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -261,7 +262,7 @@ export default function DayCloseScreen() {
                     onPress={p.has_photo || p.has_signature ? () => setEvidenceFor(p) : undefined}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.payName} numberOfLines={1}>{p.customer_name || `Crédito #${p.credit_code}`}</Text>
+                      <Text style={styles.payName} numberOfLines={1}>{p.customer_name ? withCode(p.customer_name, p.customer_code) : `Crédito #${p.credit_code}`}</Text>
                       <Text style={styles.muted}>
                         {`Crédito #${p.credit_code} · ${p.forma_pago_name}${p.time ? ` · ${p.time}` : ""}`}
                       </Text>
@@ -291,7 +292,7 @@ export default function DayCloseScreen() {
 
       <PaymentEvidenceModal
         paymentId={evidenceFor?.id}
-        subtitle={evidenceFor ? `${evidenceFor.customer_name || "Cliente"} — Crédito #${evidenceFor.credit_code}` : ""}
+        subtitle={evidenceFor ? `${withCode(evidenceFor.customer_name, evidenceFor.customer_code)} — Crédito #${evidenceFor.credit_code}` : ""}
         onDismiss={() => setEvidenceFor(null)}
       />
     </SafeAreaView>

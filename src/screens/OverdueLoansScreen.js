@@ -10,6 +10,7 @@ import { buildReminderMessage, callPhone, openWhatsApp, phoneOf } from "../utils
 import { money } from "../utils/format";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 
 const PAGE = 30;
 
@@ -111,7 +112,7 @@ export default function OverdueLoansScreen() {
     return (
       <View style={styles.card}>
         <View style={styles.top}>
-          <Text style={styles.name} numberOfLines={1}>{r.customer_name || "Cliente"}</Text>
+          <Text style={styles.name} numberOfLines={1}>{withCode(r.customer_name, r.customer_code)}</Text>
           <Chip compact style={{ backgroundColor: COLORS.bg }} textStyle={{ color: dayColor(r.days_overdue), fontWeight: "800", fontSize: 11 }}>
             {`${r.days_overdue} días`}
           </Chip>

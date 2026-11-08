@@ -91,6 +91,7 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
       buildPaymentReceiptLines({
         tenantName,
         customerName: payment.customer_name,
+        customerCode: payment.customer_code,
         customerIdentification: payment.customer_identification,
         customerHomeAddress: payment.home_address,
         customerBusinessAddress: payment.business_address,
@@ -122,6 +123,7 @@ export default function PaymentReceiptModal({ payment, onDismiss }) {
                   logoUrl={logoUrl}
                   customer={{
                     customer_name: payment.customer_name,
+                    customer_code: payment.customer_code,
                     identification: payment.customer_identification,
                     home_address: payment.home_address,
                     business_address: payment.business_address,

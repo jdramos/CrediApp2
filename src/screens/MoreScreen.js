@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState } from "react";
-import { View, StyleSheet, Alert, ScrollView } from "react-native";
+import { View, StyleSheet, Alert, ScrollView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, Avatar, List, Divider, Portal, Dialog, TextInput, Button, HelperText, Snackbar, Switch } from "react-native-paper";
 import { LinearGradient } from "expo-linear-gradient";
@@ -10,6 +10,7 @@ import { getAccessibleBranches } from "../api/branchApi";
 import { confirmAction } from "../utils/confirm";
 import { remindersEnabled, setRemindersEnabled, syncReminders, sendTestReminder } from "../notifications/reminders";
 import { workdayRequired } from "../tracking/workday";
+import { getSavedPrinter, openPrinterPicker } from "../utils/printer";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
@@ -78,10 +79,16 @@ export default function MoreScreen() {
   const [pwdSaving, setPwdSaving] = useState(false);
   const [snackbar, setSnackbar] = useState("");
   const [remindersOn, setRemindersOn] = useState(true);
+  const [printerName, setPrinterName] = useState("");
   const canPay = session?.permissions?.includes("pagos.insertar") || session?.permissions?.includes("pagos.ver");
 
   useEffect(() => {
     remindersEnabled().then(setRemindersOn);
+  }, []);
+
+  const loadPrinter = () => getSavedPrinter().then((p) => setPrinterName(p?.name || ""));
+  useEffect(() => {
+    loadPrinter();
   }, []);
 
   const onTestReminder = async () => {
@@ -202,6 +209,18 @@ export default function MoreScreen() {
               description="Llega en unos 10 segundos"
               left={(props) => <List.Icon {...props} icon="bell-outline" color={COLORS.primary} />}
               onPress={onTestReminder}
+            />
+          </Animated.View>
+        )}
+
+        {Platform.OS === "android" && (
+          <Animated.View entering={FadeInDown.delay(110).springify()} style={styles.card}>
+            <List.Item
+              title="Impresora Bluetooth"
+              description={printerName ? `Guardada: ${printerName}` : "Sin configurar — toque para elegir y probar la impresora de recibos"}
+              descriptionNumberOfLines={3}
+              left={(props) => <List.Icon {...props} icon="printer-wireless" color={COLORS.primary} />}
+              onPress={() => openPrinterPicker().then(loadPrinter)}
             />
           </Animated.View>
         )}

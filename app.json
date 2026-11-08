@@ -32,6 +32,7 @@
         "android.permission.CAMERA",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.RECORD_AUDIO",
+        "android.permission.BLUETOOTH_CONNECT",
         "android.permission.SEND_SMS"
       ],
       "package": "com.jdramos395steam.crediapp"

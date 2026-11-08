@@ -10,6 +10,7 @@ import { money } from "../utils/format";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 
 // Búsqueda general: un solo campo para encontrar clientes (nombre, cédula
 // con o sin guiones, código, teléfono), créditos (número, código, cliente)
@@ -33,7 +34,7 @@ const describe = (type, it) => {
   switch (type) {
     case "customer":
       return {
-        primary: it.customer_name,
+        primary: withCode(it.customer_name, it.customer_code),
         identification: it.identification,
         secondary: [it.cellphone && `Tel. ${it.cellphone}`].filter(Boolean).join(" · "),
         chip:
@@ -44,13 +45,13 @@ const describe = (type, it) => {
     case "loan":
       return {
         primary: `Crédito #${it.credit_code || it.id}`,
-        secondary: [it.customer_name, `Saldo ${money(it.display_balance ?? it.current_balance)}`].filter(Boolean).join(" · "),
+        secondary: [it.customer_name ? withCode(it.customer_name, it.customer_code) : null, `Saldo ${money(it.display_balance ?? it.current_balance)}`].filter(Boolean).join(" · "),
         chip: LOAN_STATUS[it.status] || { label: it.status, color: COLORS.muted, bg: COLORS.bg },
       };
     case "payment":
       return {
         primary: `Pago #${it.id} — ${money(it.total)}`,
-        secondary: [it.customer_name, String(it.payment_date || "").slice(0, 10), `Crédito #${it.loan_id}`]
+        secondary: [it.customer_name ? withCode(it.customer_name, it.customer_code) : null, String(it.payment_date || "").slice(0, 10), `Crédito #${it.loan_id}`]
           .filter(Boolean)
           .join(" · "),
         chip:

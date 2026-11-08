@@ -12,6 +12,7 @@ import { loanStage } from "../utils/loanStage";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 
 const STATUS_FILTERS = [
   { key: "", label: "Todas" },
@@ -267,7 +268,7 @@ export default function MyLoanRequestsScreen() {
             return (
               <Card style={styles.row} onPress={() => navigation.navigate("LoanDetail", { loanId: item.id })}>
                 <View style={styles.rowTop}>
-                  <Text style={styles.name} numberOfLines={1}>{item.customer_name || "Cliente"}</Text>
+                  <Text style={styles.name} numberOfLines={1}>{withCode(item.customer_name, item.customer_code)}</Text>
                   <Text style={styles.amount}>{money(item.amount)}</Text>
                 </View>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>

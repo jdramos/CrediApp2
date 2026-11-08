@@ -10,6 +10,7 @@ import { money } from "../utils/format";
 import { resultLabel } from "../utils/collectionsCatalog";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 
 const PERIOD_LABEL = { today: "hoy", week: "esta semana", month: "este mes" };
 
@@ -182,7 +183,7 @@ export default function CollectorDetailScreen() {
               {data.overdue_loans.map((l) => (
                 <View key={l.loan_id} style={styles.item}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.itemName} numberOfLines={1}>{l.customer_name || `Crédito #${l.credit_code}`}</Text>
+                    <Text style={styles.itemName} numberOfLines={1}>{l.customer_name ? withCode(l.customer_name, l.customer_code) : `Crédito #${l.credit_code}`}</Text>
                     <Text style={styles.muted}>
                       {`${l.classification ? `Cat. ${l.classification} · ` : ""}${l.days_overdue} días · ${l.overdue_installments} cuota${l.overdue_installments === 1 ? "" : "s"} vencida${l.overdue_installments === 1 ? "" : "s"}`}
                     </Text>
@@ -212,7 +213,7 @@ export default function CollectorDetailScreen() {
                   <View key={v.id} style={{ gap: 2 }}>
                     <View style={styles.item}>
                       <Text style={[styles.itemName, { flex: 1 }]} numberOfLines={1}>
-                        {v.customer_name || `Crédito #${v.credit_code}`}
+                        {v.customer_name ? withCode(v.customer_name, v.customer_code) : `Crédito #${v.credit_code}`}
                       </Text>
                       <Text style={styles.muted}>{v.action_date}</Text>
                     </View>
@@ -238,7 +239,7 @@ export default function CollectorDetailScreen() {
               {data.payments.map((p) => (
                 <View key={p.id} style={styles.item}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.itemName} numberOfLines={1}>{p.customer_name || `Crédito #${p.credit_code}`}</Text>
+                    <Text style={styles.itemName} numberOfLines={1}>{p.customer_name ? withCode(p.customer_name, p.customer_code) : `Crédito #${p.credit_code}`}</Text>
                     <Text style={styles.muted}>{`${p.payment_date} · ${p.forma_pago_name}`}</Text>
                   </View>
                   <Text style={[styles.value, { color: COLORS.success }]}>{money(p.amount)}</Text>

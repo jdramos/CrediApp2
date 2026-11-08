@@ -14,6 +14,7 @@ import { formatReceiptNumber } from "../utils/receipt";
 import { todayISO, periodRange } from "../utils/date";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 
 const PAGE_SIZE = 50;
 
@@ -165,7 +166,7 @@ export default function PaymentHistoryScreen() {
     return (
       <Pressable style={styles.row} onPress={() => navigation.navigate("AccountStatement", { loanId: p.loan_id })}>
         <View style={styles.rowTop}>
-          <Text style={styles.name} numberOfLines={1}>{p.customer_name || "Cliente"}</Text>
+          <Text style={styles.name} numberOfLines={1}>{withCode(p.customer_name, p.customer_code)}</Text>
           <Text style={styles.amount}>{money(p.amount)}</Text>
         </View>
         <Text style={styles.muted}>
@@ -296,7 +297,7 @@ export default function PaymentHistoryScreen() {
       <PaymentReceiptModal payment={receiptFor} onDismiss={() => setReceiptFor(null)} />
       <PaymentEvidenceModal
         paymentId={evidenceFor?.id}
-        subtitle={evidenceFor ? `${evidenceFor.customer_name || "Cliente"} — Crédito #${evidenceFor.credit_code || evidenceFor.loan_id}` : ""}
+        subtitle={evidenceFor ? `${withCode(evidenceFor.customer_name, evidenceFor.customer_code)} — Crédito #${evidenceFor.credit_code || evidenceFor.loan_id}` : ""}
         onDismiss={() => setEvidenceFor(null)}
       />
     </SafeAreaView>

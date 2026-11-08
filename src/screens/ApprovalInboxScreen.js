@@ -10,6 +10,7 @@ import { getApprovalInbox } from "../api/approvalApi";
 import { money } from "../utils/format";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
+import { withCode } from "../utils/customerLabel";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -96,7 +97,7 @@ export default function ApprovalInboxScreen() {
             return (
               <Animated.View entering={FadeInDown.delay(index * 40).springify()}>
                 <Card style={styles.card} onPress={() => navigation.navigate("ApprovalDecision", { item })}>
-                  <Text style={styles.name}>{item.customer_name || "Cliente"}</Text>
+                  <Text style={styles.name}>{withCode(item.customer_name, item.customer_code)}</Text>
                   <Text style={styles.amount}>{money(item.requested_amount)}</Text>
                   <View style={styles.metaRow}>
                     <Chip compact icon="tag-outline">{subtypeLabel(item)}</Chip>

@@ -59,6 +59,7 @@ export default function PaymentReceiptCard({
         <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text, marginTop: 2 }}>
           {customer?.customer_name}
         </Text>
+        {!!customer?.customer_code && <Text style={styles.muted}>Código: {customer.customer_code}</Text>}
         {!!customer?.identification && <Text style={styles.muted}>Cédula: {customer.identification}</Text>}
         <AddressLines customer={customer} showMissing={false} />
         <Text style={{ fontWeight: "800", color: COLORS.text, marginTop: 2 }}>
