@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useMemo, useState } from "react";
-import { View, StyleSheet, FlatList, Alert, Pressable } from "react-native";
+import { View, StyleSheet, FlatList, Alert, Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Text,
@@ -77,8 +77,14 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     ...SHADOW.card,
   },
-  rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: SPACING.xs },
-  name: { fontWeight: "700", color: COLORS.text, flex: 1 },
+  // El nombre va solo en su línea (ancho completo) y las etiquetas debajo: con
+  // 2-3 etiquetas al lado el nombre se quedaba sin espacio y se partía letra
+  // por letra.
+  rowTop: { gap: SPACING.xs },
+  rowTags: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs },
+  name: { fontWeight: "700", color: COLORS.text },
+  chipRow: { gap: SPACING.xs, alignItems: "center", paddingRight: SPACING.lg },
+  chipRowWrap: { marginTop: SPACING.xs, marginHorizontal: -SPACING.lg },
   muted: { color: COLORS.muted, marginTop: 2, fontSize: 12 },
   overdueRow: {
     flexDirection: "row",
@@ -92,7 +98,7 @@ const styles = StyleSheet.create({
   },
   overdueText: { color: COLORS.danger, fontWeight: "700", fontSize: 13 },
   overdueAmount: { color: COLORS.danger, fontWeight: "800", fontSize: 15 },
-  balancesRow: { flexDirection: "row", gap: SPACING.lg, marginTop: SPACING.sm },
+  balancesRow: { flexDirection: "row", flexWrap: "wrap", columnGap: SPACING.lg, rowGap: SPACING.xs, marginTop: SPACING.sm },
   balanceLabel: { color: COLORS.muted, fontSize: 11 },
   balanceValue: { color: COLORS.text, fontWeight: "700" },
   empty: { textAlign: "center", color: COLORS.muted, marginTop: SPACING.xl, paddingHorizontal: SPACING.xl },
@@ -539,8 +545,15 @@ export default function ClientPortfolioScreen() {
           outlineStyle={{ borderRadius: RADIUS.md }}
           left={<TextInput.Icon icon="magnify" />}
         />
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginTop: SPACING.sm }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipRowWrap}
+          contentContainerStyle={[styles.chipRow, { paddingLeft: SPACING.lg }]}
+          keyboardShouldPersistTaps="handled"
+        >
           <Chip
+            compact
             icon="alert-circle-outline"
             selected={sortMode === "mora"}
             showSelectedCheck={false}
@@ -550,24 +563,26 @@ export default function ClientPortfolioScreen() {
             Por mora
           </Chip>
           <Chip
+            compact
             icon={locating ? "crosshairs-gps" : "map-marker-radius-outline"}
             selected={sortMode === "near"}
             showSelectedCheck={false}
             onPress={() => chooseSort("near")}
             style={{ backgroundColor: sortMode === "near" ? COLORS.primarySoft : COLORS.card }}
           >
-            {locating && sortMode === "near" ? "Ubicándote…" : "Más cerca de mí"}
+            {locating && sortMode === "near" ? "Ubicándote…" : "Más cerca"}
           </Chip>
           <Chip
+            compact
             icon="map-marker-path"
             selected={sortMode === "route"}
             showSelectedCheck={false}
             onPress={() => chooseSort("route")}
             style={{ backgroundColor: sortMode === "route" ? COLORS.primarySoft : COLORS.card }}
           >
-            {locating && sortMode === "route" ? "Ubicándote…" : "Ruta sugerida"}
+            {locating && sortMode === "route" ? "Ubicándote…" : "Ruta"}
           </Chip>
-        </View>
+        </ScrollView>
         {sortMode === "route" && myPos && !locating && shown.stats && (
           <View style={{ marginTop: SPACING.xs, gap: SPACING.xs }}>
             <Text style={{ color: COLORS.muted, fontSize: 12 }}>
@@ -586,11 +601,17 @@ export default function ClientPortfolioScreen() {
         )}
         {sortMode === "near" && myPos && !locating && (
           <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: SPACING.xs }}>
-            Distancia en línea recta desde tu ubicación. Tocá «Más cerca de mí» para actualizarla.
+            Distancia en línea recta desde tu ubicación. Tocá «Más cerca» para actualizarla.
           </Text>
         )}
         {!!locError && <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: SPACING.xs }}>{locError}</Text>}
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginTop: SPACING.sm }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipRowWrap}
+          contentContainerStyle={[styles.chipRow, { paddingLeft: SPACING.lg }]}
+          keyboardShouldPersistTaps="handled"
+        >
           {FILTERS.map(([key, label, fn]) => (
             <Chip
               key={key}
@@ -603,7 +624,7 @@ export default function ClientPortfolioScreen() {
               {`${label} (${loans.filter(fn).length})`}
             </Chip>
           ))}
-        </View>
+        </ScrollView>
       </View>
 
       <View style={{ marginHorizontal: SPACING.lg }}>
@@ -630,6 +651,7 @@ export default function ClientPortfolioScreen() {
               <Card style={styles.row} onPress={() => navigation.navigate("AccountStatement", { loanId: item.loan_id })}>
                 <View style={styles.rowTop}>
                   <Text style={styles.name}>{item.customer_name || "Cliente"}</Text>
+                  <View style={styles.rowTags}>
                   {Number(item.due_today) === 1 && (
                     <Chip compact style={{ backgroundColor: COLORS.warningSoft }} textStyle={{ color: COLORS.warning, fontWeight: "700" }}>
                       Vence hoy
@@ -654,6 +676,7 @@ export default function ClientPortfolioScreen() {
                       Al día
                     </Chip>
                   )}
+                  </View>
                 </View>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
                   <CopyableId label="Código: " value={item.customer_identification} textStyle={styles.muted} />
@@ -714,6 +737,12 @@ export default function ClientPortfolioScreen() {
                   <View>
                     <Text style={styles.balanceLabel}>Saldo interés</Text>
                     <Text style={styles.balanceValue}>{money(item.interest_balance)}</Text>
+                  </View>
+                  <View>
+                    <Text style={styles.balanceLabel}>Saldo total</Text>
+                    <Text style={[styles.balanceValue, { color: COLORS.primary }]}>
+                      {money(item.display_balance ?? Number(item.principal_balance || 0) + Number(item.interest_balance || 0))}
+                    </Text>
                   </View>
                 </View>
                 {inArrears && Number(item.overdue_installments) > 0 && (
