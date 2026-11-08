@@ -1,7 +1,7 @@
 import React, { useContext, useState } from "react";
 import { View, StyleSheet, FlatList } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Text, TextInput, Card, ActivityIndicator, HelperText } from "react-native-paper";
+import { Text, TextInput, Card, ActivityIndicator, HelperText, Button } from "react-native-paper";
 import { SessionContext } from "../auth/SessionContext";
 import { searchCustomers } from "../api/customerApi";
 import AddressLines from "../components/AddressLines";
@@ -32,6 +32,8 @@ const styles = StyleSheet.create({
 // usuario sin ese permiso simplemente recibe un 403 al buscar).
 export default function CustomerSearchScreen({ navigation }) {
   const { session } = useContext(SessionContext);
+  // Registrar un cliente nuevo: solo con el permiso clientes.insertar.
+  const canCreateCustomer = session?.permissions?.includes("clientes.insertar");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -66,6 +68,17 @@ export default function CustomerSearchScreen({ navigation }) {
       <Text variant="bodyMedium" style={{ color: COLORS.muted, marginTop: 2, marginBottom: SPACING.md }}>
         Busque un cliente para ver sus créditos y ubicación.
       </Text>
+
+      {canCreateCustomer && (
+        <Button
+          mode="contained"
+          icon="account-plus"
+          onPress={() => navigation.navigate("NewCustomer")}
+          style={{ borderRadius: RADIUS.md, marginBottom: SPACING.md }}
+        >
+          Nuevo cliente
+        </Button>
+      )}
 
       <TextInput
         mode="outlined"

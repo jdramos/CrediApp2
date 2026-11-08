@@ -8,6 +8,13 @@ import { credimasterGet, credimasterPost, credimasterPut } from "./credimasterCl
 export const searchCustomers = (token, query) =>
   credimasterGet(`/api/customers/getCustomerList?app=1&query=${encodeURIComponent(query || "")}`, token);
 
+// Alta de un cliente nuevo (POST /api/customers, permiso clientes.insertar).
+// El servidor valida la ficha completa (cédula, obligatorios según la empresa,
+// duplicados) y guarda quién lo registró. Responde { ok, data: { id } }; un 400
+// trae `err.data.errors = [{ field, message }]` y un 409 es cédula repetida.
+export const createCustomer = (token, payload) =>
+  credimasterPost("/api/customers", payload, token);
+
 // Registro completo del cliente (GET /:customerId, permiso clientes.ver).
 // Necesario antes de guardar una ubicación: el backend espera el objeto
 // `customer` COMPLETO en el PUT (no admite parches parciales), así que
