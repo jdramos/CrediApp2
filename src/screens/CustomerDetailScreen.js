@@ -55,6 +55,7 @@ export default function CustomerDetailScreen({ route, navigation }) {
   const { customerId } = route.params;
   const { session } = useContext(SessionContext);
   const canViewLoans = session?.permissions?.includes("creditos.ver");
+  const canRequestLoan = session?.permissions?.includes("creditos.insertar");
   const canOpenFile = ["clientes.checklist.ver", "clientes.documentos.subir", "garantias.ver", "garantias.insertar"].some(
     (p) => session?.permissions?.includes(p),
   );
@@ -153,6 +154,16 @@ export default function CustomerDetailScreen({ route, navigation }) {
               style={{ marginTop: SPACING.sm, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
             >
               Actualizar expediente
+            </Button>
+          )}
+          {canRequestLoan && !!customer?.id && (
+            <Button
+              mode="contained"
+              icon="cash-plus"
+              onPress={() => navigation.navigate("Creditos", { screen: "NewLoanRequest", params: { customer } })}
+              style={{ marginTop: SPACING.sm, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+            >
+              Solicitar crédito
             </Button>
           )}
           {canOpenFile && (

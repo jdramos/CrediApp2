@@ -306,6 +306,16 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     }
   };
 
+  // Cliente que llega ya elegido (recién creado, o desde su ficha): se salta la búsqueda.
+  const presetCustomer = route?.params?.customer;
+  useEffect(() => {
+    if (!presetCustomer?.id) return;
+    // Si la pantalla quedó con otra solicitud ya hecha o con otro cliente, se empieza limpio.
+    if (result || (customer && customer.id !== presetCustomer.id)) reset();
+    pickCustomer(presetCustomer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetCustomer?.id]);
+
   const reset = () => {
     setStep(0);
     setQuery("");

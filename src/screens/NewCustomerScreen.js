@@ -1,9 +1,9 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Button, ActivityIndicator, HelperText, Chip } from "react-native-paper";
 import { SessionContext } from "../auth/SessionContext";
-import { createCustomer } from "../api/customerApi";
+import { createCustomer, getCustomer } from "../api/customerApi";
 import { getAccessibleBranches } from "../api/branchApi";
 import {
   getCountries, getProvinces, getMunicipalities, getGenres, getMaritalStatuses,
@@ -273,8 +273,32 @@ export default function NewCustomerScreen({ navigation }) {
       setGeneral([]);
       const res = await createCustomer(session.token, buildCustomerPayload(form));
       const id = res?.data?.id ?? res?.id;
-      if (id) navigation.replace("CustomerDetail", { customerId: id });
-      else navigation.goBack();
+      if (!id) {
+        navigation.goBack();
+        return;
+      }
+      navigation.replace("CustomerDetail", { customerId: id });
+      // Con permiso de crear créditos se ofrece la solicitud de una vez, con el cliente ya elegido.
+      if (session?.permissions?.includes("creditos.insertar")) {
+        const name = form.customer_name.trim();
+        const fallback = { id, customer_name: name, identification: form.identification.trim() };
+        Alert.alert("Cliente guardado", `¿Desea crear ahora una solicitud de crédito para ${name}?`, [
+          { text: "Ahora no", style: "cancel" },
+          {
+            text: "Crear solicitud",
+            onPress: async () => {
+              let customer = fallback;
+              try {
+                const full = await getCustomer(session.token, id);
+                if (full?.data?.customer?.id) customer = full.data.customer;
+              } catch {
+                // se usa lo mínimo que ya tenemos
+              }
+              navigation.navigate("Creditos", { screen: "NewLoanRequest", params: { customer } });
+            },
+          },
+        ]);
+      }
     } catch (e) {
       if (isNetworkError(e)) {
         setGeneral(["Sin conexión. Para registrar un cliente hace falta señal: conéctese y vuelva a intentar."]);
