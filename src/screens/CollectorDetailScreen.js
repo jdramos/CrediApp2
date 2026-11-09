@@ -5,7 +5,8 @@ import { Text, IconButton, Chip, ActivityIndicator, Button } from "react-native-
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
-import { getTeamCollectorDetail } from "../api/collectionsApi";
+import { getTeamCollectorDetail, getCollectorProductivity } from "../api/collectionsApi";
+import CollectorCharts from "../components/CollectorCharts";
 import { money } from "../utils/format";
 import { resultLabel } from "../utils/collectionsCatalog";
 import { COLORS, GRADIENTS } from "../theme/colors";
@@ -78,6 +79,7 @@ export default function CollectorDetailScreen() {
   const { params } = useRoute();
   const { session } = useContext(SessionContext);
   const [data, setData] = useState(null);
+  const [charts, setCharts] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -89,8 +91,12 @@ export default function CollectorDetailScreen() {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
       setError("");
+      // Los gráficos vienen de otra consulta: si falla (permiso, red) el detalle se
+      // muestra igual, solo sin gráficos.
+      const chartsReq = getCollectorProductivity(session.token, params.collectorId).catch(() => null);
       try {
         setData(await getTeamCollectorDetail(session.token, params.collectorId, params.period));
+        setCharts(await chartsReq);
       } catch (e) {
         setError(e?.message || "No se pudo cargar el detalle del cobrador.");
       } finally {
@@ -174,6 +180,8 @@ export default function CollectorDetailScreen() {
                 </Text>
               </View>
             )}
+
+            {charts?.linked !== false && <CollectorCharts data={charts} />}
 
             <View style={styles.card}>
               <Text variant="titleMedium" style={styles.cardTitle}>

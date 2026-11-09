@@ -66,6 +66,12 @@ export const getTeamCollectorDetail = (token, collectorId, period, overdueOffset
   return credimasterGet(`/api/collections/team-productivity/${collectorId}${qs ? `?${qs}` : ""}`, token);
 };
 
+// Productividad de UN cobrador (lo mismo que "Mi productividad", con sus gráficos:
+// cobrado de los últimos 7 días, mora por antigüedad, meta del mes) para el
+// supervisor — permiso creditos.productividad.ver y solo cobradores a su cargo.
+export const getCollectorProductivity = (token, collectorId) =>
+  credimasterGet(`/api/collections/productivity/${collectorId}`, token);
+
 // Cierre del día del cobrador (cobrado por forma de pago, efectivo a
 // entregar, custodia acumulada) — permiso pagos.ver. `date` YYYY-MM-DD,
 // opcional (default hoy).
