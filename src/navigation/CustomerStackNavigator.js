@@ -6,6 +6,8 @@ import CustomerLocationScreen from "../screens/CustomerLocationScreen";
 import CustomerFileScreen from "../screens/CustomerFileScreen";
 import CustomerInfoUpdateScreen from "../screens/CustomerInfoUpdateScreen";
 import NewCustomerScreen from "../screens/NewCustomerScreen";
+import CustomerSetupScreen from "../screens/CustomerSetupScreen";
+import CustomerEvaluationScreen from "../screens/CustomerEvaluationScreen";
 import LoanDetailScreen from "../screens/LoanDetailScreen";
 
 const Stack = createNativeStackNavigator();
@@ -45,6 +47,16 @@ export default function CustomerStackNavigator() {
         name="NewCustomer"
         component={NewCustomerScreen}
         options={{ title: "Nuevo cliente" }}
+      />
+      <Stack.Screen
+        name="CustomerSetup"
+        component={CustomerSetupScreen}
+        options={{ title: "Completar expediente" }}
+      />
+      <Stack.Screen
+        name="CustomerEvaluation"
+        component={CustomerEvaluationScreen}
+        options={{ title: "Evaluación financiera" }}
       />
       <Stack.Screen
         name="LoanDetail"

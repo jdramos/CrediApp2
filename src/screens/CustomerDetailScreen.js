@@ -56,6 +56,7 @@ export default function CustomerDetailScreen({ route, navigation }) {
   const { session } = useContext(SessionContext);
   const canViewLoans = session?.permissions?.includes("creditos.ver");
   const canRequestLoan = session?.permissions?.includes("creditos.insertar");
+  const canEvaluate = ["clientes.evaluacion.insertar", "clientes.evaluacion.ver"].some((p) => session?.permissions?.includes(p));
   const canOpenFile = ["clientes.checklist.ver", "clientes.documentos.subir", "garantias.ver", "garantias.insertar"].some(
     (p) => session?.permissions?.includes(p),
   );
@@ -164,6 +165,16 @@ export default function CustomerDetailScreen({ route, navigation }) {
               style={{ marginTop: SPACING.sm, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
             >
               Solicitar crédito
+            </Button>
+          )}
+          {canEvaluate && (
+            <Button
+              mode="outlined"
+              icon="chart-box-outline"
+              onPress={() => navigation.navigate("CustomerEvaluation", { customerId, customerName: customer?.customer_name })}
+              style={{ marginTop: SPACING.sm, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+            >
+              Evaluación financiera
             </Button>
           )}
           {canOpenFile && (
