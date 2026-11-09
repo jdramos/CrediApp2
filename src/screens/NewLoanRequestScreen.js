@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import { View, StyleSheet, FlatList, Alert, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Card, Button, Chip, ActivityIndicator, HelperText, IconButton, Checkbox, Portal, Modal } from "react-native-paper";
@@ -24,6 +24,9 @@ import { pickImage } from "../utils/imagePicker";
 import { isNetworkError } from "../api/credimasterClient";
 import { persistLocalFile } from "../offline/filePersist";
 import { enqueue } from "../offline/queue";
+import { cachedFetch } from "../offline/cache";
+import { searchCachedCustomers } from "../offline/paymentData";
+import { isLocalCustomerId } from "../offline/localCustomers";
 import { useSync } from "../offline/SyncProvider";
 import { useBusinessDayStatus } from "../hooks/useBusinessDayStatus";
 import BusinessDayBanner from "../components/BusinessDayBanner";
@@ -121,7 +124,11 @@ function QuoteCard({ quote, frequency, showHint }) {
       {quote.loading && !s ? (
         <ActivityIndicator style={{ alignSelf: "flex-start" }} />
       ) : quote.error || !s ? (
-        <Text style={{ color: COLORS.muted }}>No se pudo calcular la cuota con estos datos.</Text>
+        <Text style={{ color: COLORS.muted }}>
+          {quote.offline
+            ? "Sin conexión: la cuota se calcula cuando haya señal. La solicitud se puede guardar igual."
+            : "No se pudo calcular la cuota con estos datos."}
+        </Text>
       ) : (
         <View style={{ opacity: quote.loading ? 0.5 : 1 }}>
           <Text style={{ color: COLORS.primary, fontWeight: "800", fontSize: 26 }}>{money(s.installment)}</Text>
@@ -257,9 +264,13 @@ export default function NewLoanRequestScreen({ route, navigation }) {
 
   useEffect(() => {
     if (!customer?.id) return;
-    getCurrentEvaluation(session.token, customer.id).then(setEvaluation).catch(() => setEvaluation(null));
-    getCustomerGuarantees(session.token, customer.id).then((rows) => setGuarantees(rows || [])).catch(() => setGuarantees([]));
-    getCustomerChecklist(session.token, customer.id).then((rows) => setChecklist(Array.isArray(rows) ? rows : [])).catch(() => setChecklist([]));
+    // Cliente creado sin señal: todavía no existe en el servidor, no hay nada que pedirle.
+    if (isLocalCustomerId(customer.id)) return;
+    // Se guarda la última respuesta de cada cliente que se abre: sin señal se usa esa copia.
+    const key = (what) => `${session.user.id}:loanform:${what}:${customer.id}`;
+    cachedFetch(key("evaluation"), () => getCurrentEvaluation(session.token, customer.id)).then((r) => setEvaluation(r.data)).catch(() => setEvaluation(null));
+    cachedFetch(key("guarantees"), () => getCustomerGuarantees(session.token, customer.id)).then((r) => setGuarantees(r.data || [])).catch(() => setGuarantees([]));
+    cachedFetch(key("checklist"), () => getCustomerChecklist(session.token, customer.id)).then((r) => setChecklist(Array.isArray(r.data) ? r.data : [])).catch(() => setChecklist([]));
   }, [customer?.id, session.token]);
 
   // Prellena los catálogos complementarios con la fila "por defecto" del
@@ -291,7 +302,18 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       const res = await searchCustomers(session.token, text.trim());
       setResults(res?.data || []);
     } catch (e) {
-      setError(e?.message ?? "Error buscando clientes");
+      if (isNetworkError(e)) {
+        // Sin señal: se busca dentro de la cartera guardada en el teléfono.
+        const found = await searchCachedCustomers(session.user.id, text.trim());
+        setResults(found);
+        setError(
+          found.length
+            ? "Sin conexión: se busca solo en la cartera guardada en el teléfono."
+            : "Sin conexión y no hay coincidencias en la cartera guardada en el teléfono.",
+        );
+      } else {
+        setError(e?.message ?? "Error buscando clientes");
+      }
     } finally {
       setSearching(false);
     }
@@ -405,7 +427,11 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       setShowAddGuarantee(false);
       if (photoProblem) setError(photoProblem);
     } catch (e) {
-      setError(e?.message ?? "No se pudo agregar la garantía");
+      setError(
+        isNetworkError(e)
+          ? "Sin conexión: una garantía nueva se puede agregar cuando haya señal. Por ahora puede elegir las que ya tiene el cliente."
+          : e?.message ?? "No se pudo agregar la garantía",
+      );
     } finally {
       setSavingGuarantee(false);
     }
@@ -487,8 +513,8 @@ export default function NewLoanRequestScreen({ route, navigation }) {
         .then((table) => {
           if (alive) setQuote({ loading: false, summary: summarizeSchedule(table) });
         })
-        .catch(() => {
-          if (alive) setQuote({ loading: false, summary: null, error: true });
+        .catch((e) => {
+          if (alive) setQuote({ loading: false, summary: null, error: true, offline: isNetworkError(e) });
         });
     }, 600);
     return () => {
@@ -669,8 +695,16 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     return "";
   };
 
+  // Referencia única de esta solicitud: se genera una vez y se reutiliza en cada reintento (también el
+  // que hace la cola sin señal), así el servidor no crea dos créditos si la primera respuesta se perdió.
+  const clientRefRef = useRef(null);
+
   const submitLoanRequest = async () => {
+    if (!clientRefRef.current) {
+      clientRefRef.current = `loan-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    }
     const payload = {
+      client_reference_id: clientRefRef.current,
       customer_id: customer.id,
       customer_identification: customer.identification,
       requestDate,
@@ -704,12 +738,37 @@ export default function NewLoanRequestScreen({ route, navigation }) {
 
     try {
       setSaving(true);
+      // Cliente creado sin señal: no existe todavía en el servidor, la solicitud va directo a la cola.
+      if (isLocalCustomerId(customer.id)) throw Object.assign(new Error("cliente sin registrar"), { localCustomer: true });
       const res = await createLoanRequest(session.token, payload);
+      clientRefRef.current = null;
       setResult(res);
       setStep(4);
     } catch (e) {
       const data = e?.data;
-      if (data?.code === "COLLATERAL_INSUFFICIENT") {
+      if (isNetworkError(e)) {
+        // Sin señal: se ofrece guardar la solicitud en el teléfono y enviarla sola al volver la conexión.
+        confirmAction(
+          "Sin conexión",
+          "No se pudo conectar al servidor. ¿Guardar esta solicitud en el teléfono para enviarla automáticamente cuando vuelva la señal?",
+          async () => {
+            try {
+              await enqueue({
+                type: "LOAN_REQUEST",
+                label: `Solicitud de crédito ${money(toNumber(amount))} — ${customer?.customer_name || "cliente"}`,
+                payload: { customerId: customer.id, customerName: customer?.customer_name, request: payload },
+              });
+              refreshPendingCount();
+              clientRefRef.current = null;
+              setResult({ pendingOffline: true });
+              setStep(4);
+            } catch (queueErr) {
+              setError(queueErr?.message ?? "No se pudo guardar la solicitud para enviarla después");
+            }
+          },
+          { confirmText: "Guardar" },
+        );
+      } else if (data?.code === "COLLATERAL_INSUFFICIENT") {
         setError("La garantía seleccionada no cubre el mínimo requerido para este monto. Agregá más garantías o consultá a tu supervisor.");
       } else if (Array.isArray(data?.missing_documents) && data.missing_documents.length > 0) {
         const list = data.missing_documents.map((d) => d.title || d.code).join(", ");
@@ -1284,12 +1343,14 @@ export default function NewLoanRequestScreen({ route, navigation }) {
 
         {step === 4 && (
           <Animated.View entering={FadeIn} style={styles.successWrap}>
-            <MaterialCommunityIcons name="clock-check-outline" size={72} color={COLORS.warning} />
+            <MaterialCommunityIcons name={result?.pendingOffline ? "cloud-upload-outline" : "clock-check-outline"} size={72} color={COLORS.warning} />
             <Text variant="headlineSmall" style={{ fontWeight: "800", color: COLORS.text }}>
-              Solicitud enviada
+              {result?.pendingOffline ? "Solicitud guardada sin conexión" : "Solicitud enviada"}
             </Text>
             <Text style={{ color: COLORS.muted, textAlign: "center" }}>
-              Solicitud #{result?.loan_id} para {customer?.customer_name}, quedó pendiente de aprobación.
+              {result?.pendingOffline
+                ? `Solicitud para ${customer?.customer_name}. Se envía sola cuando vuelva la señal; si el servidor la rechaza la verá en Pendientes de sincronizar con el motivo.`
+                : `Solicitud #${result?.loan_id} para ${customer?.customer_name}, quedó pendiente de aprobación.`}
             </Text>
             {result?.collateral_exception && (
               <Text style={{ color: COLORS.warning, textAlign: "center" }}>

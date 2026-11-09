@@ -1,5 +1,6 @@
 import { getPaymentMethods } from "../api/paymentApi";
-import { getAssignedLoans } from "../api/collectionsApi";
+import { getAssignedLoans, getMyPayments } from "../api/collectionsApi";
+import { periodRange } from "../utils/date";
 import { isNetworkError } from "../api/credimasterClient";
 import { cachedFetch, readCache } from "./cache";
 
@@ -101,6 +102,25 @@ export async function cachedLoansOfCustomer(userId, customerId) {
 export async function cachedLoan(userId, loanId) {
   const item = (await loadCachedPortfolio(userId)).find((l) => Number(l.loan_id) === Number(loanId));
   return item ? loanFromPortfolio(item) : undefined;
+}
+
+// "Mis cobros": primera página de cada período, guardada por rango de fechas (no por nombre del
+// período: "hoy" de ayer no debe mostrarse como el de hoy).
+export const PAYMENTS_PAGE_SIZE = 50;
+export const PAYMENT_PERIODS = ["today", "yesterday", "week", "month", "prevMonth"];
+export const paymentsCacheKey = (userId, from, to) => `${userId}:payments:${from}:${to}`;
+export const statementCacheKey = (userId, loanId) => `${userId}:statement:${loanId}`;
+
+// Deja guardados los cobros de los períodos de "Mis cobros" para verlos sin señal.
+export async function prefetchPayments(token, userId) {
+  await Promise.allSettled(
+    PAYMENT_PERIODS.map((p) => {
+      const { from, to } = periodRange(p);
+      return cachedFetch(paymentsCacheKey(userId, from, to), () =>
+        getMyPayments(token, { from, to, page: 1, pageSize: PAYMENTS_PAGE_SIZE }),
+      );
+    }),
+  );
 }
 
 // Deja guardada la cartera para poder cobrar sin señal aunque no se haya abierto esa pantalla.

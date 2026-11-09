@@ -392,6 +392,14 @@ export default function PaymentsScreen({ route }) {
     }, [step, leave]),
   );
 
+  // "Registrar otro pago": vuelve a la ruta de cobro (Mi cartera), de donde se elige al siguiente
+  // cliente; si ya está en la pila de esta pestaña se regresa a ella en vez de apilar otra.
+  const goToRoute = () => {
+    reset();
+    if (typeof navigation.popTo === "function") navigation.popTo("ClientPortfolio");
+    else navigation.navigate("ClientPortfolio");
+  };
+
   const reset = () => {
     setStep(0);
     setError("");
@@ -1200,7 +1208,7 @@ export default function PaymentsScreen({ route }) {
               Imprimir (impresora Bluetooth)
             </Button>
 
-            <Button mode="contained" onPress={reset} style={{ borderRadius: RADIUS.md }} contentStyle={{ height: 46 }}>
+            <Button mode="contained" onPress={goToRoute} style={{ borderRadius: RADIUS.md }} contentStyle={{ height: 46 }}>
               Registrar otro pago
             </Button>
           </Animated.View>

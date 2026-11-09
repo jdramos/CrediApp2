@@ -17,6 +17,7 @@ const TYPE_LABEL = {
   PAYMENT: "Pago",
   PAYMENT_USD: "Dólares de un pago",
   CUSTOMER_CREATE: "Cliente nuevo",
+  LOAN_REQUEST: "Solicitud de crédito",
   CUSTOMER_EVALUATION: "Evaluación financiera",
   CUSTOMER_INFO_UPDATE: "Actualización de expediente",
   GUARANTEE_PHOTO: "Foto de garantía",

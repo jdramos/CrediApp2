@@ -140,7 +140,11 @@ export default function CustomerSetupScreen({ route, navigation }) {
 
   const requestLoan = () => {
     // El cliente recién creado ya queda elegido en la solicitud.
-    navigation.navigate("Creditos", { screen: "NewLoanRequest", params: { customer: customer || { id: customerId, customer_name: customerName } } });
+    // Cliente creado sin señal: se pasa su id local; la solicitud queda en la cola detrás del alta.
+    const chosen = isLocal
+      ? { id: customerId, customer_name: customerName, identification: customer?.identification, conami_id_actividad_economica: customer?.conami_id_actividad_economica }
+      : customer || { id: customerId, customer_name: customerName };
+    navigation.navigate("Creditos", { screen: "NewLoanRequest", params: { customer: chosen } });
   };
 
   return (
@@ -211,13 +215,15 @@ export default function CustomerSetupScreen({ route, navigation }) {
         )}
 
         <View style={{ gap: SPACING.sm }}>
-          {canRequestLoan && !isLocal && (
+          {canRequestLoan && (
             <Button mode="contained" icon="cash-plus" onPress={requestLoan} style={{ borderRadius: RADIUS.md }}>
               Crear solicitud de crédito
             </Button>
           )}
           {canRequestLoan && isLocal && (
-            <Text style={styles.hint}>La solicitud de crédito se podrá crear cuando el cliente quede registrado (al volver la señal).</Text>
+            <Text style={styles.hint}>
+              Sin señal la solicitud se guarda en el teléfono y se envía detrás del cliente. Si la empresa exige documentos del expediente, el servidor la rechazará hasta que se suban (la verá en Pendientes para reintentar).
+            </Text>
           )}
           <Button
             mode="outlined"

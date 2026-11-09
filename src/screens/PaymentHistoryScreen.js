@@ -6,6 +6,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getMyPayments } from "../api/collectionsApi";
+import { isNetworkError } from "../api/credimasterClient";
+import { cachedFetch } from "../offline/cache";
+import { paymentsCacheKey, PAYMENTS_PAGE_SIZE } from "../offline/paymentData";
+import OfflineNotice from "../components/OfflineNotice";
 import PaymentEvidenceModal from "../components/PaymentEvidenceModal";
 import PaymentReceiptModal from "../components/PaymentReceiptModal";
 import { usePendingPayments } from "../offline/pendingPayments";
@@ -16,7 +20,7 @@ import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import { withCode } from "../utils/customerLabel";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = PAYMENTS_PAGE_SIZE;
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -87,8 +91,9 @@ const dayLabel = (iso) => {
 export default function PaymentHistoryScreen() {
   const navigation = useNavigation();
   const { session } = useContext(SessionContext);
-  const pending = usePendingPayments();
   const [period, setPeriod] = useState("today");
+  const range = periodRange(period);
+  const pending = usePendingPayments(undefined, range);
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState(null);
   const [linked, setLinked] = useState(true);
@@ -97,6 +102,7 @@ export default function PaymentHistoryScreen() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const [cachedAt, setCachedAt] = useState(null); // sin señal: fecha de la copia que se está viendo
   const [evidenceFor, setEvidenceFor] = useState(null);
   const canCreate = session?.permissions?.includes("pagos.insertar");
   const [receiptFor, setReceiptFor] = useState(null);
@@ -110,8 +116,19 @@ export default function PaymentHistoryScreen() {
       setError("");
       try {
         const { from, to } = periodRange(period);
-        const res = await getMyPayments(session.token, { from, to, page: nextPage, pageSize: PAGE_SIZE });
+        const fetcher = () => getMyPayments(session.token, { from, to, page: nextPage, pageSize: PAGE_SIZE });
+        let res;
+        let stamp = null;
+        if (nextPage === 1) {
+          // La primera página se guarda: sin señal se ve la última copia de ese período.
+          const r = await cachedFetch(paymentsCacheKey(session.user.id, from, to), fetcher);
+          res = r.data;
+          stamp = r.cachedAt;
+        } else {
+          res = await fetcher();
+        }
         if (id !== requestId.current) return; // llegó una respuesta vieja de otro período
+        if (nextPage === 1) setCachedAt(stamp);
         setLinked(res?.linked !== false);
         setSummary(res?.summary || null);
         setHasMore(!!res?.has_more);
@@ -123,7 +140,11 @@ export default function PaymentHistoryScreen() {
           setItems([]);
           setSummary(null);
         }
-        setError(e?.message || "No se pudo cargar tus cobros. Revisá tu conexión.");
+        setError(
+          isNetworkError(e)
+            ? "Sin conexión y este período todavía no está guardado en el teléfono. Se guarda al abrirlo con señal."
+            : e?.message || "No se pudo cargar tus cobros. Revisá tu conexión.",
+        );
       } finally {
         if (id === requestId.current) {
           setLoading(false);
@@ -131,7 +152,7 @@ export default function PaymentHistoryScreen() {
         }
       }
     },
-    [session.token, period],
+    [session.token, session.user.id, period],
   );
 
   useFocusEffect(useCallback(() => { load(1); }, [load]));
@@ -248,6 +269,7 @@ export default function PaymentHistoryScreen() {
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={
             <>
+              <OfflineNotice cachedAt={cachedAt} />
               {!!error && <Text style={styles.error}>{error}</Text>}
               {(pending.count > 0 || pending.failedCount > 0) && (
                 <View style={styles.notice}>
@@ -265,6 +287,20 @@ export default function PaymentHistoryScreen() {
                   )}
                 </View>
               )}
+              {pending.rows.map((r) => (
+                <View key={r.key} style={[styles.row, { marginTop: SPACING.sm, borderColor: COLORS.warning }]}>
+                  <View style={styles.rowTop}>
+                    <Text style={styles.name} numberOfLines={2}>{r.label || `Pago — crédito #${r.loanId}`}</Text>
+                    <Text style={styles.amount}>{money(r.amount)}</Text>
+                  </View>
+                  <Text style={styles.muted}>{r.date}</Text>
+                  <View style={styles.chipsRow}>
+                    <Chip compact icon="cloud-upload-outline" style={{ backgroundColor: COLORS.warningSoft }}>
+                      Por enviar (sin señal)
+                    </Chip>
+                  </View>
+                </View>
+              ))}
             </>
           }
           ListEmptyComponent={

@@ -7,6 +7,10 @@ import ViewShot, { captureRef } from "react-native-view-shot";
 import { shareImage } from "../utils/shareImage";
 import { SessionContext } from "../auth/SessionContext";
 import { getAccountStatement } from "../api/loanApi";
+import { cachedFetch } from "../offline/cache";
+import { statementCacheKey } from "../offline/paymentData";
+import OfflineNotice from "../components/OfflineNotice";
+import { isNetworkError } from "../api/credimasterClient";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import AddressLines from "../components/AddressLines";
 import PayoffModal from "../components/PayoffModal";
@@ -56,6 +60,7 @@ export default function AccountStatementScreen({ route }) {
   const logoUrl = useTenantLogo(session?.token);
 
   const [statement, setStatement] = useState(null);
+  const [cachedAt, setCachedAt] = useState(null); // sin señal: fecha de la copia que se está viendo
   const [loading, setLoading] = useState(true);
   const [sharing, setSharing] = useState(false);
   const [showPayoff, setShowPayoff] = useState(false);
@@ -83,19 +88,26 @@ export default function AccountStatementScreen({ route }) {
       try {
         setLoading(true);
         setError("");
-        const res = await getAccountStatement(session.token, loanId);
+        // Se guarda la última respuesta de cada crédito que se abre: sin señal se ve esa copia.
+        const r = await cachedFetch(statementCacheKey(session.user.id, loanId), () => getAccountStatement(session.token, loanId));
+        const res = r.data;
+        setCachedAt(r.cachedAt);
         // El backend devuelve { ok, header, movements } (no { data }) --
         // se aplanan en un solo objeto porque toda la pantalla lee los
         // campos de "header" (customer_name, capital_balance, etc.) al
         // nivel raíz de `statement`.
         setStatement(res?.header ? { ...res.header, movements: res.movements, payments: res.payments || [] } : null);
       } catch (e) {
-        setError(e?.message ?? "Error cargando el estado de cuenta");
+        setError(
+          isNetworkError(e)
+            ? "Sin conexión y este estado de cuenta todavía no está guardado en el teléfono. Se guarda al abrirlo con señal."
+            : e?.message ?? "Error cargando el estado de cuenta",
+        );
       } finally {
         setLoading(false);
       }
     })();
-  }, [loanId, session.token]);
+  }, [loanId, session.token, session.user.id]);
 
   const onShare = async () => {
     try {

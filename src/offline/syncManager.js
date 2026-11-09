@@ -3,6 +3,7 @@ import { uploadGuaranteePhoto } from "../api/guaranteePhotoApi";
 import { uploadCustomerDocument } from "../api/customerDocumentApi";
 import { saveCustomerLocation, saveCustomerInfoUpdate, createCustomer, searchCustomers } from "../api/customerApi";
 import { createEvaluation } from "../api/customerEvaluationApi";
+import { createLoanRequest } from "../api/loanApi";
 import { logVisit } from "../api/collectionsApi";
 import { uploadPaymentEvidence } from "../api/paymentEvidenceApi";
 import { isNetworkError, setOfflineSyncMode } from "../api/credimasterClient";
@@ -34,6 +35,28 @@ async function findSameCustomer(token, customer) {
       normText(c.customer_name) === normText(customer?.customer_name),
   );
   return found.length === 1 ? found[0].id : null;
+}
+
+// Solicitud de crédito guardada sin señal. Lleva su client_reference_id: si el servidor ya la había
+// creado (respuesta perdida) devuelve esa misma solicitud en vez de crear otra. El cliente puede ser
+// uno creado sin señal: su id real ya viene en payload.customerId (localCustomers.linkLocalCustomer).
+// Si el servidor la rechaza (expediente incompleto, garantía, día cerrado...) queda como "Requiere
+// atención" con el motivo; al corregirlo se puede reintentar desde Pendientes.
+async function syncLoanRequest(token, item) {
+  const { customerId, request } = item.payload;
+  try {
+    return await createLoanRequest(token, { ...request, customer_id: customerId });
+  } catch (e) {
+    const missing = e?.data?.missing_documents;
+    if (e?.status && Array.isArray(missing) && missing.length) {
+      const list = missing.map((d) => d.title || d.code).join(", ");
+      throw Object.assign(new Error(`Expediente del cliente incompleto. Faltan: ${list}`), { status: e.status, data: e.data });
+    }
+    if (e?.status && e?.data?.code === "COLLATERAL_INSUFFICIENT") {
+      throw Object.assign(new Error("La garantía no cubre el mínimo requerido para este monto."), { status: e.status, data: e.data });
+    }
+    throw e;
+  }
 }
 
 // Alta de un cliente creado sin señal. Al lograrlo se enlaza el id local con el real, y los
@@ -81,6 +104,8 @@ function processItem(token, item) {
       return saveCustomerInfoUpdate(token, item.payload.customerId, item.payload.payload);
     case "CUSTOMER_CREATE":
       return syncCustomerCreate(token, item);
+    case "LOAN_REQUEST":
+      return syncLoanRequest(token, item);
     case "CUSTOMER_EVALUATION":
       // El servidor calcula puntaje, riesgo y recomendación al recibirla, igual que en línea.
       return createEvaluation(token, { ...item.payload.evaluation, customer_id: Number(item.payload.customerId) });

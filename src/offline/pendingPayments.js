@@ -32,20 +32,44 @@ export function summarizePendingPayments(items, { date } = {}) {
   return out;
 }
 
+// Pagos por enviar (PENDING) cuya fecha cae en [from, to] (YYYY-MM-DD), del más nuevo al más viejo,
+// para mostrarlos en "Mis cobros" junto a los ya registrados en el servidor.
+export function pendingPaymentRows(items, { from, to } = {}) {
+  return (items || [])
+    .filter((i) => i.type === "PAYMENT" && i.status !== "FAILED")
+    .filter((i) => {
+      const d = i.payload?.payment_date;
+      return (!from || d >= from) && (!to || d <= to);
+    })
+    .map((i) => ({
+      key: i.id,
+      label: i.label,
+      date: i.payload?.payment_date,
+      amount: Number(i.payload?.payment_amount) || 0,
+      loanId: i.payload?.loan_id,
+      createdAt: i.createdAt,
+      usd: i.payload?.usd || null,
+    }))
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+
 // Hook: resumen de los pagos en cola (de `date` YYYY-MM-DD, o todos si no se
 // da). Se recalcula al enfocar la pantalla y cuando cambia la cantidad de
 // pendientes (al encolar o al sincronizar).
-export function usePendingPayments(date) {
+export function usePendingPayments(date, range) {
   const { pendingCount } = useSync();
   const [summary, setSummary] = useState(() => summarizePendingPayments([], { date }));
+  const [rows, setRows] = useState([]);
 
   const refresh = useCallback(async () => {
     try {
-      setSummary(summarizePendingPayments(await listQueue(), { date }));
+      const items = await listQueue();
+      setSummary(summarizePendingPayments(items, { date }));
+      setRows(pendingPaymentRows(items, range));
     } catch {
       // sin acceso a la cola: no se informa nada extra
     }
-  }, [date]);
+  }, [date, range?.from, range?.to]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useFocusEffect(
     useCallback(() => {
@@ -56,5 +80,5 @@ export function usePendingPayments(date) {
     refresh();
   }, [refresh, pendingCount]);
 
-  return summary;
+  return { ...summary, rows };
 }
