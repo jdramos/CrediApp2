@@ -6,6 +6,11 @@ import { SessionContext } from "../auth/SessionContext";
 import { createEvaluation, getCurrentEvaluation, getEvaluationFormOptions } from "../api/customerEvaluationApi";
 import { isNetworkError } from "../api/credimasterClient";
 import { confirmAction } from "../utils/confirm";
+import { enqueue } from "../offline/queue";
+import { cachedFetch } from "../offline/cache";
+import { EVAL_OPTIONS_CACHE_KEY } from "../offline/prefetch";
+import { useSync } from "../offline/SyncProvider";
+import { isLocalCustomerId, resolveCustomerId, getQueuedEvaluation } from "../offline/localCustomers";
 import { money, toNumber, formatAmountInput } from "../utils/format";
 import { todayISO } from "../utils/date";
 import { COLORS } from "../theme/colors";
@@ -15,6 +20,8 @@ import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 // ingresos, gastos y deudas del cliente (los conceptos los define cada empresa en la web),
 // y el SERVIDOR calcula el puntaje, el riesgo y la recomendación, igual que en la web.
 // Si el cliente ya tiene una evaluación vigente se muestra (para revisarla se usa la web).
+// Sin señal (o si el cliente se creó sin señal y todavía no está registrado) la evaluación se
+// guarda en el teléfono y se envía sola; el servidor calcula el puntaje cuando la recibe.
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -126,10 +133,13 @@ function ResultCard({ ev, title }) {
 export default function CustomerEvaluationScreen({ route, navigation }) {
   const { customerId, customerName } = route.params;
   const { session } = useContext(SessionContext);
+  const { refreshPendingCount } = useSync();
   const canCreate = session?.permissions?.includes("clientes.evaluacion.insertar");
 
   const [loading, setLoading] = useState(true);
   const [current, setCurrent] = useState(null);
+  // Evaluación ya llenada que espera señal en la cola (payload del pendiente).
+  const [queued, setQueued] = useState(null);
   const [concepts, setConcepts] = useState(FALLBACK_CONCEPTS);
   const [options, setOptions] = useState(FALLBACK_OPTIONS);
   const [saved, setSaved] = useState(null);
@@ -151,10 +161,17 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
     let alive = true;
     (async () => {
       try {
-        const cur = await getCurrentEvaluation(session.token, customerId).catch(() => null);
-        if (alive) setCurrent(cur && cur.id ? cur : null);
+        // Si el cliente se creó sin señal y ya se registró, se trabaja con su id real.
+        const rid = await resolveCustomerId(customerId);
+        const q = await getQueuedEvaluation(rid);
+        if (alive) setQueued(q?.payload || null);
+        if (!isLocalCustomerId(rid)) {
+          const cur = await getCurrentEvaluation(session.token, rid).catch(() => null);
+          if (alive) setCurrent(cur && cur.id ? cur : null);
+        }
         if (canCreate) {
-          const opts = await getEvaluationFormOptions(session.token).catch(() => null);
+          // Las opciones de la empresa se guardan: sin señal se usa la última copia.
+          const opts = (await cachedFetch(EVAL_OPTIONS_CACHE_KEY, () => getEvaluationFormOptions(session.token)).catch(() => null))?.data;
           if (alive && opts?.concepts?.length) {
             setConcepts(opts.concepts);
             setOptions({
@@ -197,9 +214,11 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
     if (saving) return;
     setSaving(true);
     setError("");
+    let id = customerId;
     try {
+      // Si el cliente se creó sin señal y ya se registró, se usa su id real.
+      id = await resolveCustomerId(customerId);
       const payload = {
-        customer_id: Number(customerId),
         evaluation_date: todayISO(),
         methodology,
         concept_values: Object.fromEntries(concepts.map((c) => [c.concept_key, toNumber(values[c.concept_key])])),
@@ -212,14 +231,44 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
         bureau_result: bureau || "NO_APLICA",
         analyst_comment: comment.trim() || null,
       };
-      const res = await createEvaluation(session.token, payload);
+      // Guarda la evaluación en el teléfono para enviarla sola cuando haya señal.
+      const queueIt = async () => {
+        const item = await enqueue({
+          type: "CUSTOMER_EVALUATION",
+          label: `Evaluación financiera — ${customerName || "cliente"}`,
+          payload: {
+            customerId: id,
+            customerName,
+            evaluation: payload,
+            preview: {
+              totals,
+              proposed: toNumber(proposed),
+              concepts: concepts.map((c) => ({ concept_key: c.concept_key, concept_label: c.label, value: toNumber(values[c.concept_key]) })),
+            },
+          },
+        });
+        refreshPendingCount();
+        setQueued(item.payload);
+      };
+      if (isLocalCustomerId(id)) {
+        await queueIt();
+        return;
+      }
+      let res;
+      try {
+        res = await createEvaluation(session.token, { customer_id: Number(id), ...payload });
+      } catch (e) {
+        if (!isNetworkError(e)) throw e;
+        await queueIt();
+        return;
+      }
       setSaved({ ...res, concept_values: concepts.map((c) => ({ concept_key: c.concept_key, concept_label: c.label, value: toNumber(values[c.concept_key]) })) });
     } catch (e) {
       if (isNetworkError(e)) {
-        setError("Sin conexión. Para guardar la evaluación hace falta señal: conéctese y vuelva a intentar.");
+        setError("No se pudo guardar la evaluación en el teléfono. Intente de nuevo.");
       } else if (e?.status === 409) {
         setError("Este cliente ya tiene una evaluación vigente. Para cambiarla use la web.");
-        getCurrentEvaluation(session.token, customerId).then((c) => c?.id && setCurrent(c)).catch(() => {});
+        getCurrentEvaluation(session.token, id).then((c) => c?.id && setCurrent(c)).catch(() => {});
       } else {
         setError(e?.message ?? "No se pudo guardar la evaluación");
       }
@@ -252,13 +301,34 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
   }
 
   const done = saved || current;
+  const pv = queued?.preview;
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text variant="titleMedium" style={styles.header}>{customerName || "Cliente"}</Text>
 
-        {done ? (
+        {!done && queued ? (
+          <>
+            <View style={styles.card}>
+              <Text variant="titleMedium" style={styles.header}>Evaluación guardada sin conexión</Text>
+              <Text style={styles.hint}>
+                Se envía sola cuando haya señal{isLocalCustomerId(customerId) ? " y el cliente esté registrado" : ""}. El puntaje, el riesgo y la recomendación los calcula el servidor al recibirla.
+              </Text>
+              {pv && (
+                <>
+                  <Row label="Ingresos" value={money(pv.totals?.income)} />
+                  <Row label="Gastos y deudas" value={money(pv.totals?.expenses)} />
+                  <Row label="Flujo disponible" value={money(pv.totals?.available)} color={Number(pv.totals?.available) < 0 ? COLORS.danger : COLORS.success} />
+                  <Row label="Cuota propuesta" value={money(pv.proposed)} />
+                </>
+              )}
+            </View>
+            <Button mode="contained" onPress={() => navigation.goBack()} style={{ borderRadius: RADIUS.md }}>
+              Listo
+            </Button>
+          </>
+        ) : done ? (
           <>
             <ResultCard ev={done} title={saved ? "Evaluación guardada" : "Evaluación vigente"} />
             {!saved && (

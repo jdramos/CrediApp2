@@ -4,7 +4,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, Card, Chip, Button, IconButton, ActivityIndicator } from "react-native-paper";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
-import { listQueue, removeFromQueue } from "../offline/queue";
+import { listQueue, removeFromQueue, countOtherOwnersQueue } from "../offline/queue";
+import { isLocalCustomerId } from "../offline/localCustomers";
 import { retryQueueItem } from "../offline/syncManager";
 import { deletePersistedFile } from "../offline/filePersist";
 import { useSync } from "../offline/SyncProvider";
@@ -14,6 +15,10 @@ import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
 const TYPE_LABEL = {
   PAYMENT: "Pago",
+  PAYMENT_USD: "Dólares de un pago",
+  CUSTOMER_CREATE: "Cliente nuevo",
+  CUSTOMER_EVALUATION: "Evaluación financiera",
+  CUSTOMER_INFO_UPDATE: "Actualización de expediente",
   GUARANTEE_PHOTO: "Foto de garantía",
   CUSTOMER_DOCUMENT: "Documento de cliente",
   CUSTOMER_LOCATION: "Ubicación de cliente",
@@ -50,10 +55,12 @@ export default function PendingSyncScreen() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  const [othersCount, setOthersCount] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     setItems(await listQueue());
+    setOthersCount(await countOtherOwnersQueue());
     setLoading(false);
   }, []);
 
@@ -75,13 +82,22 @@ export default function PendingSyncScreen() {
     }
   };
 
+  // Pendientes que esperan a que este cliente (creado sin señal) se registre.
+  const dependentsOf = (item) =>
+    item.type === "CUSTOMER_CREATE" ? items.filter((i) => i.id !== item.id && i.payload?.customerId === item.payload?.localId) : [];
+
   const onDelete = (item) => {
+    const dependents = dependentsOf(item);
     confirmAction(
       "Eliminar pendiente",
-      "¿Eliminar esta acción de la cola? No se va a enviar al servidor.",
+      dependents.length
+        ? `¿Eliminar este cliente de la cola? No se va a registrar y también se eliminan sus ${dependents.length} pendiente(s) (fotos, evaluación).`
+        : "¿Eliminar esta acción de la cola? No se va a enviar al servidor.",
       async () => {
-        await removeFromQueue(item.id);
-        if (item.payload?.file?.uri) await deletePersistedFile(item.payload.file.uri);
+        for (const d of [item, ...dependents]) {
+          await removeFromQueue(d.id);
+          if (d.payload?.file?.uri) await deletePersistedFile(d.payload.file.uri);
+        }
         refreshPendingCount();
         load();
       },
@@ -98,6 +114,12 @@ export default function PendingSyncScreen() {
           Sincronizar
         </Button>
       </View>
+
+      {othersCount > 0 && (
+        <Text style={[styles.muted, { paddingHorizontal: SPACING.lg }]}>
+          Hay {othersCount} pendiente{othersCount === 1 ? "" : "s"} de otro usuario guardado{othersCount === 1 ? "" : "s"} en este teléfono. Se envían cuando esa persona inicie sesión.
+        </Text>
+      )}
 
       {loading && <ActivityIndicator style={{ marginTop: SPACING.lg }} />}
 
@@ -123,6 +145,9 @@ export default function PendingSyncScreen() {
               </View>
               <Text style={styles.muted}>{new Date(item.createdAt).toLocaleString("es-NI")}</Text>
               {!!item.lastError && <Text style={styles.errorText}>{item.lastError}</Text>}
+              {isLocalCustomerId(item.payload?.customerId) && (
+                <Text style={styles.muted}>Espera a que el cliente nuevo se registre; se envía después de él.</Text>
+              )}
               <View style={styles.actionsRow}>
                 <Button
                   compact

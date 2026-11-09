@@ -8,8 +8,9 @@ import { registerForPushNotificationsAsync } from "../notifications/pushNotifica
 import { cancelReminders } from "../notifications/reminders";
 import { clearCache } from "../offline/cache";
 import { resetTracking, setTrackingSessionGetter } from "../tracking/tracker";
-import { queueCount } from "../offline/queue";
-import { discardQueue } from "../offline/syncManager";
+import { queueCount, setQueueOwner } from "../offline/queue";
+import { flushQueue } from "../offline/syncManager";
+import { isConnected } from "../offline/network";
 import { confirmAction } from "../utils/confirm";
 import { setNoticeReporter } from "../utils/contact";
 import { reportPaymentNotice } from "../api/paymentNoticeApi";
@@ -50,6 +51,9 @@ export function SessionProvider({ children }) {
   // saber en cada envío quién es el usuario y su token ACTUALES.
   const sessionRef = useRef(null);
   sessionRef.current = session;
+  // Dueño de la cola de pendientes (offline/queue.js): se fija al renderizar, antes de que ninguna
+  // pantalla encole o lea, para que cada pendiente quede a nombre de quien lo creó.
+  setQueueOwner(session?.user?.id ?? null);
   useEffect(() => {
     setTrackingSessionGetter(() =>
       sessionRef.current
@@ -139,15 +143,31 @@ export function SessionProvider({ children }) {
   // al backend con un token que ya sabemos inválido) y no muestra un
   // segundo Alert -- lo usa el logout forzado por 401, que ya avisó al
   // usuario por su cuenta (ver arriba).
+  //
+  // Los pendientes de sincronizar NO se borran al cerrar sesión (ni cuando el servidor la cierra
+  // solo, por vencer o por entrar desde otro dispositivo): se quedan en el teléfono a nombre de su
+  // dueño y se envían cuando ese usuario vuelve a iniciar sesión (offline/queue.js). Antes se
+  // descartaban y un cobro hecho sin señal se perdía.
   const signOut = async ({ force = false, silent = false } = {}) => {
     if (!force) {
-      const pending = await queueCount();
+      let pending = await queueCount();
+      // Con señal se intenta enviar todo ahora, mientras todavía hay sesión.
+      if (pending > 0 && session?.token) {
+        try {
+          if (await isConnected()) {
+            await flushQueue(session.token);
+            pending = await queueCount();
+          }
+        } catch {
+          // se sigue con lo que quede
+        }
+      }
       if (pending > 0) {
         confirmAction(
           "Acciones pendientes de sincronizar",
-          `Tenés ${pending} acción${pending === 1 ? "" : "es"} (pagos, fotos, documentos, ubicaciones o visitas) sin sincronizar. Si cerrás sesión ahora se van a perder, porque no le pertenecen a la siguiente persona que use este dispositivo. ¿Cerrar sesión de todas formas?`,
+          `Quedan ${pending} acción${pending === 1 ? "" : "es"} (pagos, clientes, fotos, evaluaciones, ubicaciones o visitas) sin enviar. Se quedan guardadas en este teléfono, solo para su usuario, y se envían solas cuando vuelva a iniciar sesión con señal. Hasta entonces no llegan a la oficina. ¿Cerrar sesión?`,
           () => signOut({ force: true }),
-          { confirmText: "Cerrar sesión y perder lo pendiente", destructive: true },
+          { confirmText: "Cerrar sesión" },
         );
         return;
       }
@@ -160,7 +180,6 @@ export function SessionProvider({ children }) {
     const token = session?.token;
     setSession(null);
     await clearSession();
-    await discardQueue();
     await cancelReminders();
     await clearCache();
 

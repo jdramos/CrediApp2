@@ -21,7 +21,7 @@ import { shareImage } from "../utils/shareImage";
 import { SessionContext } from "../auth/SessionContext";
 import { searchCustomers, getCustomer } from "../api/customerApi";
 import { getCustomerActiveLoans, getLoanDetail } from "../api/loanApi";
-import { getPaymentMethods, simulatePayment, createPayment, recordUsdReceipt } from "../api/paymentApi";
+import { simulatePayment, createPayment, recordUsdReceipt } from "../api/paymentApi";
 import { uploadPaymentEvidence } from "../api/paymentEvidenceApi";
 import { isNetworkError } from "../api/credimasterClient";
 import { enqueue } from "../offline/queue";
@@ -31,6 +31,7 @@ import SignatureModal from "../components/SignatureModal";
 import AddressLines from "../components/AddressLines";
 import { ensureWorkday } from "../tracking/workday";
 import { useSync } from "../offline/SyncProvider";
+import { loadPaymentMethods, searchCachedCustomers, cachedLoansOfCustomer, cachedLoan } from "../offline/paymentData";
 import { useBusinessDayStatus } from "../hooks/useBusinessDayStatus";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import BusinessDayBanner from "../components/BusinessDayBanner";
@@ -94,6 +95,12 @@ const styles = StyleSheet.create({
 });
 
 const STEPS = ["Cliente", "Crédito", "Monto", "Listo"];
+
+// Sin señal el registro de un pago sigue: cliente y crédito salen de la cartera guardada en el
+// teléfono y el pago queda en la cola (se envía solo al volver la señal).
+const OFFLINE_SEARCH_NOTICE = "Sin conexión: se busca solo en la cartera guardada en el teléfono.";
+const OFFLINE_PAY_NOTICE = "Sin conexión: el saldo es el de la última vez que se descargó la cartera. El pago se guarda en el teléfono y se envía solo cuando vuelva la señal.";
+const OFFLINE_NO_DATA = "Sin conexión y este cliente o crédito no está en la cartera guardada en el teléfono. Abra la cartera una vez con señal para poder cobrar sin conexión.";
 
 // Cuántos clientes de la búsqueda muestran ya sus créditos (uno por consulta).
 const MAX_PREVIEW_CUSTOMERS = 6;
@@ -205,6 +212,8 @@ export default function PaymentsScreen({ route }) {
 
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
+  // Aviso (no es un error): se está trabajando con los datos guardados porque no hay señal.
+  const [notice, setNotice] = useState("");
 
   // Paso 1: cliente
   const [query, setQuery] = useState("");
@@ -324,8 +333,17 @@ export default function PaymentsScreen({ route }) {
     (async () => {
       try {
         setLoadingLoans(true);
-        const res = await getLoanDetail(session.token, prefill.loanId);
-        const loanData = res?.data || res;
+        let loanData;
+        try {
+          const res = await getLoanDetail(session.token, prefill.loanId);
+          loanData = res?.data || res;
+        } catch (e) {
+          if (!isNetworkError(e)) throw e;
+          // Sin señal: se cobra con los datos de la cartera guardada.
+          loanData = await cachedLoan(session.user.id, prefill.loanId);
+          if (!loanData) throw e;
+          setNotice(OFFLINE_PAY_NOTICE);
+        }
         setLoan(loanData);
         setAmount(defaultAmountFor(loanData));
         setStep(2);
@@ -334,18 +352,18 @@ export default function PaymentsScreen({ route }) {
         // es quien normalmente llena `loans` -- sin esto, si el cobrador
         // presiona "atrás" para volver al paso 1, lo encuentra vacío y ve
         // "este cliente no tiene créditos activos" aunque sí los tenga.
-        const [methodsRes, loansRes] = await Promise.all([
-          getPaymentMethods(session.token),
+        const [list, loansRes] = await Promise.all([
+          loadPaymentMethods(session.token, session.user.id),
           prefill.customerId
             ? getCustomerActiveLoans(session.token, prefill.customerId).catch(() => null)
             : Promise.resolve(null),
         ]);
-        const list = methodsRes?.data || [];
         setMethods(list);
         if (list.length) setMethodId(defaultMethod(list).id);
         if (loansRes) setLoans(loansRes?.loans || []);
+        else if (prefill.customerId) setLoans(await cachedLoansOfCustomer(session.user.id, prefill.customerId));
       } catch (e) {
-        setError(e?.message ?? "Error cargando el crédito");
+        setError(isNetworkError(e) ? OFFLINE_NO_DATA : e?.message ?? "Error cargando el crédito");
       } finally {
         setLoadingLoans(false);
       }
@@ -377,6 +395,7 @@ export default function PaymentsScreen({ route }) {
   const reset = () => {
     setStep(0);
     setError("");
+    setNotice("");
     setQuery("");
     setResults([]);
     setCustomer(null);
@@ -400,6 +419,7 @@ export default function PaymentsScreen({ route }) {
   const onSearchChange = async (text) => {
     setQuery(text);
     setError("");
+    setNotice("");
     if (text.trim().length < 2) {
       setResults([]);
       return;
@@ -409,7 +429,14 @@ export default function PaymentsScreen({ route }) {
       const res = await searchCustomers(session.token, text.trim());
       setResults(res?.data || []);
     } catch (e) {
-      setError(e?.message ?? "Error buscando clientes");
+      if (isNetworkError(e)) {
+        // Sin señal: se busca dentro de la cartera guardada.
+        const found = await searchCachedCustomers(session.user.id, text.trim());
+        setResults(found);
+        setNotice(found.length ? OFFLINE_SEARCH_NOTICE : `${OFFLINE_SEARCH_NOTICE} No hay coincidencias.`);
+      } else {
+        setError(e?.message ?? "Error buscando clientes");
+      }
     } finally {
       setSearching(false);
     }
@@ -418,13 +445,21 @@ export default function PaymentsScreen({ route }) {
   const pickCustomer = async (c) => {
     setCustomer(c);
     setError("");
+    setNotice("");
     setStep(1);
     try {
       setLoadingLoans(true);
       const res = await getCustomerActiveLoans(session.token, c.id);
       setLoans(res?.loans || []);
     } catch (e) {
-      setError(e?.message ?? "Error cargando créditos del cliente");
+      if (isNetworkError(e)) {
+        const list = await cachedLoansOfCustomer(session.user.id, c.id);
+        setLoans(list);
+        if (list.length) setNotice(OFFLINE_PAY_NOTICE);
+        else setError(OFFLINE_NO_DATA);
+      } else {
+        setError(e?.message ?? "Error cargando créditos del cliente");
+      }
     } finally {
       setLoadingLoans(false);
     }
@@ -433,16 +468,20 @@ export default function PaymentsScreen({ route }) {
   const pickLoan = async (l) => {
     setLoan(l);
     setError("");
+    setNotice("");
     setStep(2);
     try {
       // getCustomerActiveLoans (active-summary) no trae next_installment_amount
       // -- se busca el detalle completo del crédito para precargar el monto,
-      // igual que en el flujo por prefill.
-      const [methodsRes, detailRes] = await Promise.all([
-        getPaymentMethods(session.token),
-        getLoanDetail(session.token, l.id || l.loan_id),
+      // igual que en el flujo por prefill. Sin señal se sigue con lo que ya se tiene
+      // (la lista, completada con la cartera guardada) y las formas de pago guardadas.
+      const [list, detailRes] = await Promise.all([
+        loadPaymentMethods(session.token, session.user.id),
+        getLoanDetail(session.token, l.id || l.loan_id).catch((e) => {
+          if (isNetworkError(e)) return null;
+          throw e;
+        }),
       ]);
-      const list = methodsRes?.data || [];
       setMethods(list);
       if (list.length) setMethodId(defaultMethod(list).id);
 
@@ -450,6 +489,12 @@ export default function PaymentsScreen({ route }) {
       if (loanData) {
         setLoan(loanData);
         setAmount(defaultAmountFor(loanData));
+      } else {
+        const fromCache = await cachedLoan(session.user.id, l.id || l.loan_id);
+        const merged = { ...(fromCache || {}), ...l };
+        setLoan(merged);
+        setAmount(defaultAmountFor(merged));
+        setNotice(OFFLINE_PAY_NOTICE);
       }
     } catch (e) {
       setError(e?.message ?? "Error cargando formas de pago");
@@ -458,6 +503,7 @@ export default function PaymentsScreen({ route }) {
 
   const onSimulate = async () => {
     setError("");
+    setNotice("");
     const amt = amountNio;
     if (!amt || amt <= 0) {
       setError("Ingrese un monto válido");
@@ -472,7 +518,11 @@ export default function PaymentsScreen({ route }) {
       });
       setBreakdown(res?.data || res);
     } catch (e) {
-      setError(e?.message ?? "No se pudo calcular el desglose");
+      if (isNetworkError(e)) {
+        setNotice("Sin conexión: no se puede calcular el desglose ahora. Puede confirmar el pago igual; se guarda en el teléfono y se aplica al enviarse.");
+      } else {
+        setError(e?.message ?? "No se pudo calcular el desglose");
+      }
     } finally {
       setSimulating(false);
     }
@@ -795,6 +845,7 @@ export default function PaymentsScreen({ route }) {
               left={<TextInput.Icon icon="magnify" />}
             />
             <HelperText type="error" visible={!!error}>{error}</HelperText>
+            {!!notice && <Text style={{ color: COLORS.warning, fontSize: 12, marginBottom: SPACING.xs }}>{notice}</Text>}
             {searching && <ActivityIndicator style={{ marginTop: SPACING.md }} />}
             <FlatList
               data={results}
@@ -817,6 +868,7 @@ export default function PaymentsScreen({ route }) {
           <Animated.View entering={FadeInDown} exiting={FadeOut}>
             <StepHeader step={1} title={customer?.customer_name ? withCode(customer.customer_name, customer.customer_code) : "Créditos"} onBack={() => setStep(0)} />
             <HelperText type="error" visible={!!error}>{error}</HelperText>
+            {!!notice && <Text style={{ color: COLORS.warning, fontSize: 12, marginBottom: SPACING.xs }}>{notice}</Text>}
             {loadingLoans && <ActivityIndicator style={{ marginTop: SPACING.md }} />}
             {!loadingLoans && loans.length === 0 && !error && (
               <Text style={{ color: COLORS.muted, marginTop: SPACING.md }}>
@@ -959,6 +1011,7 @@ export default function PaymentsScreen({ route }) {
             </View>
 
             <HelperText type="error" visible={!!error}>{error}</HelperText>
+            {!!notice && <Text style={{ color: COLORS.warning, fontSize: 12, marginBottom: SPACING.xs }}>{notice}</Text>}
 
             <Button
               mode="outlined"

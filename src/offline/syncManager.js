@@ -1,14 +1,58 @@
 import { createPayment, recordUsdReceipt } from "../api/paymentApi";
 import { uploadGuaranteePhoto } from "../api/guaranteePhotoApi";
 import { uploadCustomerDocument } from "../api/customerDocumentApi";
-import { saveCustomerLocation, saveCustomerInfoUpdate } from "../api/customerApi";
+import { saveCustomerLocation, saveCustomerInfoUpdate, createCustomer, searchCustomers } from "../api/customerApi";
+import { createEvaluation } from "../api/customerEvaluationApi";
 import { logVisit } from "../api/collectionsApi";
 import { uploadPaymentEvidence } from "../api/paymentEvidenceApi";
 import { isNetworkError, setOfflineSyncMode } from "../api/credimasterClient";
 import { listQueue, removeFromQueue, updateQueueItem, clearQueue } from "./queue";
 import { deletePersistedFile } from "./filePersist";
+import { isLocalCustomerId, getRealCustomerId, linkLocalCustomer, clearLocalCustomerMap } from "./localCustomers";
 
 let syncing = false;
+
+const normText = (v) =>
+  String(v || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+const normId = (v) => String(v || "").replace(/[\s-]/g, "").toUpperCase();
+
+// Si el alta ya había llegado al servidor pero la respuesta se perdió (se cayó la señal justo
+// ahí), reintentar da "cédula repetida" aunque el cliente sea el mismo. Se busca por cédula y
+// solo se da por bueno si el nombre también coincide: un cliente distinto con la misma cédula
+// sí debe quedar como error para que alguien lo revise.
+async function findSameCustomer(token, customer) {
+  const res = await searchCustomers(token, customer?.identification);
+  const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+  const found = list.filter(
+    (c) =>
+      normId(c.identification) === normId(customer?.identification) &&
+      normText(c.customer_name) === normText(customer?.customer_name),
+  );
+  return found.length === 1 ? found[0].id : null;
+}
+
+// Alta de un cliente creado sin señal. Al lograrlo se enlaza el id local con el real, y los
+// pendientes que dependían de él (evaluación, fotos) pasan a usar el id real.
+async function syncCustomerCreate(token, item) {
+  const { localId, body } = item.payload;
+  let id;
+  try {
+    const res = await createCustomer(token, body);
+    id = res?.data?.id ?? res?.id;
+  } catch (e) {
+    if (e?.status !== 409) throw e;
+    id = await findSameCustomer(token, body?.customer);
+    if (!id) throw e;
+  }
+  if (!id) throw new Error("El servidor no devolvió el id del cliente nuevo");
+  await linkLocalCustomer(localId, id);
+  return id;
+}
 
 function processItem(token, item) {
   switch (item.type) {
@@ -35,6 +79,11 @@ function processItem(token, item) {
       return logVisit(token, item.payload);
     case "CUSTOMER_INFO_UPDATE":
       return saveCustomerInfoUpdate(token, item.payload.customerId, item.payload.payload);
+    case "CUSTOMER_CREATE":
+      return syncCustomerCreate(token, item);
+    case "CUSTOMER_EVALUATION":
+      // El servidor calcula puntaje, riesgo y recomendación al recibirla, igual que en línea.
+      return createEvaluation(token, { ...item.payload.evaluation, customer_id: Number(item.payload.customerId) });
     case "PAYMENT_EVIDENCE":
       // Se encola DESPUÉS del pago (misma cola, en orden), identificada por el
       // client_reference_id del pago o por su payment_id si ya estaba registrado.
@@ -58,9 +107,24 @@ export async function flushQueue(token, { onProgress } = {}) {
   setOfflineSyncMode(true);
   let synced = 0;
   let failed = 0;
+  let waiting = 0;
   try {
-    const items = await listQueue();
-    for (const item of items.filter((i) => i.status === "PENDING")) {
+    // Se recorren los ids y cada ítem se lee de nuevo justo antes de enviarlo: al registrarse un
+    // cliente creado sin señal, los pendientes que dependen de él cambian de id local a real.
+    const ids = (await listQueue()).filter((i) => i.status === "PENDING").map((i) => i.id);
+    for (const id of ids) {
+      let item = (await listQueue()).find((i) => i.id === id);
+      if (!item || item.status !== "PENDING") continue;
+      // Depende de un cliente que todavía no se registró (su alta sigue en espera o falló):
+      // se deja pendiente, no es un error de este ítem.
+      if (isLocalCustomerId(item.payload?.customerId)) {
+        const real = await getRealCustomerId(item.payload.customerId);
+        if (!real) {
+          waiting += 1;
+          continue;
+        }
+        item = { ...item, payload: { ...item.payload, customerId: real } };
+      }
       try {
         await processItem(token, item);
         if (item.payload?.file?.uri) {
@@ -90,7 +154,7 @@ export async function flushQueue(token, { onProgress } = {}) {
     syncing = false;
     setOfflineSyncMode(false);
   }
-  return { synced, failed };
+  return { synced, failed, waiting };
 }
 
 // Reintento manual de un ítem marcado FAILED (botón "Reintentar" en la
@@ -100,11 +164,9 @@ export async function retryQueueItem(token, id) {
   return flushQueue(token);
 }
 
-// Descarta TODA la cola pendiente, incluyendo los archivos locales de
-// fotos/documentos en espera de subir (ver SessionContext.js::signOut —
-// se usa al cerrar sesión con ítems sin sincronizar, para que no queden
-// esperando para irse con el token de la siguiente persona que use el
-// dispositivo).
+// Descarta los pendientes del usuario con sesión, con sus archivos locales de fotos/documentos.
+// Ya NO se usa al cerrar sesión (ahí los pendientes se conservan a nombre de su dueño, ver
+// queue.js y SessionContext.js::signOut); queda para una acción explícita del usuario.
 export async function discardQueue() {
   const items = await listQueue();
   for (const item of items) {
@@ -113,4 +175,5 @@ export async function discardQueue() {
     }
   }
   await clearQueue();
+  await clearLocalCustomerMap();
 }

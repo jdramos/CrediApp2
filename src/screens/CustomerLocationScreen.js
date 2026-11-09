@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { View, StyleSheet, ScrollView, Alert, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, Card, Button, ActivityIndicator, HelperText, Snackbar } from "react-native-paper";
@@ -10,6 +10,7 @@ import { isNetworkError } from "../api/credimasterClient";
 import { enqueue } from "../offline/queue";
 import { persistLocalFile } from "../offline/filePersist";
 import { useSync } from "../offline/SyncProvider";
+import { isLocalCustomerId, resolveCustomerId, getQueuedCustomerFields, patchQueuedCustomer } from "../offline/localCustomers";
 import { confirmAction } from "../utils/confirm";
 import { pickImage } from "../utils/imagePicker";
 import { openDirectionsTo } from "../utils/maps";
@@ -67,12 +68,19 @@ const formatCoords = (lat, lng) =>
 // cargar el cliente y clientes.editar para guardarlo. El backend espera
 // el objeto customer COMPLETO en cada PUT, así que primero se trae el
 // registro entero y solo se cambian los 4 campos de coordenadas.
+//
+// Si el cliente se creó sin señal (id "local:...") todavía no existe en el servidor: la ubicación
+// se guarda dentro de su alta pendiente y las fotos quedan en la cola apuntando a él.
+const CUSTOMER_NOT_REGISTERED = new Error("cliente sin registrar"); // sin status: sigue el camino de "sin señal"
 export default function CustomerLocationScreen({ route }) {
   const { customerId } = route.params;
   const { session } = useContext(SessionContext);
   const { refreshPendingCount } = useSync();
 
   const [customer, setCustomer] = useState(null);
+  // true: `customer` es solo lo escrito en el formulario guardado en el teléfono (incompleto);
+  // no sirve para un PUT, que reemplaza el registro completo.
+  const partialCustomer = useRef(false);
   const [homeLat, setHomeLat] = useState(null);
   const [homeLng, setHomeLng] = useState(null);
   const [businessLat, setBusinessLat] = useState(null);
@@ -112,8 +120,16 @@ export default function CustomerLocationScreen({ route }) {
     (async () => {
       try {
         setLoading(true);
-        const res = await getCustomer(session.token, customerId);
-        const c = res?.data?.customer;
+        const id = await resolveCustomerId(customerId);
+        let c;
+        if (isLocalCustomerId(id)) {
+          c = await getQueuedCustomerFields(customerId);
+          partialCustomer.current = true;
+          if (!c) throw new Error("Este cliente ya no está en la lista de pendientes.");
+        } else {
+          c = (await getCustomer(session.token, id))?.data?.customer;
+          partialCustomer.current = false;
+        }
         setCustomer(c);
         const loaded = {
           homeLat: c?.home_lat != null ? Number(c.home_lat) : null,
@@ -181,8 +197,11 @@ export default function CustomerLocationScreen({ route }) {
     if (!file) return;
     const options = { docType: "OTRO", docName: PHOTO_NAME[target], relatedItemCode: "OTHER_DOC" };
     setPhotoBusy(target);
+    let id = customerId;
     try {
-      await uploadCustomerDocument(session.token, customerId, file, options);
+      id = await resolveCustomerId(customerId);
+      if (isLocalCustomerId(id)) throw CUSTOMER_NOT_REGISTERED; // va directo a la cola
+      await uploadCustomerDocument(session.token, id, file, options);
       setPhotos((p) => ({ ...p, [target]: [...p[target], { uri: file.uri, state: "sent" }] }));
       setSnackbar("Foto guardada en el expediente");
     } catch (e) {
@@ -192,7 +211,7 @@ export default function CustomerLocationScreen({ route }) {
           await enqueue({
             type: "CUSTOMER_DOCUMENT",
             label: `${PHOTO_NAME[target]} — ${customer?.customer_name || "cliente"}`,
-            payload: { customerId, file: { ...file, uri: stableUri }, options },
+            payload: { customerId: id, file: { ...file, uri: stableUri }, options },
           });
           refreshPendingCount();
           setPhotos((p) => ({ ...p, [target]: [...p[target], { uri: file.uri, state: "queued" }] }));
@@ -249,18 +268,42 @@ export default function CustomerLocationScreen({ route }) {
     // aceptado igual que en el resto de la cola offline, no hay
     // reconciliación de conflictos en esta versión.
     const location = { home_lat: homeLat, home_lng: homeLng, business_lat: businessLat, business_lng: businessLng };
+    let id = customerId;
     try {
       setSaving(true);
-      await saveCustomerLocation(session.token, customerId, customer, location);
+      id = await resolveCustomerId(customerId);
+      if (isLocalCustomerId(id)) {
+        // Cliente todavía sin registrar: la ubicación viaja dentro de su alta pendiente.
+        const ok = await patchQueuedCustomer(customerId, location);
+        if (!ok) {
+          setError("El cliente se acaba de registrar. Salga y vuelva a abrir esta pantalla para guardar la ubicación.");
+          return;
+        }
+        setSaved({ homeLat, homeLng, businessLat, businessLng });
+        setSnackbar("Ubicación guardada en el teléfono; se enviará con el cliente cuando haya señal");
+        return;
+      }
+      let full = customer;
+      if (partialCustomer.current) {
+        // Ya se registró mientras tanto: hay que traer su ficha completa antes de guardar.
+        full = (await getCustomer(session.token, id))?.data?.customer;
+        partialCustomer.current = false;
+        setCustomer(full);
+      }
+      await saveCustomerLocation(session.token, id, full, location);
       setSaved({ homeLat, homeLng, businessLat, businessLng });
       setSnackbar("Ubicación guardada");
     } catch (e) {
       if (isNetworkError(e)) {
+        if (partialCustomer.current) {
+          setError("Sin conexión. Intente de nuevo en un momento.");
+          return;
+        }
         try {
           await enqueue({
             type: "CUSTOMER_LOCATION",
             label: `Ubicación — ${customer?.customer_name || "cliente"}`,
-            payload: { customerId, fullCustomer: customer, location },
+            payload: { customerId: id, fullCustomer: customer, location },
           });
           refreshPendingCount();
           setSaved({ homeLat, homeLng, businessLat, businessLng });

@@ -13,6 +13,9 @@ import { isNetworkError } from "../api/credimasterClient";
 import CatalogPickerField from "../components/CatalogPickerField";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 import { confirmAction } from "../utils/confirm";
+import { enqueue } from "../offline/queue";
+import { useSync } from "../offline/SyncProvider";
+import { newLocalCustomerId, hasQueuedCustomerWithIdentification } from "../offline/localCustomers";
 import {
   STEPS, EMPTY_FORM, CEDULA_TYPE_ID, FIELD_INFO, needsSpouse, isRequired, validateForm, firstStepWithError,
   buildCustomerPayload, mapServerErrors, maskDate, addYears, ageFromBirth, birthFromCedula, normalizeCedula,
@@ -56,6 +59,7 @@ const styles = StyleSheet.create({
 // utils/customerForm.js y el servidor las vuelve a validar al guardar.
 export default function NewCustomerScreen({ navigation }) {
   const { session } = useContext(SessionContext);
+  const { refreshPendingCount } = useSync();
   const canCreate = session?.permissions?.includes("clientes.insertar");
   const regulated = session?.tenant?.conami_regulated !== false;
   const modules = session?.tenant?.enabled_modules;
@@ -100,7 +104,9 @@ export default function NewCustomerScreen({ navigation }) {
       setCatError(
         e?.status === 403
           ? "Su usuario no tiene permiso para ver los catálogos (catalogos.ver). Pídaselo al administrador."
-          : e?.message ?? "No se pudieron cargar los catálogos",
+          : isNetworkError(e)
+            ? "Sin conexión y los catálogos todavía no están guardados en el teléfono. Abra esta pantalla una vez con señal para poder registrar clientes sin conexión."
+            : e?.message ?? "No se pudieron cargar los catálogos",
       );
     }
   };
@@ -266,6 +272,28 @@ export default function NewCustomerScreen({ navigation }) {
     );
   };
 
+  // Guarda el alta en la cola de pendientes. El cliente recibe un id local; lo que se le agregue
+  // después (ubicación, fotos, evaluación) queda en la cola apuntando a ese id y se envía en orden
+  // cuando el cliente ya se registró (offline/syncManager.js).
+  const queueCustomer = async () => {
+    try {
+      if (await hasQueuedCustomerWithIdentification(form.identification)) {
+        setGeneral(["Ya hay un cliente con esa identificación esperando señal para registrarse (ver Pendientes de sincronizar)."]);
+        return;
+      }
+      const localId = newLocalCustomerId();
+      await enqueue({
+        type: "CUSTOMER_CREATE",
+        label: `Cliente nuevo — ${form.customer_name.trim()}`,
+        payload: { localId, body: buildCustomerPayload(form) },
+      });
+      refreshPendingCount();
+      navigation.replace("CustomerSetup", { customerId: localId, customerName: form.customer_name.trim() });
+    } catch (err) {
+      setGeneral([err?.message ?? "No se pudo guardar el cliente en el teléfono"]);
+    }
+  };
+
   const doSave = async () => {
     if (saving) return;
     try {
@@ -279,7 +307,14 @@ export default function NewCustomerScreen({ navigation }) {
       else navigation.goBack();
     } catch (e) {
       if (isNetworkError(e)) {
-        setGeneral(["Sin conexión. Para registrar un cliente hace falta señal: conéctese y vuelva a intentar."]);
+        // Sin señal: se ofrece guardar el cliente en el teléfono (cola de pendientes) y seguir
+        // con su expediente; se registra solo al volver la conexión.
+        confirmAction(
+          "Sin conexión",
+          "No se pudo conectar al servidor. ¿Guardar este cliente en el teléfono para registrarlo automáticamente cuando vuelva la señal?",
+          queueCustomer,
+          { confirmText: "Guardar" },
+        );
       } else if (e?.status === 409) {
         setErrors((prev) => ({ ...prev, identification: "Ya existe un cliente con esa identificación" }));
         setGeneral(["Ya existe un cliente con esa identificación. Búsquelo en Clientes."]);

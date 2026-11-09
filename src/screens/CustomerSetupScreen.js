@@ -7,6 +7,9 @@ import { SessionContext } from "../auth/SessionContext";
 import { getCustomer } from "../api/customerApi";
 import { getCustomerChecklist } from "../api/customerDocumentApi";
 import { getCurrentEvaluation } from "../api/customerEvaluationApi";
+import {
+  isLocalCustomerId, getRealCustomerId, getQueuedCustomerFields, getQueuedEvaluation,
+} from "../offline/localCustomers";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -14,6 +17,11 @@ import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 // para dejarlo listo: ubicación (con fotos de la casa y el negocio), documentos
 // obligatorios, evaluación financiera y, al final, la solicitud de crédito. Cada paso abre
 // su pantalla y al volver se actualiza el estado; ninguno bloquea a los demás.
+//
+// Si el cliente se creó SIN señal (id "local:...") todavía no existe en el servidor: se puede
+// agregar su ubicación y fotos y la evaluación (quedan en la cola y se envían detrás del alta),
+// pero no los documentos del expediente ni la solicitud de crédito, que necesitan al cliente
+// ya registrado. En cuanto se registra, esta pantalla cambia sola al id real.
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -80,24 +88,44 @@ export default function CustomerSetupScreen({ route, navigation }) {
   const [customer, setCustomer] = useState(null);
   const [checklist, setChecklist] = useState(null);
   const [evaluation, setEvaluation] = useState(null);
+  const [queuedEval, setQueuedEval] = useState(null); // evaluación guardada sin señal, por enviar
+  const isLocal = isLocalCustomerId(customerId);
 
   useFocusEffect(
     useCallback(() => {
       let alive = true;
       (async () => {
-        const [c, cl, ev] = await Promise.all([
+        if (isLocalCustomerId(customerId)) {
+          const real = await getRealCustomerId(customerId);
+          if (real) {
+            // Ya se registró: se sigue con el id real (esto vuelve a cargar la pantalla).
+            navigation.setParams({ customerId: real });
+            return;
+          }
+          const [fields, qe] = await Promise.all([getQueuedCustomerFields(customerId), getQueuedEvaluation(customerId)]);
+          if (!alive) return;
+          setCustomer(fields);
+          setChecklist(null);
+          setEvaluation(null);
+          setQueuedEval(qe?.payload || null);
+          setLoading(false);
+          return;
+        }
+        const [c, cl, ev, qe] = await Promise.all([
           getCustomer(session.token, customerId).catch(() => null),
           canChecklist ? getCustomerChecklist(session.token, customerId).catch(() => null) : null,
           canSeeEvaluation ? getCurrentEvaluation(session.token, customerId).catch(() => null) : null,
+          getQueuedEvaluation(customerId),
         ]);
         if (!alive) return;
         setCustomer(c?.data?.customer || null);
         setChecklist(Array.isArray(cl) ? cl : null);
         setEvaluation(ev && ev.id ? ev : null);
+        setQueuedEval(qe?.payload || null);
         setLoading(false);
       })();
       return () => { alive = false; };
-    }, [session.token, customerId, canChecklist, canSeeEvaluation]),
+    }, [session.token, customerId, canChecklist, canSeeEvaluation, navigation]),
   );
 
   const hasLocation =
@@ -119,9 +147,12 @@ export default function CustomerSetupScreen({ route, navigation }) {
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.content}>
         <View>
-          <Text variant="titleLarge" style={styles.header}>Cliente guardado</Text>
+          <Text variant="titleLarge" style={styles.header}>{isLocal ? "Cliente guardado sin conexión" : "Cliente guardado"}</Text>
           <Text style={styles.hint}>
-            {customerName ? `${customerName}. ` : ""}Complete lo que falta del expediente. Puede hacerlo ahora o más tarde desde su ficha.
+            {customerName ? `${customerName}. ` : ""}
+            {isLocal
+              ? "Se registrará solo cuando vuelva la señal (puede verlo en Pendientes de sincronizar). Mientras tanto agregue su ubicación y la evaluación financiera."
+              : "Complete lo que falta del expediente. Puede hacerlo ahora o más tarde desde su ficha."}
           </Text>
         </View>
 
@@ -144,15 +175,18 @@ export default function CustomerSetupScreen({ route, navigation }) {
             icon="folder-image"
             title="Documentos obligatorios"
             description={
-              mandatory.length
-                ? `${mandatoryDone} de ${mandatory.length} documentos obligatorios entregados. Tome una foto de cada uno.`
-                : "Este cliente no tiene documentos obligatorios en su expediente."
+              isLocal
+                ? "Documentos obligatorios del expediente (cédula, comprobantes...)."
+                : mandatory.length
+                  ? `${mandatoryDone} de ${mandatory.length} documentos obligatorios entregados. Tome una foto de cada uno.`
+                  : "Este cliente no tiene documentos obligatorios en su expediente."
             }
-            done={mandatory.length === 0 ? true : docsDone}
+            done={isLocal ? false : mandatory.length === 0 ? true : docsDone}
             doneLabel={mandatory.length === 0 ? "Sin obligatorios" : "Completos"}
-            pendingLabel={`Faltan ${mandatory.length - mandatoryDone}`}
+            pendingLabel={isLocal ? "En espera" : `Faltan ${mandatory.length - mandatoryDone}`}
             actionLabel={docsDone ? "Ver expediente" : "Subir documentos"}
             onPress={() => navigation.navigate("CustomerFile", params)}
+            disabledReason={isLocal ? "Podrá subir los documentos del expediente cuando el cliente quede registrado (al volver la señal)." : null}
           />
         )}
 
@@ -163,29 +197,34 @@ export default function CustomerSetupScreen({ route, navigation }) {
             description={
               evaluation
                 ? `Puntaje ${evaluation.final_score} · riesgo ${String(evaluation.risk_level || "").toLowerCase().replace("_", " ")}.`
-                : "Ingresos, gastos y deudas del cliente para medir su capacidad de pago."
+                : queuedEval
+                  ? "Guardada en el teléfono. Se envía sola cuando haya señal y el servidor calcula el puntaje."
+                  : "Ingresos, gastos y deudas del cliente para medir su capacidad de pago."
             }
-            done={!!evaluation}
-            doneLabel="Hecha"
+            done={!!evaluation || !!queuedEval}
+            doneLabel={evaluation ? "Hecha" : "Por enviar"}
             pendingLabel="Pendiente"
-            actionLabel={evaluation ? "Ver evaluación" : "Hacer evaluación"}
+            actionLabel={evaluation || queuedEval ? "Ver evaluación" : "Hacer evaluación"}
             onPress={() => navigation.navigate("CustomerEvaluation", params)}
-            disabledReason={!evaluation && !canEvaluate ? "Su usuario no tiene permiso para registrar evaluaciones." : null}
+            disabledReason={!evaluation && !queuedEval && !canEvaluate ? "Su usuario no tiene permiso para registrar evaluaciones." : null}
           />
         )}
 
         <View style={{ gap: SPACING.sm }}>
-          {canRequestLoan && (
+          {canRequestLoan && !isLocal && (
             <Button mode="contained" icon="cash-plus" onPress={requestLoan} style={{ borderRadius: RADIUS.md }}>
               Crear solicitud de crédito
             </Button>
           )}
+          {canRequestLoan && isLocal && (
+            <Text style={styles.hint}>La solicitud de crédito se podrá crear cuando el cliente quede registrado (al volver la señal).</Text>
+          )}
           <Button
             mode="outlined"
-            onPress={() => navigation.replace("CustomerDetail", { customerId })}
+            onPress={() => (isLocal ? navigation.popToTop() : navigation.replace("CustomerDetail", { customerId }))}
             style={{ borderRadius: RADIUS.md }}
           >
-            Terminar y ver la ficha
+            {isLocal ? "Terminar" : "Terminar y ver la ficha"}
           </Button>
         </View>
       </ScrollView>
