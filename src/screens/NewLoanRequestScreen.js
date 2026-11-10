@@ -287,13 +287,15 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   // Cliente nuevo pendiente de aprobación: la evaluación financiera es obligatoria y se digita
   // en su pantalla; al volver aquí se vuelve a consultar (también la copia guardada sin señal).
   const perms = session?.permissions || [];
-  const canSeeEvaluation = perms.includes("clientes.evaluacion.insertar") || perms.includes("clientes.evaluacion.ver");
-  const isProspect = Number(customer?.is_prospect) === 1 && canSeeEvaluation;
+  const canEvaluate = perms.includes("clientes.evaluacion.insertar");
+  const canSeeEvaluation = canEvaluate || perms.includes("clientes.evaluacion.ver");
+  const isProspectCustomer = Number(customer?.is_prospect) === 1;
+  const isProspect = isProspectCustomer && canSeeEvaluation;
   useFocusEffect(
     useCallback(() => {
-      if (!isProspect || !customer?.id || isLocalCustomerId(customer.id)) return;
+      if (!canSeeEvaluation || !customer?.id || isLocalCustomerId(customer.id)) return;
       getCurrentEvaluation(session.token, customer.id).then((r) => setEvaluation(r?.data?.id ? r.data : null)).catch(() => {});
-    }, [isProspect, customer?.id, session.token]),
+    }, [canSeeEvaluation, customer?.id, session.token]),
   );
 
   // Prellena los catálogos complementarios con la fila "por defecto" del
@@ -1010,18 +1012,25 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                   </Chip>
                 ))}
               </View>
-              {evaluation?.id && (
-                <Chip icon="chart-line" style={{ marginTop: SPACING.sm, alignSelf: "flex-start", backgroundColor: COLORS.successSoft }}>
-                  Evaluación financiera #{evaluation.id} vigente
-                </Chip>
-              )}
-              {isProspect && !evaluation?.id && (
-                <View style={{ marginTop: SPACING.sm, gap: SPACING.xs }}>
-                  <Text style={{ color: COLORS.warning, fontWeight: "700" }}>
-                    Cliente pendiente de aprobación: falta digitar su evaluación financiera (obligatoria).
+            </View>
+
+            {customer?.id && !isLocalCustomerId(customer.id) && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Evaluación financiera</Text>
+                {evaluation?.id ? (
+                  <Chip icon="chart-line" style={{ alignSelf: "flex-start", backgroundColor: COLORS.successSoft }}>
+                    Evaluación #{evaluation.id} vigente
+                  </Chip>
+                ) : (
+                  <Text style={{ color: isProspectCustomer ? COLORS.warning : COLORS.muted, fontWeight: "700" }}>
+                    {isProspectCustomer
+                      ? "Cliente pendiente de aprobación: falta digitar su evaluación financiera (obligatoria)."
+                      : "Este cliente no tiene evaluación financiera."}
                   </Text>
+                )}
+                {canEvaluate ? (
                   <Button
-                    mode="contained-tonal"
+                    mode={evaluation?.id ? "outlined" : "contained-tonal"}
                     icon="chart-box-outline"
                     onPress={() =>
                       navigation.navigate("Clientes", {
@@ -1029,13 +1038,18 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                         params: { customerId: customer.id, customerName: customer.customer_name },
                       })
                     }
-                    style={{ borderRadius: RADIUS.md }}
+                    style={{ marginTop: SPACING.xs, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
                   >
-                    Digitar evaluación financiera
+                    {evaluation?.id ? "Actualizar evaluación financiera" : "Digitar evaluación financiera"}
                   </Button>
-                </View>
-              )}
-            </View>
+                ) : (
+                  <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: SPACING.xs }}>
+                    Su rol no tiene permiso para registrar evaluaciones financieras (clientes.evaluacion.insertar).
+                    {isProspectCustomer ? " Este cliente nuevo la necesita: pídale a un promotor u oficial de crédito que la digite." : ""}
+                  </Text>
+                )}
+              </View>
+            )}
 
             {(promoters.length > 0 || collectors.length > 0) && (
               <View style={styles.card}>

@@ -257,6 +257,16 @@ export default function CustomerSetupScreen({ route, navigation }) {
           />
         )}
 
+        {!canSeeEvaluation && (
+          <View style={styles.card}>
+            <Text variant="titleMedium" style={styles.title}>Evaluación financiera</Text>
+            <Text style={styles.hint}>
+              Su rol no tiene permiso para registrar evaluaciones (clientes.evaluacion.insertar).
+              {isProspect ? " Este cliente nuevo la necesita para su solicitud: pídale a un promotor u oficial de crédito que la digite." : ""}
+            </Text>
+          </View>
+        )}
+
         <View style={{ gap: SPACING.sm }}>
           {canRequestLoan && (
             <Button mode="contained" icon="cash-plus" onPress={requestLoan} disabled={needsEvaluation} style={{ borderRadius: RADIUS.md }}>
