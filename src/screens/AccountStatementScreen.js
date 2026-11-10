@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { View, StyleSheet, ScrollView, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Text, Card, Button, ActivityIndicator, HelperText, Chip, IconButton, Divider } from "react-native-paper";
+import { Text, Card, Button, ActivityIndicator, HelperText, Chip, IconButton, Divider, SegmentedButtons } from "react-native-paper";
 import { useNavigation } from "@react-navigation/native";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import { shareImage } from "../utils/shareImage";
@@ -21,6 +21,7 @@ import { formatReceiptNumber, installmentDetailRows } from "../utils/receipt";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
 import CompactStatementCard from "../components/CompactStatementCard";
+import { rescheduledNote } from "../utils/compactStatement";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
 const STATUS_COLOR = {
@@ -67,6 +68,9 @@ export default function AccountStatementScreen({ route }) {
   const [showPayoff, setShowPayoff] = useState(false);
   const [error, setError] = useState("");
   const [showDetail, setShowDetail] = useState(false);
+  // Dos vistas (dueño, 2026-11-10): RESUMIDA por omisión (formato del sistema anterior, solo totales) o DETALLADA.
+  // La elegida es la que se imprime y se comparte.
+  const [view, setView] = useState("SUMMARY");
   // Pagos recibidos que se ven en pantalla (de 5 en 5 con "Ver más"). Al compartir la
   // imagen se arma con TODO el detalle: todas las cuotas y todos los pagos.
   const PAGE = 5;
@@ -131,6 +135,7 @@ export default function AccountStatementScreen({ route }) {
       buildAccountStatementReceiptLines(
         statement,
         session?.tenant?.commercial_name || session?.tenant?.legal_name,
+        { compact: view === "SUMMARY" },
       ),
     );
   };
@@ -166,8 +171,7 @@ export default function AccountStatementScreen({ route }) {
     );
   }
 
-  // Política estado_cuenta_solo_totales (la manda el servidor): cuotas y pagos por su total, sin capital e intereses.
-  const totalsOnly = !!statement.statement_totals_only;
+  const totalsOnly = view === "SUMMARY";
   const inArrears = Number(statement.defaulted_days || 0) > 0;
   const initialBalance = initialBalanceOf(statement);
 
@@ -178,6 +182,18 @@ export default function AccountStatementScreen({ route }) {
         <Text variant="titleLarge" style={styles.title}>Estado de cuenta</Text>
         <IconButton icon="history" onPress={() => navigation.navigate("LoanActions", { loanId })} />
         <IconButton icon="share-variant" onPress={onShare} loading={sharing} disabled={sharing} />
+      </View>
+
+      <View style={{ paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xs }}>
+        <SegmentedButtons
+          value={view}
+          onValueChange={setView}
+          density="small"
+          buttons={[
+            { value: "SUMMARY", label: "Resumida" },
+            { value: "DETAIL", label: "Detallada" },
+          ]}
+        />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -266,6 +282,9 @@ export default function AccountStatementScreen({ route }) {
                     <View>
                       <Text style={{ color: COLORS.text, fontWeight: "600" }}>Cuota #{m.payment_number}</Text>
                       <Text style={{ color: COLORS.muted, fontSize: 12 }}>{m.payment_date}</Text>
+                      {!!m.rescheduled && (
+                        <Text style={{ color: COLORS.warning, fontWeight: "700", fontSize: 11 }}>{rescheduledNote(m)}</Text>
+                      )}
                     </View>
                     <View style={{ alignItems: "flex-end" }}>
                       <Text style={{ color: COLORS.text, fontWeight: "600" }}>{money(m.installment_total)}</Text>

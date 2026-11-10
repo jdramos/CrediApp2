@@ -35,11 +35,26 @@ const receiptNo = (id) => {
   return Number.isFinite(n) && n > 0 ? String(Math.trunc(n)).padStart(6, "0") : "";
 };
 
+// Cuota reprogramada (dueño, 2026-11-10): las cuotas de un feriado que se pasaron al final del plan conservan su
+// número; el servidor las manda con rescheduled, rescheduled_from (fecha original) y rescheduled_reason y el
+// estado de cuenta las muestra por fecha con esta nota. Igual que la web (utils/rescheduledInstallment.js).
+export function rescheduledNote(row) {
+  if (!row?.rescheduled) return "";
+  const reason = row.rescheduled_reason && row.rescheduled_reason !== "Reprogramada" ? ` por ${String(row.rescheduled_reason).toLowerCase()}` : "";
+  return row.rescheduled_from ? `Reprogramada${reason}: era el ${fmtDMY(row.rescheduled_from)}` : `Reprogramada${reason}`;
+}
+
 // Cuotas: sin la fila 0 del desembolso.
 export function buildCuotaLines(movements = []) {
   return (movements || [])
     .filter((m) => Number(m.payment_number) > 0)
-    .map((m) => ({ n: m.payment_number, due: m.payment_date, total: num(m.installment_total) }));
+    .map((m) => ({
+      n: m.payment_number,
+      due: m.payment_date,
+      total: num(m.installment_total),
+      note: rescheduledNote(m),
+      movedFrom: m.rescheduled ? ymd(m.rescheduled_from) || true : null,
+    }));
 }
 
 // Pagos: uno por línea con su total, del más antiguo al más reciente.
@@ -57,6 +72,19 @@ export function compactTotals(statement) {
     installments: buildCuotaLines(statement?.movements).reduce((s, c) => s + c.total, 0),
     paid: buildPaymentLines(statement).reduce((s, p) => s + p.amount, 0),
     balance: num(statement?.total_balance),
+  };
+}
+
+// Mora a la fecha de corte: días (del servidor), cuotas vencidas sin pagar completas y cuánto falta de ellas
+// (mismo cálculo que "atrasado" del resumen: lo pendiente de las cuotas OVERDUE).
+export function moraSummary(statement) {
+  const overdue = (statement?.movements || []).filter((m) => Number(m.payment_number) > 0 && String(m.status).toUpperCase() === "OVERDUE");
+  const since = overdue.map((m) => String(m.payment_date).slice(0, 10)).sort()[0] || null;
+  return {
+    days: num(statement?.defaulted_days),
+    count: overdue.length,
+    amount: Math.round(overdue.reduce((s, m) => s + num(m.pending_total), 0) * 100) / 100,
+    since,
   };
 }
 
@@ -83,6 +111,7 @@ export function buildCompactStatementReceiptLines(statement, tenantName) {
   const cuotas = buildCuotaLines(statement.movements);
   const pagos = buildPaymentLines(statement);
   const totals = compactTotals(statement);
+  const mora = moraSummary(statement);
   const lines = [
     center((tenantName || "CrediMaster").toUpperCase()),
     center("ESTADO DE CUENTA"),
@@ -97,9 +126,21 @@ export function buildCompactStatementReceiptLines(statement, tenantName) {
     ...(officerLabel(statement) ? [`Oficial: ${officerLabel(statement)}`] : []),
     `Corte: ${fmtDMY(statement.cut_date) || new Date().toISOString().slice(0, 10)}`,
     divider(),
+    ...(mora.count > 0 || mora.days > 0
+      ? [
+          "EN MORA",
+          twoCol("  Dias de mora", String(mora.days)),
+          twoCol("  Cuotas en mora", String(mora.count)),
+          twoCol("  Monto en mora", fmtAmount(mora.amount)),
+        ]
+      : ["AL DIA (sin mora)"]),
+    divider(),
     twoCol("CUOTAS  Cta Fecha", "Total"),
     divider(),
-    ...cuotas.map((c) => twoCol(`${String(c.n).padStart(2)} ${fmtDMYShort(c.due)}`, fmtAmount(c.total))),
+    ...cuotas.flatMap((c) => [
+      twoCol(`${String(c.n).padStart(2)} ${fmtDMYShort(c.due)}`, fmtAmount(c.total)),
+      ...(c.movedFrom ? [`   Reprogramada${typeof c.movedFrom === "string" ? `: era ${fmtDMYShort(c.movedFrom)}` : ""}`] : []),
+    ]),
     twoCol("TOTAL CUOTAS", fmtAmount(totals.installments)),
     divider(),
     twoCol("PAGOS  Documento Fecha", "Total"),

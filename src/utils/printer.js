@@ -210,9 +210,10 @@ export function initialBalanceOf(statement) {
 // para un ticket de 58mm. `tenantName` es el nombre comercial del tenant
 // (no "CrediMaster", que es solo el nombre de la plataforma) -- ver
 // session.tenant en SessionContext.js.
-export function buildAccountStatementReceiptLines(statement, tenantName) {
-  // Política estado_cuenta_solo_totales: formato del sistema anterior, solo totales (utils/compactStatement.js).
-  if (statement.statement_totals_only) return buildCompactStatementReceiptLines(statement, tenantName);
+// compact (por omisión true): vista RESUMIDA del sistema anterior, solo totales (utils/compactStatement.js);
+// false = la detallada.
+export function buildAccountStatementReceiptLines(statement, tenantName, { compact = true } = {}) {
+  if (compact) return buildCompactStatementReceiptLines(statement, tenantName);
   const { overdueBalance, currentBalance, totalBalance, overdueSinceDate } = summarizeMovements(statement.movements, !!statement.is_flat_plan);
   const initialBalance = initialBalanceOf(statement);
   const summaryLines = [
