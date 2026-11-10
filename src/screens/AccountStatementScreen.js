@@ -20,6 +20,7 @@ import { printReceipt, buildAccountStatementReceiptLines, summarizeMovements, in
 import { formatReceiptNumber, installmentDetailRows } from "../utils/receipt";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
+import CompactStatementCard from "../components/CompactStatementCard";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
 const STATUS_COLOR = {
@@ -165,6 +166,8 @@ export default function AccountStatementScreen({ route }) {
     );
   }
 
+  // Política estado_cuenta_solo_totales (la manda el servidor): cuotas y pagos por su total, sin capital e intereses.
+  const totalsOnly = !!statement.statement_totals_only;
   const inArrears = Number(statement.defaulted_days || 0) > 0;
   const initialBalance = initialBalanceOf(statement);
 
@@ -210,6 +213,9 @@ export default function AccountStatementScreen({ route }) {
             )}
           </View>
 
+          {totalsOnly && <CompactStatementCard statement={statement} />}
+
+          {!totalsOnly && (
           <View style={styles.card}>
             <Text style={{ fontWeight: "800", color: COLORS.text, marginBottom: SPACING.xs }}>Resumen de saldo</Text>
             {initialBalance > 0 && (
@@ -243,7 +249,9 @@ export default function AccountStatementScreen({ route }) {
             )}
           </View>
 
-          {Array.isArray(statement.movements) && statement.movements.length > 0 && (
+          )}
+
+          {!totalsOnly && Array.isArray(statement.movements) && statement.movements.length > 0 && (
             <View style={styles.card}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <Text style={{ fontWeight: "800", color: COLORS.text }}>Detalle de cuotas</Text>
@@ -276,7 +284,7 @@ export default function AccountStatementScreen({ route }) {
             </View>
           )}
 
-          {Array.isArray(statement.payments) && statement.payments.length > 0 && (
+          {!totalsOnly && Array.isArray(statement.payments) && statement.payments.length > 0 && (
             <View style={styles.card}>
               <Text style={{ fontWeight: "800", color: COLORS.text, marginBottom: SPACING.xs }}>
                 Pagos recibidos ({statement.payments.length})

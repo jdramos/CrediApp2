@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { money } from "./format";
 import { buildEscPos, TEST_LINES } from "./escpos";
 import { bytesToBase64 } from "./pdfBuilder";
+import { buildCompactStatementReceiptLines } from "./compactStatement";
 import {
   isBluetoothPrintAvailable,
   hasBluetoothPermission,
@@ -210,6 +211,8 @@ export function initialBalanceOf(statement) {
 // (no "CrediMaster", que es solo el nombre de la plataforma) -- ver
 // session.tenant en SessionContext.js.
 export function buildAccountStatementReceiptLines(statement, tenantName) {
+  // Política estado_cuenta_solo_totales: formato del sistema anterior, solo totales (utils/compactStatement.js).
+  if (statement.statement_totals_only) return buildCompactStatementReceiptLines(statement, tenantName);
   const { overdueBalance, currentBalance, totalBalance, overdueSinceDate } = summarizeMovements(statement.movements, !!statement.is_flat_plan);
   const initialBalance = initialBalanceOf(statement);
   const summaryLines = [
