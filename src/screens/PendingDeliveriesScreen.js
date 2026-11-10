@@ -14,6 +14,7 @@ import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import { withCode } from "../utils/customerLabel";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
+import useKeyboardModalStyle from "../components/useKeyboardModalStyle";
 
 const IMAGE_REQUIRED_TRUE = ["true", "1", "si", "sí"];
 
@@ -59,6 +60,7 @@ const styles = StyleSheet.create({
 });
 
 export default function PendingDeliveriesScreen() {
+  const modalStyle = useKeyboardModalStyle(styles.modal);
   const navigation = useNavigation();
   const { session } = useContext(SessionContext);
 
@@ -184,7 +186,7 @@ export default function PendingDeliveriesScreen() {
       )}
 
       <Portal>
-        <Modal visible={!!active} onDismiss={() => setActive(null)} contentContainerStyle={styles.modal}>
+        <Modal visible={!!active} onDismiss={() => setActive(null)} contentContainerStyle={modalStyle}>
           <KeyboardAwareScroll style={{ maxHeight: 520 }}>
             <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text }}>
               Confirmar entrega

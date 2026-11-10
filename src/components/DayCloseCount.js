@@ -11,6 +11,7 @@ import DenominationCounter, { countTotal, cleanCounts } from "./DenominationCoun
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import KeyboardAwareScroll from "./KeyboardAwareScroll";
+import useKeyboardModalStyle from "./useKeyboardModalStyle";
 
 const TOLERANCE = 0.005;
 const fxText = (n) => Number(n).toFixed(2);
@@ -71,6 +72,7 @@ function DiffLine({ label, diff, fmt }) {
 // La oficina lo revisa y aprueba desde la web. Sin efectivo ese día se cierra
 // sin contar.
 export default function DayCloseCount({ token, date, cashCount, pendingCashAmount = 0, onSaved }) {
+  const modalStyle = useKeyboardModalStyle(styles.modal, 8);
   const [open, setOpen] = useState(false);
   const [counts, setCounts] = useState({ NIO: {}, USD: {} });
   const [showUsd, setShowUsd] = useState(false);
@@ -271,7 +273,7 @@ export default function DayCloseCount({ token, date, cashCount, pendingCashAmoun
       )}
 
       <Portal>
-        <Modal visible={open} onDismiss={() => !saving && setOpen(false)} contentContainerStyle={styles.modal}>
+        <Modal visible={open} onDismiss={() => !saving && setOpen(false)} contentContainerStyle={modalStyle}>
           <KeyboardAwareScroll keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <Text variant="titleLarge" style={styles.title}>Arqueo por denominación</Text>
             <Text style={styles.muted}>Contá billete por billete y moneda por moneda. Solo se guarda si cuadra o te sobra.</Text>

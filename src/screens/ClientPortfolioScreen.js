@@ -17,6 +17,7 @@ import {
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import DateWheelPicker from "../components/DateWheelPicker";
+import useKeyboardModalStyle from "../components/useKeyboardModalStyle";
 import * as Location from "expo-location";
 import { SessionContext } from "../auth/SessionContext";
 import { getAssignedLoans, logVisit, getMyLoanPayments } from "../api/collectionsApi";
@@ -108,6 +109,13 @@ const styles = StyleSheet.create({
 });
 
 export default function ClientPortfolioScreen() {
+  const gestionModalStyle = useKeyboardModalStyle({
+    backgroundColor: COLORS.card,
+    margin: SPACING.lg,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    maxHeight: "85%",
+  });
   const navigation = useNavigation();
   const { session } = useContext(SessionContext);
   const { refreshPendingCount } = useSync();
@@ -933,13 +941,7 @@ export default function ClientPortfolioScreen() {
         <Modal
           visible={!!gestionItem}
           onDismiss={closeGestion}
-          contentContainerStyle={{
-            backgroundColor: COLORS.card,
-            margin: SPACING.lg,
-            borderRadius: RADIUS.lg,
-            padding: SPACING.md,
-            maxHeight: "85%",
-          }}
+          contentContainerStyle={gestionModalStyle}
         >
           <KeyboardAwareScroll keyboardShouldPersistTaps="handled">
             <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text }}>

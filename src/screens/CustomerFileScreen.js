@@ -19,6 +19,7 @@ import { money, toNumber } from "../utils/format";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
+import useKeyboardModalStyle from "../components/useKeyboardModalStyle";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -58,6 +59,7 @@ export default function CustomerFileScreen() {
   const { customerId, customerName } = params;
   const { session } = useContext(SessionContext);
   const { refreshPendingCount } = useSync();
+  const guaranteeModalStyle = useKeyboardModalStyle(styles.modal);
   const perms = session?.permissions || [];
   const canSeeChecklist = perms.includes("clientes.checklist.ver");
   const canUploadDoc = perms.includes("clientes.documentos.subir");
@@ -73,6 +75,9 @@ export default function CustomerFileScreen() {
 
   const [checklist, setChecklist] = useState([]);
   const [otherDocs, setOtherDocs] = useState([]); // documentos subidos que no son de un ítem del checklist
+  // Lo enviado en esta visita: quien no puede VER documentos ni fotos (rol sin clientes.documentos.ver /
+  // garantias.ver) igual ve que sus envíos salieron.
+  const [sentNow, setSentNow] = useState([]);
   const [guarantees, setGuarantees] = useState([]);
   const [photos, setPhotos] = useState({}); // { [guaranteeId]: [{ id, url }] }
   const [loading, setLoading] = useState(true);
@@ -232,7 +237,10 @@ export default function CustomerFileScreen() {
     if (result) {
       setDraft(null);
       if (result === "queued" && d.itemCode) setQueuedCodes((c) => [...c, d.itemCode]);
-      if (result === "sent") load(true);
+      if (result === "sent") {
+        setSentNow((list) => [...list, { id: `${Date.now()}-${list.length}`, title: d.title }]);
+        load(true);
+      }
     }
   };
 
@@ -395,6 +403,18 @@ export default function CustomerFileScreen() {
         <HelperText type="error" visible={!!error}>{error}</HelperText>
         {loading && <ActivityIndicator color={COLORS.primary} />}
 
+        {sentNow.length > 0 && (
+          <View style={styles.card}>
+            <Text style={styles.title}>Enviado en esta visita</Text>
+            {sentNow.map((s) => (
+              <Text key={s.id} style={{ color: COLORS.success, fontWeight: "600" }}>✓ {s.title}</Text>
+            ))}
+            {!canSeeDocs && (
+              <Text style={styles.muted}>Su rol no puede ver los documentos ya subidos; el listado completo lo ve la oficina.</Text>
+            )}
+          </View>
+        )}
+
         {showDocs && !loading && (
           <>
             <Text style={styles.sectionTitle}>Documentos del expediente</Text>
@@ -498,7 +518,15 @@ export default function CustomerFileScreen() {
         {showGuarantees && !loading && (
           <>
             <Text style={styles.sectionTitle}>Garantías</Text>
-            {guarantees.length === 0 && <Text style={styles.muted}>Este cliente no tiene garantías registradas.</Text>}
+            {!canSeeGuarantees && (
+              <Text style={styles.muted}>Su rol no puede ver las garantías ya registradas; solo agregar nuevas.</Text>
+            )}
+            {!canPhotoGuarantee && (
+              <Text style={[styles.muted, { color: COLORS.warning, fontWeight: "700" }]}>
+                Su rol no tiene permiso para tomar fotos de garantías (garantias.insertar). Pídaselo al administrador.
+              </Text>
+            )}
+            {canSeeGuarantees && guarantees.length === 0 && <Text style={styles.muted}>Este cliente no tiene garantías registradas.</Text>}
             {canCreateGuarantee && (
               <Button
                 mode="outlined"
@@ -614,7 +642,7 @@ export default function CustomerFileScreen() {
         <Modal
           visible={showAddGuarantee}
           onDismiss={() => setShowAddGuarantee(false)}
-          contentContainerStyle={styles.modal}
+          contentContainerStyle={guaranteeModalStyle}
         >
           <KeyboardAwareScroll style={{ maxHeight: 440 }} keyboardShouldPersistTaps="handled">
           <Text variant="titleMedium" style={[styles.title, { marginBottom: SPACING.sm }]}>Nueva garantía</Text>

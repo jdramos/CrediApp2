@@ -21,6 +21,7 @@ import { getCustomerChecklist, uploadCustomerDocument } from "../api/customerDoc
 import { getCurrentEvaluation } from "../api/customerEvaluationApi";
 import { getCreditPolicies } from "../api/creditPolicyApi";
 import CatalogPickerField from "../components/CatalogPickerField";
+import useKeyboardModalStyle from "../components/useKeyboardModalStyle";
 import { pickImage } from "../utils/imagePicker";
 import { isNetworkError } from "../api/credimasterClient";
 import { persistLocalFile } from "../offline/filePersist";
@@ -161,6 +162,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   const sim = route?.params?.sim;
   const { session } = useContext(SessionContext);
   const { refreshPendingCount } = useSync();
+  const guaranteeModalStyle = useKeyboardModalStyle({ backgroundColor: COLORS.card, margin: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.md });
   const [step, setStep] = useState(0);
 
   // Cliente
@@ -1247,7 +1249,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
           <Modal
             visible={showAddGuarantee}
             onDismiss={() => setShowAddGuarantee(false)}
-            contentContainerStyle={{ backgroundColor: COLORS.card, margin: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.md }}
+            contentContainerStyle={guaranteeModalStyle}
           >
             <KeyboardAwareScroll style={{ maxHeight: 520 }}>
               <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text, marginBottom: SPACING.sm }}>
