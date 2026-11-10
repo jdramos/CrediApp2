@@ -9,7 +9,7 @@ import DateWheelPicker from "../components/DateWheelPicker";
 import { SessionContext } from "../auth/SessionContext";
 import { searchCustomers, getCustomer, saveCustomerGuarantees } from "../api/customerApi";
 import { getAccessibleBranches } from "../api/branchApi";
-import { createLoanRequest, simulateLoan } from "../api/loanApi";
+import { createLoanRequest, simulateLoan, updateLoanRequest, getLoanDetail } from "../api/loanApi";
 import { summarizeSchedule } from "../utils/loanSimulation";
 import { getLoanCatalogs } from "../api/conamiApi";
 import { getFrecuencies } from "../api/frecuencyApi";
@@ -160,10 +160,18 @@ function QuoteCard({ quote, frequency, showHint }) {
 export default function NewLoanRequestScreen({ route, navigation }) {
   // Datos que trae el simulador de crédito (opcional): precargan el paso del crédito.
   const sim = route?.params?.sim;
+  // Modo edición: la solicitud pendiente que el originador quiere corregir (se abre desde el detalle).
+  const editLoanId = route?.params?.editLoanId ?? null;
+  const [editError, setEditError] = useState("");
+  // Las garantías ya ligadas a ESTA solicitud cuentan como disponibles (el servidor las marca comprometidas).
+  const asOwn = (rows) =>
+    (rows || []).map((g) =>
+      editLoanId && String(g.committed_loan_id) === String(editLoanId) ? { ...g, is_committed: false, available_value: g.value } : g,
+    );
   const { session } = useContext(SessionContext);
   const { refreshPendingCount } = useSync();
   const guaranteeModalStyle = useKeyboardModalStyle({ backgroundColor: COLORS.card, margin: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.md });
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(route?.params?.editLoanId ? 1 : 0);
 
   // Cliente
   const [query, setQuery] = useState("");
@@ -272,7 +280,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     // Se guarda la última respuesta de cada cliente que se abre: sin señal se usa esa copia.
     const key = (what) => `${session.user.id}:loanform:${what}:${customer.id}`;
     cachedFetch(key("evaluation"), () => getCurrentEvaluation(session.token, customer.id)).then((r) => setEvaluation(r.data)).catch(() => setEvaluation(null));
-    cachedFetch(key("guarantees"), () => getCustomerGuarantees(session.token, customer.id)).then((r) => setGuarantees(r.data || [])).catch(() => setGuarantees([]));
+    cachedFetch(key("guarantees"), () => getCustomerGuarantees(session.token, customer.id)).then((r) => setGuarantees(asOwn(r.data || []))).catch(() => setGuarantees([]));
     cachedFetch(key("checklist"), () => getCustomerChecklist(session.token, customer.id)).then((r) => setChecklist(Array.isArray(r.data) ? r.data : [])).catch(() => setChecklist([]));
   }, [customer?.id, session.token]);
 
@@ -374,6 +382,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     setExtra({});
     setShowExtra(false);
     setSelectedGuaranteeIds([]);
+    seenGuaranteeIds.current = new Set();
     setGuarantees([]);
     setNewPhotos([]);
     setGuaranteePhotos({});
@@ -388,6 +397,33 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   const selectedFrequency = frecuencies.find((f) => String(f.id) === String(frequencyId));
   const selectedPromoter = promoters.find((p) => String(p.id) === String(promoterId));
   const availableGuarantees = guarantees.filter((g) => !g.is_committed);
+
+  // Por omisión se seleccionan todas las garantías disponibles del cliente (también las que se agreguen
+  // después). Solo se auto-seleccionan las que aparecen por primera vez: lo que el usuario desmarque se respeta.
+  const seenGuaranteeIds = useRef(new Set());
+  useEffect(() => {
+    const fresh = guarantees.filter((g) => !seenGuaranteeIds.current.has(g.id));
+    if (!fresh.length) return;
+    fresh.forEach((g) => seenGuaranteeIds.current.add(g.id));
+    const pick = fresh.filter((g) => !g.is_committed).map((g) => g.id);
+    if (pick.length) setSelectedGuaranteeIds((prev) => [...new Set([...prev, ...pick])]);
+  }, [guarantees]);
+
+  // Sin ninguna garantía seleccionada se pide confirmación antes de seguir.
+  const continueFromGuarantees = () => {
+    if (selectedGuaranteeIds.length === 0 && customer?.id && !isLocalCustomerId(customer.id)) {
+      confirmAction(
+        "Sin garantías",
+        availableGuarantees.length
+          ? "No seleccionó ninguna de las garantías del cliente. ¿Desea continuar la solicitud sin garantías?"
+          : "El cliente no tiene garantías registradas. ¿Desea continuar la solicitud sin garantías?",
+        () => setStep(3),
+        { confirmText: "Continuar sin garantías" },
+      );
+      return;
+    }
+    setStep(3);
+  };
 
   const toggleGuarantee = (id) => {
     setSelectedGuaranteeIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -436,7 +472,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
         }
       }
 
-      setGuarantees(rows || []);
+      setGuarantees(asOwn(rows || []));
       setNewArticle(""); setNewSeries(""); setNewBrand(""); setNewValue("");
       setNewPhotos([]);
       setShowAddGuarantee(false);
@@ -756,13 +792,21 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       setSaving(true);
       // Cliente creado sin señal: no existe todavía en el servidor, la solicitud va directo a la cola.
       if (isLocalCustomerId(customer.id)) throw Object.assign(new Error("cliente sin registrar"), { localCustomer: true });
+      if (editLoanId) {
+        const res = await updateLoanRequest(session.token, editLoanId, payload);
+        setResult({ ...res, loan_id: editLoanId, edited: true });
+        setStep(4);
+        return;
+      }
       const res = await createLoanRequest(session.token, payload);
       clientRefRef.current = null;
       setResult(res);
       setStep(4);
     } catch (e) {
       const data = e?.data;
-      if (isNetworkError(e)) {
+      if (editLoanId && isNetworkError(e)) {
+        setError("Sin señal: modificar una solicitud necesita conexión. Intente de nuevo cuando tenga señal.");
+      } else if (isNetworkError(e)) {
         // Sin señal: se ofrece guardar la solicitud en el teléfono y enviarla sola al volver la conexión.
         confirmAction(
           "Sin conexión",
@@ -792,7 +836,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       } else if (e?.status === 423) {
         setError(data?.message || "El día operativo de la sucursal no está abierto todavía.");
       } else {
-        setError(e?.message ?? "No se pudo crear la solicitud");
+        setError(e?.message ?? (editLoanId ? "No se pudo modificar la solicitud" : "No se pudo crear la solicitud"));
       }
     } finally {
       setSaving(false);
@@ -807,13 +851,83 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       return;
     }
     confirmAction(
-      "Enviar solicitud",
-      `¿Confirmás enviar la solicitud de ${money(toNumber(amount))} para ${customer?.customer_name}?`,
+      editLoanId ? "Guardar cambios" : "Enviar solicitud",
+      editLoanId
+        ? `¿Confirmás guardar los cambios de la solicitud #${editLoanId} (${money(toNumber(amount))}) de ${customer?.customer_name}?`
+        : `¿Confirmás enviar la solicitud de ${money(toNumber(amount))} para ${customer?.customer_name}?`,
       submitLoanRequest,
     );
   };
 
+  // Modo edición: se carga la solicitud pendiente y se llena el formulario con sus datos.
+  useEffect(() => {
+    if (!editLoanId) return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await getLoanDetail(session.token, editLoanId);
+        const loan = res?.data;
+        if (!loan) throw new Error("No se encontró la solicitud");
+        if (loan.status !== "PENDING") throw new Error("Solo se pueden modificar solicitudes pendientes de aprobación.");
+        const cRes = await getCustomer(session.token, loan.customer_id);
+        const c = cRes?.data?.customer || {};
+        if (!alive) return;
+        setCustomer({
+          id: loan.customer_id,
+          customer_name: c.customer_name || loan.customer_name,
+          customer_code: c.customer_code || loan.customer_code,
+          identification: c.identification || loan.customer_identification,
+          conami_id_actividad_economica: c.conami_id_actividad_economica,
+          is_prospect: c.is_prospect,
+        });
+        setBranchId(loan.branch_id);
+        setAmount(formatAmountInput(String(loan.amount ?? "")));
+        setTerm(String(loan.term ?? ""));
+        setInterestRate(loan.interest_rate != null ? String(loan.interest_rate) : "");
+        setDefaultedRate(loan.defaulted_rate ? String(loan.defaulted_rate) : "");
+        setFee(Number(loan.fee) ? formatAmountInput(String(loan.fee)) : "");
+        setInsurance(Number(loan.insurance) ? formatAmountInput(String(loan.insurance)) : "");
+        setOtherCharges(Number(loan.other_charges) ? formatAmountInput(String(loan.other_charges)) : "");
+        setDeduction(Number(loan.deduction) ? formatAmountInput(String(loan.deduction)) : "");
+        setPromoterId(loan.promoter_id ?? null);
+        setVendorId(loan.vendor_id ?? null);
+        if (loan.request_date) setRequestDate(String(loan.request_date).slice(0, 10));
+        if (loan.due_date) setDueDate(String(loan.due_date).slice(0, 10));
+        const keep = {};
+        COMPLEMENTARY_FIELDS.forEach(({ key }) => { if (loan[key] != null) keep[key] = loan[key]; });
+        setExtra(keep);
+        setEditFrequencyTag(loan.frequency || null);
+      } catch (e) {
+        if (alive) setEditError(e?.message ?? "No se pudo cargar la solicitud");
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editLoanId]);
+
+  // La frecuencia viene como etiqueta (tag): se elige cuando ya se cargó el catálogo.
+  const [editFrequencyTag, setEditFrequencyTag] = useState(null);
+  useEffect(() => {
+    if (!editFrequencyTag || !frecuencies.length) return;
+    const f = frecuencies.find((x) => x.tag === editFrequencyTag);
+    if (f) setFrequencyId(f.id);
+  }, [editFrequencyTag, frecuencies]);
+
   const canCreate = session?.permissions?.includes("creditos.insertar");
+  if (editLoanId && !customer) {
+    return (
+      <SafeAreaView style={[styles.safe, { alignItems: "center", justifyContent: "center", padding: SPACING.xl }]}>
+        {editError ? (
+          <>
+            <Text style={{ color: COLORS.danger, textAlign: "center" }}>{editError}</Text>
+            <Button onPress={() => navigation.goBack()} style={{ marginTop: SPACING.md }}>Volver</Button>
+          </>
+        ) : (
+          <ActivityIndicator />
+        )}
+      </SafeAreaView>
+    );
+  }
   if (!canCreate) {
     return (
       <SafeAreaView style={[styles.safe, { alignItems: "center", justifyContent: "center", padding: SPACING.xl }]}>
@@ -868,7 +982,19 @@ export default function NewLoanRequestScreen({ route, navigation }) {
 
         {step === 1 && (
           <Animated.View entering={FadeInDown} exiting={FadeOut}>
-            <StepHeader step={1} title={withCode(customer?.customer_name, customer?.customer_code)} onBack={() => setStep(0)} />
+            <StepHeader
+              step={1}
+              title={withCode(customer?.customer_name, customer?.customer_code)}
+              onBack={() => (editLoanId ? navigation.goBack() : setStep(0))}
+            />
+            {!!editLoanId && (
+              <View style={[styles.card, { backgroundColor: COLORS.warningSoft, borderColor: COLORS.warning, marginBottom: SPACING.sm }]}>
+                <Text style={{ fontWeight: "800", color: COLORS.text }}>Modificando la solicitud #{editLoanId}</Text>
+                <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+                  Sigue pendiente de aprobación. Al guardar, las aprobaciones que ya hubiera se reinician.
+                </Text>
+              </View>
+            )}
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Sucursal</Text>
@@ -1235,7 +1361,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
 
             <Button
               mode="contained"
-              onPress={() => setStep(3)}
+              onPress={continueFromGuarantees}
               style={{ marginTop: SPACING.md, borderRadius: RADIUS.md }}
               contentStyle={{ height: 46 }}
               labelStyle={{ fontWeight: "700" }}
@@ -1397,7 +1523,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
               contentStyle={{ height: 46 }}
               labelStyle={{ fontWeight: "700" }}
             >
-              Enviar solicitud
+              {editLoanId ? "Guardar cambios" : "Enviar solicitud"}
             </Button>
           </Animated.View>
         )}
@@ -1406,20 +1532,26 @@ export default function NewLoanRequestScreen({ route, navigation }) {
           <Animated.View entering={FadeIn} style={styles.successWrap}>
             <MaterialCommunityIcons name={result?.pendingOffline ? "cloud-upload-outline" : "clock-check-outline"} size={72} color={COLORS.warning} />
             <Text variant="headlineSmall" style={{ fontWeight: "800", color: COLORS.text }}>
-              {result?.pendingOffline ? "Solicitud guardada sin conexión" : "Solicitud enviada"}
+              {result?.pendingOffline ? "Solicitud guardada sin conexión" : result?.edited ? "Solicitud modificada" : "Solicitud enviada"}
             </Text>
             <Text style={{ color: COLORS.muted, textAlign: "center" }}>
               {result?.pendingOffline
                 ? `Solicitud para ${customer?.customer_name}. Se envía sola cuando vuelva la señal; si el servidor la rechaza la verá en Pendientes de sincronizar con el motivo.`
-                : `Solicitud #${result?.loan_id} para ${customer?.customer_name}, quedó pendiente de aprobación.`}
+                : result?.edited
+                  ? `Solicitud #${result?.loan_id} de ${customer?.customer_name} modificada; sigue pendiente de aprobación.`
+                  : `Solicitud #${result?.loan_id} para ${customer?.customer_name}, quedó pendiente de aprobación.`}
             </Text>
             {result?.collateral_exception && (
               <Text style={{ color: COLORS.warning, textAlign: "center" }}>
                 Nota: la garantía no cubre el mínimo requerido — queda registrada como excepción.
               </Text>
             )}
-            <Button mode="contained" onPress={reset} style={{ marginTop: SPACING.md, borderRadius: RADIUS.md }}>
-              Registrar otra solicitud
+            <Button
+              mode="contained"
+              onPress={() => (result?.edited ? navigation.navigate("MyLoanRequests") : reset())}
+              style={{ marginTop: SPACING.md, borderRadius: RADIUS.md }}
+            >
+              {result?.edited ? "Volver a Mis solicitudes" : "Registrar otra solicitud"}
             </Button>
           </Animated.View>
         )}

@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useEffect, useState } from "react";
-import { View, StyleSheet, FlatList } from "react-native";
+import { View, StyleSheet, FlatList, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Card, Chip, ActivityIndicator, HelperText, IconButton, FAB } from "react-native-paper";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -37,6 +37,9 @@ const styles = StyleSheet.create({
   sub: { color: COLORS.muted, marginTop: 2, paddingHorizontal: SPACING.lg },
   filtersWrap: { paddingHorizontal: SPACING.lg, marginTop: SPACING.sm, gap: SPACING.sm },
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs },
+  // Filtros en una sola línea deslizable (antes los chips se acomodaban en varias líneas y ocupaban media pantalla).
+  chipsScroll: { flexDirection: "row", alignItems: "center", gap: SPACING.xs, paddingRight: SPACING.lg },
+  searchRow: { flexDirection: "row", alignItems: "center", gap: SPACING.xs },
   listContent: { padding: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: 96, gap: SPACING.sm },
   row: {
     backgroundColor: COLORS.card,
@@ -73,6 +76,7 @@ export default function MyLoanRequestsScreen() {
   const [search, setSearch] = useState("");
 
   const [mineOnly, setMineOnly] = useState(true);
+  const [showMore, setShowMore] = useState(false); // "Más filtros": quién la sometió y sucursal
   const canCreate = session?.permissions?.includes("creditos.insertar");
   const [loans, setLoans] = useState([]);
   const [total, setTotal] = useState(0);
@@ -137,6 +141,7 @@ export default function MyLoanRequestsScreen() {
   });
 
   const periodLabel = PERIODS.find((p) => p.key === period)?.label?.toLowerCase();
+  const moreActive = !mineOnly || branchId !== undefined;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -150,10 +155,35 @@ export default function MyLoanRequestsScreen() {
       </Text>
 
       <View style={styles.filtersWrap}>
-        <View style={styles.chipsRow}>
+        <View style={styles.searchRow}>
+          <TextInput
+            mode="outlined"
+            dense
+            placeholder="Buscar por nombre o cédula"
+            value={search}
+            onChangeText={setSearch}
+            onSubmitEditing={() => load()}
+            autoCapitalize="none"
+            style={{ backgroundColor: COLORS.card, flex: 1 }}
+            outlineStyle={{ borderRadius: RADIUS.md }}
+            left={<TextInput.Icon icon="magnify" />}
+            right={search ? <TextInput.Icon icon="close" onPress={() => { setSearch(""); }} /> : null}
+          />
+          <IconButton
+            icon={showMore ? "filter-variant-remove" : "filter-variant"}
+            mode={moreActive ? "contained" : "outlined"}
+            selected={moreActive}
+            onPress={() => setShowMore((v) => !v)}
+            accessibilityLabel="Más filtros"
+            style={{ margin: 0 }}
+          />
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
           {PERIODS.map((p) => (
             <Chip
               key={p.key}
+              compact
               selected={period === p.key}
               showSelectedCheck={false}
               onPress={() => setPeriod(p.key)}
@@ -162,44 +192,13 @@ export default function MyLoanRequestsScreen() {
               {p.label}
             </Chip>
           ))}
-        </View>
+        </ScrollView>
 
-        <View style={styles.chipsRow}>
-          <Chip
-            selected={mineOnly}
-            onPress={() => setMineOnly(true)}
-            icon="account"
-            style={{ backgroundColor: mineOnly ? COLORS.primarySoft : COLORS.card }}
-          >
-            Sometidas por mí
-          </Chip>
-          <Chip
-            selected={!mineOnly}
-            onPress={() => setMineOnly(false)}
-            icon="account-group"
-            style={{ backgroundColor: !mineOnly ? COLORS.primarySoft : COLORS.card }}
-          >
-            Todas mis sucursales
-          </Chip>
-        </View>
-
-        <TextInput
-          mode="outlined"
-          placeholder="Buscar por nombre o cédula"
-          value={search}
-          onChangeText={setSearch}
-          onSubmitEditing={() => load()}
-          autoCapitalize="none"
-          style={{ backgroundColor: COLORS.card }}
-          outlineStyle={{ borderRadius: RADIUS.md }}
-          left={<TextInput.Icon icon="magnify" />}
-          right={search ? <TextInput.Icon icon="close" onPress={() => { setSearch(""); }} /> : null}
-        />
-
-        <View style={styles.chipsRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
           {STATUS_FILTERS.map((f) => (
             <Chip
               key={f.key}
+              compact
               selected={status === f.key}
               showSelectedCheck={false}
               onPress={() => setStatus(f.key)}
@@ -208,43 +207,70 @@ export default function MyLoanRequestsScreen() {
               {f.label}
             </Chip>
           ))}
-        </View>
+        </ScrollView>
 
-        {(branches.length > 1 || allAccess) && (
-          <View style={styles.chipsRow}>
-            <Chip
-              selected={branchId === undefined}
-              onPress={() => setBranchId(undefined)}
-              style={{ backgroundColor: branchId === undefined ? COLORS.primarySoft : COLORS.card }}
-            >
-              Todas las sucursales
-            </Chip>
-            {branches.map((b) => (
+        {showMore && (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
               <Chip
-                key={b.id}
-                selected={branchId === b.id}
-                onPress={() => setBranchId(b.id)}
-                style={{ backgroundColor: branchId === b.id ? COLORS.primarySoft : COLORS.card }}
+                compact
+                selected={mineOnly}
+                onPress={() => setMineOnly(true)}
+                icon="account"
+                style={{ backgroundColor: mineOnly ? COLORS.primarySoft : COLORS.card }}
               >
-                {b.name}
+                Sometidas por mí
               </Chip>
-            ))}
-          </View>
+              <Chip
+                compact
+                selected={!mineOnly}
+                onPress={() => setMineOnly(false)}
+                icon="account-group"
+                style={{ backgroundColor: !mineOnly ? COLORS.primarySoft : COLORS.card }}
+              >
+                Todas mis sucursales
+              </Chip>
+            </ScrollView>
+
+            {(branches.length > 1 || allAccess) && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
+                <Chip
+                  compact
+                  selected={branchId === undefined}
+                  onPress={() => setBranchId(undefined)}
+                  style={{ backgroundColor: branchId === undefined ? COLORS.primarySoft : COLORS.card }}
+                >
+                  Todas las sucursales
+                </Chip>
+                {branches.map((b) => (
+                  <Chip
+                    key={b.id}
+                    compact
+                    selected={branchId === b.id}
+                    onPress={() => setBranchId(b.id)}
+                    style={{ backgroundColor: branchId === b.id ? COLORS.primarySoft : COLORS.card }}
+                  >
+                    {b.name}
+                  </Chip>
+                ))}
+              </ScrollView>
+            )}
+          </>
         )}
 
         {Object.keys(stageCounts).length > 0 && loans.length >= total && (
-          <View style={styles.chipsRow}>
-            {Object.values(stageCounts).map((s) => (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
+            {Object.values(stageCounts).map((s2) => (
               <Chip
-                key={s.key}
+                key={s2.key}
                 compact
                 style={{ backgroundColor: COLORS.bg }}
-                textStyle={{ color: s.color, fontWeight: "700", fontSize: 11 }}
+                textStyle={{ color: s2.color, fontWeight: "700", fontSize: 11 }}
               >
-                {`${s.count} ${s.label}`}
+                {`${s2.count} ${s2.label}`}
               </Chip>
             ))}
-          </View>
+          </ScrollView>
         )}
       </View>
 
@@ -279,6 +305,9 @@ export default function MyLoanRequestsScreen() {
                   <Text style={styles.muted}>
                     Solicitado por {item.created_by_name}{item.source ? ` · ${item.source === "MOBILE" ? "App" : "Web"}` : ""} · {item.date}
                   </Text>
+                )}
+                {String(item.status).toUpperCase() === "PENDING" && String(item.created_by ?? "") === String(session?.user?.id ?? "") && (
+                  <Text style={[styles.muted, { color: COLORS.primary, fontWeight: "700" }]}>Pendiente de aprobación · toque para ver o modificar</Text>
                 )}
                 <View style={styles.stageRow}>
                   <Text style={styles.stageDetail} numberOfLines={2}>{st.detail}</Text>

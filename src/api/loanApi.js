@@ -1,4 +1,4 @@
-import { credimasterGet, credimasterPost } from "./credimasterClient";
+import { credimasterGet, credimasterPost, credimasterPut } from "./credimasterClient";
 
 // Créditos activos de un cliente (para elegir cuál pagar) — permiso
 // creditos.ver.
@@ -22,6 +22,13 @@ export const getLoanAmortization = (token, loanId) =>
 // mensaje legible, que se muestra tal cual en la pantalla.
 export const createLoanRequest = (token, payload) =>
   credimasterPost("/api/loans", payload, token);
+
+// Modifica una solicitud que sigue PENDIENTE de aprobación (PUT /api/loans/:loanId). Permiso creditos.editar,
+// o creditos.insertar si la solicitud la registró el propio usuario (el originador). Lleva el mismo cuerpo que
+// createLoanRequest; el cliente no se puede cambiar. Reinicia las aprobaciones y recalcula la tabla de cuotas.
+// 409 = ya no está pendiente; 403 = no es suya; 423 = día operativo cerrado.
+export const updateLoanRequest = (token, loanId, payload) =>
+  credimasterPut(`/api/loans/${loanId}`, payload, token);
 
 // Lista de créditos con filtros — permiso creditos.ver. `params` admite
 // page/limit, status ("PENDIENTE"/"APROBADO"/"RECHAZADO", vacío = todos),

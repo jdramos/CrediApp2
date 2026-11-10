@@ -86,6 +86,13 @@ export default function LoanDetailScreen({ route }) {
       .catch(() => setApprovals([]));
   }, [loanId, session.token]);
 
+  // La solicitud pendiente de aprobación la puede modificar quien la registró (o quien tenga creditos.editar).
+  const perms = session?.permissions || [];
+  const canModify =
+    loan?.status === "PENDING" &&
+    perms.includes("creditos.insertar") &&
+    (perms.includes("creditos.editar") || String(loan?.created_by ?? "") === String(session?.user?.id ?? ""));
+
   if (loading) {
     return (
       <SafeAreaView style={[styles.safe, { justifyContent: "center", alignItems: "center" }]}>
@@ -136,6 +143,17 @@ export default function LoanDetailScreen({ route }) {
         </View>
         {!!loan?.created_by_name && (
           <Text style={[styles.sub, { marginTop: SPACING.xs }]}>Solicitado por {loan.created_by_name}</Text>
+        )}
+        {canModify && (
+          <Button
+            mode="contained"
+            icon="pencil"
+            onPress={() => navigation.navigate("Creditos", { screen: "NewLoanRequest", params: { editLoanId: loanId } })}
+            style={{ marginTop: SPACING.md, borderRadius: RADIUS.md, backgroundColor: COLORS.warning, alignSelf: "flex-start" }}
+            labelStyle={{ color: "#000", fontWeight: "800" }}
+          >
+            Modificar solicitud
+          </Button>
         )}
         <Button
           mode="contained"
