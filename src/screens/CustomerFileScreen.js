@@ -5,7 +5,7 @@ import { Text, TextInput, Button, Chip, ActivityIndicator, HelperText, Portal, M
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { isNetworkError } from "../api/credimasterClient";
-import { getCustomerChecklist, uploadCustomerDocument, getCustomerDocumentUrl } from "../api/customerDocumentApi";
+import { getCustomerChecklist, uploadCustomerDocument, getCustomerDocumentUrl, listCustomerDocuments } from "../api/customerDocumentApi";
 import { getCustomer, saveCustomerGuarantees } from "../api/customerApi";
 import { getCustomerGuarantees } from "../api/guaranteesApi";
 import { listGuaranteePhotos, uploadGuaranteePhoto } from "../api/guaranteePhotoApi";
@@ -67,8 +67,12 @@ export default function CustomerFileScreen() {
   // Crear una garantía es, en el backend, un PUT del cliente (ver
   // saveCustomerGuarantees), por eso pide clientes.editar y no garantias.insertar.
   const canCreateGuarantee = perms.includes("clientes.editar");
+  // Se ofrece la sección con solo poder agregar (no hace falta poder ver el checklist o las garantías).
+  const showDocs = canSeeChecklist || canUploadDoc || canSeeDocs;
+  const showGuarantees = canSeeGuarantees || canCreateGuarantee || canPhotoGuarantee;
 
   const [checklist, setChecklist] = useState([]);
+  const [otherDocs, setOtherDocs] = useState([]); // documentos subidos que no son de un ítem del checklist
   const [guarantees, setGuarantees] = useState([]);
   const [photos, setPhotos] = useState({}); // { [guaranteeId]: [{ id, url }] }
   const [loading, setLoading] = useState(true);
@@ -102,11 +106,17 @@ export default function CustomerFileScreen() {
       else setLoading(true);
       setError("");
       try {
-        const [cl, gs] = await Promise.all([
+        const [cl, gs, docs] = await Promise.all([
           canSeeChecklist ? getCustomerChecklist(session.token, customerId) : [],
           canSeeGuarantees ? getCustomerGuarantees(session.token, customerId) : [],
+          canSeeDocs ? listCustomerDocuments(session.token, customerId).catch(() => []) : [],
         ]);
-        setChecklist(Array.isArray(cl) ? cl : []);
+        const checklistRows = Array.isArray(cl) ? cl : [];
+        setChecklist(checklistRows);
+        const checklistCodes = new Set(checklistRows.map((i) => i.code));
+        setOtherDocs(
+          (Array.isArray(docs) ? docs : []).filter((d) => !d.related_item_code || !checklistCodes.has(d.related_item_code) || d.related_item_code === "OTHER_DOC"),
+        );
         const list = Array.isArray(gs) ? gs : [];
         setGuarantees(list);
         if (canSeeGuarantees && list.length) {
@@ -128,7 +138,7 @@ export default function CustomerFileScreen() {
         setRefreshing(false);
       }
     },
-    [session.token, customerId, canSeeChecklist, canSeeGuarantees],
+    [session.token, customerId, canSeeChecklist, canSeeGuarantees, canSeeDocs],
   );
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -385,11 +395,13 @@ export default function CustomerFileScreen() {
         <HelperText type="error" visible={!!error}>{error}</HelperText>
         {loading && <ActivityIndicator color={COLORS.primary} />}
 
-        {canSeeChecklist && !loading && (
+        {showDocs && !loading && (
           <>
             <Text style={styles.sectionTitle}>Documentos del expediente</Text>
             <Text style={styles.hint}>Tomá una foto del documento o elegila de la galería. Se marca como entregado al subirlo.</Text>
-            {checklist.length === 0 && <Text style={styles.muted}>Este cliente no tiene checklist de documentos.</Text>}
+            {checklist.length === 0 && canSeeChecklist && (
+              <Text style={styles.muted}>La empresa no definió documentos obligatorios: suba los que tenga con «Subir otro documento».</Text>
+            )}
             {checklist.map((item) => (
               <View key={item.code} style={styles.card}>
                 <View style={styles.rowTop}>
@@ -439,6 +451,36 @@ export default function CustomerFileScreen() {
                 </View>
               </View>
             ))}
+            {otherDocs.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Documentos subidos</Text>
+                {otherDocs.map((d) => (
+                  <View key={d.id} style={styles.card}>
+                    <View style={styles.rowTop}>
+                      <Text style={styles.title} numberOfLines={1}>{d.doc_name || "Documento"}</Text>
+                      <Chip compact icon="check-circle" style={{ backgroundColor: COLORS.successSoft }} textStyle={{ color: COLORS.success, fontWeight: "700" }}>
+                        Subido
+                      </Chip>
+                    </View>
+                    {!!d.uploaded_at && <Text style={styles.muted}>{String(d.uploaded_at).slice(0, 10)}</Text>}
+                    {canSeeDocs && (
+                      <View style={styles.actions}>
+                        <Button
+                          compact
+                          mode="outlined"
+                          icon="eye-outline"
+                          onPress={() => onViewDocument({ code: `doc-${d.id}`, document_id: d.id, title: d.doc_name || "Documento" })}
+                          loading={busy === `view-doc-${d.id}`}
+                          disabled={busy !== null}
+                        >
+                          Ver
+                        </Button>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </>
+            )}
             {canUploadDoc && (
               <Button
                 mode="outlined"
@@ -453,7 +495,7 @@ export default function CustomerFileScreen() {
           </>
         )}
 
-        {canSeeGuarantees && !loading && (
+        {showGuarantees && !loading && (
           <>
             <Text style={styles.sectionTitle}>Garantías</Text>
             {guarantees.length === 0 && <Text style={styles.muted}>Este cliente no tiene garantías registradas.</Text>}
@@ -507,7 +549,7 @@ export default function CustomerFileScreen() {
           </>
         )}
 
-        {!loading && !canSeeChecklist && !canSeeGuarantees && (
+        {!loading && !showDocs && !showGuarantees && (
           <Text style={styles.muted}>Tu usuario no tiene permisos para ver el expediente ni las garantías.</Text>
         )}
         <Button onPress={() => navigation.goBack()} style={{ alignSelf: "flex-start" }}>Volver</Button>

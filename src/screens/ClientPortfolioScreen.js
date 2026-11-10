@@ -16,7 +16,7 @@ import {
 } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateWheelPicker from "../components/DateWheelPicker";
 import * as Location from "expo-location";
 import { SessionContext } from "../auth/SessionContext";
 import { getAssignedLoans, logVisit, getMyLoanPayments } from "../api/collectionsApi";
@@ -971,17 +971,18 @@ export default function ClientPortfolioScreen() {
             >
               {gestionForm.action_date}
             </Button>
-            {showDatePicker && (
-              <DateTimePicker
-                value={new Date(gestionForm.action_date)}
-                mode="date"
-                display="default"
-                onChange={(_, selected) => {
-                  setShowDatePicker(false);
-                  if (selected) setG("action_date", selected.toISOString().slice(0, 10));
-                }}
-              />
-            )}
+            <DateWheelPicker
+              visible={showDatePicker}
+              title="Fecha de la gestión"
+              value={gestionForm.action_date}
+              minYear={new Date().getFullYear() - 2}
+              maxYear={new Date().getFullYear() + 1}
+              onCancel={() => setShowDatePicker(false)}
+              onConfirm={(iso) => {
+                setShowDatePicker(false);
+                if (iso) setG("action_date", iso);
+              }}
+            />
 
             <Text style={{ fontWeight: "700", color: COLORS.text, marginBottom: SPACING.xs }}>Resultado</Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginBottom: SPACING.md }}>
@@ -1045,17 +1046,19 @@ export default function ClientPortfolioScreen() {
             >
               {gestionForm.promised_date || "Fecha de promesa"}
             </Button>
-            {showPromiseDatePicker && (
-              <DateTimePicker
-                value={gestionForm.promised_date ? new Date(gestionForm.promised_date) : new Date()}
-                mode="date"
-                display="default"
-                onChange={(_, selected) => {
-                  setShowPromiseDatePicker(false);
-                  if (selected) setG("promised_date", selected.toISOString().slice(0, 10));
-                }}
-              />
-            )}
+            <DateWheelPicker
+              visible={showPromiseDatePicker}
+              title="Fecha de promesa"
+              value={gestionForm.promised_date}
+              minYear={new Date().getFullYear() - 1}
+              maxYear={new Date().getFullYear() + 2}
+              clearable
+              onCancel={() => setShowPromiseDatePicker(false)}
+              onConfirm={(iso) => {
+                setShowPromiseDatePicker(false);
+                setG("promised_date", iso || "");
+              }}
+            />
 
             <Text style={{ fontWeight: "700", color: COLORS.text, marginBottom: SPACING.xs }}>Volver a visitar</Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginBottom: SPACING.xs }}>

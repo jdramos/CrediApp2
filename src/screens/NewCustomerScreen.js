@@ -11,6 +11,7 @@ import {
 } from "../api/customerCatalogApi";
 import { isNetworkError } from "../api/credimasterClient";
 import CatalogPickerField from "../components/CatalogPickerField";
+import { DateWheelField } from "../components/DateWheelPicker";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 import { confirmAction } from "../utils/confirm";
 import { enqueue } from "../offline/queue";
@@ -195,21 +196,25 @@ export default function NewCustomerScreen({ navigation }) {
     </View>
   );
 
+  // Fechas con selector de ruedas (día · mes · año); el formulario las guarda como AAAA-MM-DD.
+  const thisYear = new Date().getFullYear();
+  const DATE_RANGES = {
+    birth_date: { minYear: 1920, maxYear: thisYear, defaultValue: `${thisYear - 30}-01-01` },
+    identity_issue_date: { minYear: 1990, maxYear: thisYear },
+    identity_expiration_date: { minYear: thisYear - 5, maxYear: thisYear + 30 },
+    job_start_day: { minYear: 1970, maxYear: thisYear },
+  };
   const dateField = (field, labelText, onChange) => (
     <View key={field}>
-      <TextInput
-        mode="outlined"
-        label={label(`${labelText} (AAAA-MM-DD)`, field)}
+      <DateWheelField
+        label={label(labelText, field)}
         value={form[field] || ""}
-        onChangeText={onChange || ((v) => setF(field, maskDate(v)))}
-        keyboardType="number-pad"
-        maxLength={10}
-        error={!!errors[field]}
+        onChange={(iso) => (onChange || ((v) => setF(field, maskDate(v))))(iso || "")}
+        error={errors[field]}
         style={styles.input}
         outlineStyle={{ borderRadius: RADIUS.md, borderColor: COLORS.border }}
-        left={<TextInput.Icon icon="calendar" />}
+        {...(DATE_RANGES[field] || {})}
       />
-      <HelperText type="error" visible={!!errors[field]}>{errors[field]}</HelperText>
     </View>
   );
 
@@ -285,7 +290,7 @@ export default function NewCustomerScreen({ navigation }) {
       await enqueue({
         type: "CUSTOMER_CREATE",
         label: `Cliente nuevo — ${form.customer_name.trim()}`,
-        payload: { localId, body: buildCustomerPayload(form) },
+        payload: { localId, body: { ...buildCustomerPayload(form), prospect_request: true } },
       });
       refreshPendingCount();
       navigation.replace("CustomerSetup", { customerId: localId, customerName: form.customer_name.trim() });
@@ -299,7 +304,9 @@ export default function NewCustomerScreen({ navigation }) {
     try {
       setSaving(true);
       setGeneral([]);
-      const res = await createCustomer(session.token, buildCustomerPayload(form));
+      // prospect_request: si la empresa tiene activa la política "cliente nuevo = prospecto", este
+      // cliente solo queda guardado cuando se apruebe su solicitud de crédito (CustomerSetupScreen).
+      const res = await createCustomer(session.token, { ...buildCustomerPayload(form), prospect_request: true });
       const id = res?.data?.id ?? res?.id;
       // Ya con el cliente creado: ubicación y fotos, documentos obligatorios, evaluación
       // financiera y la solicitud de crédito (CustomerSetupScreen).
@@ -316,8 +323,12 @@ export default function NewCustomerScreen({ navigation }) {
           { confirmText: "Guardar" },
         );
       } else if (e?.status === 409) {
-        setErrors((prev) => ({ ...prev, identification: "Ya existe un cliente con esa identificación" }));
-        setGeneral(["Ya existe un cliente con esa identificación. Búsquelo en Clientes."]);
+        const inProcess = e?.data?.errors?.[0]?.message;
+        const text = /en trámite/i.test(String(inProcess || ""))
+          ? inProcess
+          : "Ya existe un cliente con esa identificación. Búsquelo en Clientes.";
+        setErrors((prev) => ({ ...prev, identification: /en trámite/i.test(text) ? "Esa cédula ya tiene una solicitud en trámite" : "Ya existe un cliente con esa identificación" }));
+        setGeneral([text]);
         goTo(0);
       } else if (e?.status === 400 && Array.isArray(e?.data?.errors)) {
         const { fields, general: other } = mapServerErrors(e.data.errors);

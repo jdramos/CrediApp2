@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
+import { View, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Button, ActivityIndicator, HelperText, Chip } from "react-native-paper";
 import { SessionContext } from "../auth/SessionContext";
@@ -305,7 +306,7 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScroll contentContainerStyle={styles.content}>
         <Text variant="titleMedium" style={styles.header}>{customerName || "Cliente"}</Text>
 
         {!done && queued ? (
@@ -423,7 +424,7 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
           </>
         )}
         {!!error && (done || !canCreate) && <HelperText type="error" visible>{error}</HelperText>}
-      </ScrollView>
+      </KeyboardAwareScroll>
     </SafeAreaView>
   );
 }

@@ -7,6 +7,7 @@ import { SessionContext } from "../auth/SessionContext";
 import { getCustomer } from "../api/customerApi";
 import { getCustomerChecklist } from "../api/customerDocumentApi";
 import { getCurrentEvaluation } from "../api/customerEvaluationApi";
+import { getCustomerGuarantees } from "../api/guaranteesApi";
 import {
   isLocalCustomerId, getRealCustomerId, getQueuedCustomerFields, getQueuedEvaluation,
 } from "../offline/localCustomers";
@@ -80,6 +81,9 @@ export default function CustomerSetupScreen({ route, navigation }) {
   const perms = session?.permissions || [];
   const canLocation = perms.includes("clientes.editar") || perms.includes("clientes.documentos.subir");
   const canChecklist = perms.includes("clientes.checklist.ver");
+  const canUploadDocs = perms.includes("clientes.documentos.subir");
+  const canGuarantees = perms.includes("garantias.ver") || perms.includes("garantias.insertar") || perms.includes("clientes.editar");
+  const canSeeGuarantees = perms.includes("garantias.ver");
   const canEvaluate = perms.includes("clientes.evaluacion.insertar");
   const canSeeEvaluation = canEvaluate || perms.includes("clientes.evaluacion.ver");
   const canRequestLoan = perms.includes("creditos.insertar");
@@ -89,6 +93,7 @@ export default function CustomerSetupScreen({ route, navigation }) {
   const [checklist, setChecklist] = useState(null);
   const [evaluation, setEvaluation] = useState(null);
   const [queuedEval, setQueuedEval] = useState(null); // evaluación guardada sin señal, por enviar
+  const [guaranteeCount, setGuaranteeCount] = useState(null); // null = no se pudo saber
   const isLocal = isLocalCustomerId(customerId);
 
   useFocusEffect(
@@ -111,13 +116,15 @@ export default function CustomerSetupScreen({ route, navigation }) {
           setLoading(false);
           return;
         }
-        const [c, cl, ev, qe] = await Promise.all([
+        const [c, cl, ev, qe, gs] = await Promise.all([
           getCustomer(session.token, customerId).catch(() => null),
           canChecklist ? getCustomerChecklist(session.token, customerId).catch(() => null) : null,
           canSeeEvaluation ? getCurrentEvaluation(session.token, customerId).catch(() => null) : null,
           getQueuedEvaluation(customerId),
+          canSeeGuarantees ? getCustomerGuarantees(session.token, customerId).catch(() => null) : null,
         ]);
         if (!alive) return;
+        setGuaranteeCount(gs && Array.isArray(gs.data ?? gs) ? (gs.data ?? gs).length : null);
         setCustomer(c?.data?.customer || null);
         setChecklist(Array.isArray(cl) ? cl : null);
         setEvaluation(ev && ev.id ? ev : null);
@@ -125,8 +132,15 @@ export default function CustomerSetupScreen({ route, navigation }) {
         setLoading(false);
       })();
       return () => { alive = false; };
-    }, [session.token, customerId, canChecklist, canSeeEvaluation, navigation]),
+    }, [session.token, customerId, canChecklist, canSeeEvaluation, canSeeGuarantees, navigation]),
   );
+
+  // Cliente nuevo pendiente de aprobación (política "cliente nuevo = prospecto"): se guarda como cliente
+  // solo si se aprueba su solicitud; para pedirla hace falta su evaluación financiera.
+  const isProspect = Number(customer?.is_prospect) === 1;
+  const evaluationDone = !!evaluation || !!queuedEval;
+  // Sin permiso para ver/registrar evaluaciones no se puede bloquear aquí (el servidor igual la exige al enviar).
+  const needsEvaluation = isProspect && !evaluationDone && canSeeEvaluation;
 
   const hasLocation =
     (customer?.home_lat != null && customer?.home_lng != null) ||
@@ -162,6 +176,15 @@ export default function CustomerSetupScreen({ route, navigation }) {
 
         {loading && <ActivityIndicator color={COLORS.primary} />}
 
+        {isProspect && (
+          <View style={[styles.card, { backgroundColor: COLORS.warningSoft, borderColor: COLORS.warning }]}>
+            <Text variant="titleSmall" style={{ fontWeight: "800", color: COLORS.text }}>Cliente pendiente de aprobación</Text>
+            <Text style={styles.hint}>
+              Llene su ficha completa y digite la evaluación financiera. Si la solicitud se aprueba queda guardado como cliente; si se rechaza o se anula, se borra todo lo que se capturó.
+            </Text>
+          </View>
+        )}
+
         <StepCard
           icon="map-marker-outline"
           title="Ubicación y fotos"
@@ -174,23 +197,43 @@ export default function CustomerSetupScreen({ route, navigation }) {
           disabledReason={canLocation ? null : "Su usuario no tiene permiso para guardar ubicaciones."}
         />
 
-        {canChecklist && (
+        {(canChecklist || canUploadDocs) && (
           <StepCard
             icon="folder-image"
-            title="Documentos obligatorios"
+            title="Documentos del cliente"
             description={
               isLocal
-                ? "Documentos obligatorios del expediente (cédula, comprobantes...)."
+                ? "Documentos del expediente (cédula, comprobantes, fotos...)."
                 : mandatory.length
                   ? `${mandatoryDone} de ${mandatory.length} documentos obligatorios entregados. Tome una foto de cada uno.`
-                  : "Este cliente no tiene documentos obligatorios en su expediente."
+                  : "Suba la cédula, comprobantes y demás archivos del cliente (foto, galería o varias páginas en un solo PDF)."
             }
-            done={isLocal ? false : mandatory.length === 0 ? true : docsDone}
-            doneLabel={mandatory.length === 0 ? "Sin obligatorios" : "Completos"}
-            pendingLabel={isLocal ? "En espera" : `Faltan ${mandatory.length - mandatoryDone}`}
+            done={isLocal ? false : mandatory.length > 0 && docsDone}
+            doneLabel="Completos"
+            pendingLabel={isLocal ? "En espera" : mandatory.length ? `Faltan ${mandatory.length - mandatoryDone}` : "Opcional"}
             actionLabel={docsDone ? "Ver expediente" : "Subir documentos"}
             onPress={() => navigation.navigate("CustomerFile", params)}
             disabledReason={isLocal ? "Podrá subir los documentos del expediente cuando el cliente quede registrado (al volver la señal)." : null}
+          />
+        )}
+
+        {canGuarantees && (
+          <StepCard
+            icon="shield-check-outline"
+            title="Garantías"
+            description={
+              isLocal
+                ? "Garantías del cliente (artículo, serie, marca, valor y fotos)."
+                : guaranteeCount
+                  ? `${guaranteeCount} garantía${guaranteeCount === 1 ? "" : "s"} registrada${guaranteeCount === 1 ? "" : "s"}. Puede agregar más o tomarles fotos.`
+                  : "Digite las garantías del cliente (artículo, serie, marca, valor) y tome sus fotos."
+            }
+            done={!isLocal && guaranteeCount > 0}
+            doneLabel="Registradas"
+            pendingLabel={isLocal ? "En espera" : "Opcional"}
+            actionLabel={guaranteeCount > 0 ? "Ver / agregar garantías" : "Agregar garantías"}
+            onPress={() => navigation.navigate("CustomerFile", params)}
+            disabledReason={isLocal ? "Podrá registrar las garantías cuando el cliente quede registrado (al volver la señal)." : null}
           />
         )}
 
@@ -207,7 +250,7 @@ export default function CustomerSetupScreen({ route, navigation }) {
             }
             done={!!evaluation || !!queuedEval}
             doneLabel={evaluation ? "Hecha" : "Por enviar"}
-            pendingLabel="Pendiente"
+            pendingLabel={isProspect ? "Obligatoria" : "Pendiente"}
             actionLabel={evaluation || queuedEval ? "Ver evaluación" : "Hacer evaluación"}
             onPress={() => navigation.navigate("CustomerEvaluation", params)}
             disabledReason={!evaluation && !queuedEval && !canEvaluate ? "Su usuario no tiene permiso para registrar evaluaciones." : null}
@@ -216,9 +259,14 @@ export default function CustomerSetupScreen({ route, navigation }) {
 
         <View style={{ gap: SPACING.sm }}>
           {canRequestLoan && (
-            <Button mode="contained" icon="cash-plus" onPress={requestLoan} style={{ borderRadius: RADIUS.md }}>
+            <Button mode="contained" icon="cash-plus" onPress={requestLoan} disabled={needsEvaluation} style={{ borderRadius: RADIUS.md }}>
               Crear solicitud de crédito
             </Button>
+          )}
+          {canRequestLoan && needsEvaluation && (
+            <Text style={[styles.hint, { color: COLORS.warning, fontWeight: "700" }]}>
+              Falta digitar la evaluación financiera del cliente: es obligatoria para crear la solicitud.
+            </Text>
           )}
           {canRequestLoan && isLocal && (
             <Text style={styles.hint}>

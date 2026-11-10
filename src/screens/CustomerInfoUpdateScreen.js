@@ -1,5 +1,7 @@
 import React, { useContext, useEffect, useState } from "react";
-import { View, StyleSheet, ScrollView, Alert } from "react-native";
+import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
+import { DateWheelField } from "../components/DateWheelPicker";
+import { View, StyleSheet, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Button, ActivityIndicator, HelperText, Checkbox } from "react-native-paper";
 import * as Location from "expo-location";
@@ -146,7 +148,7 @@ export default function CustomerInfoUpdateScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScroll contentContainerStyle={styles.content}>
         <Text variant="titleLarge" style={styles.header}>{customerName || "Cliente"}</Text>
         <InfoUpdateBanner status={status} />
         <Text style={styles.hint}>
@@ -157,7 +159,18 @@ export default function CustomerInfoUpdateScreen({ route, navigation }) {
         {GROUPS.map(([title, list]) => (
           <View key={title} style={styles.card}>
             <Text style={styles.group}>{title}</Text>
-            {list.map(([key, label, keyboardType]) => (
+            {list.map(([key, label, keyboardType]) => key === "identity_expiration_date" ? (
+              <DateWheelField
+                key={key}
+                dense
+                label={label.replace(/\s*\(AAAA-MM-DD\)/, "")}
+                value={form[key]}
+                onChange={(iso) => setForm((f) => ({ ...f, [key]: iso || "" }))}
+                minYear={new Date().getFullYear() - 5}
+                maxYear={new Date().getFullYear() + 30}
+                style={styles.input}
+              />
+            ) : (
               <TextInput
                 key={key}
                 mode="outlined"
@@ -194,7 +207,7 @@ export default function CustomerInfoUpdateScreen({ route, navigation }) {
         <Button mode="contained" icon="content-save" onPress={save} loading={busy} disabled={busy} style={{ borderRadius: RADIUS.md }}>
           Guardar actualización
         </Button>
-      </ScrollView>
+      </KeyboardAwareScroll>
     </SafeAreaView>
   );
 }

@@ -16,6 +16,11 @@ export const uploadCustomerDocument = (token, customerId, file, { docType, docNa
     token,
   );
 
+// Todos los documentos subidos del cliente (también los que no son del checklist, p. ej. "Documento
+// adicional") — permiso clientes.documentos.ver. Cada fila: id, doc_name, mime_type, related_item_code, uploaded_at.
+export const listCustomerDocuments = (token, customerId) =>
+  credimasterGet(`/api/customer-files/${customerId}/documents-list`, token);
+
 // URL temporal (2 min) para ver/descargar un documento ya subido, con su tipo
 // (mime_type) — permiso clientes.documentos.ver.
 export const getCustomerDocumentUrl = (token, documentId) =>

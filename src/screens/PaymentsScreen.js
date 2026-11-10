@@ -14,7 +14,7 @@ import {
 } from "react-native-paper";
 import Animated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateWheelPicker from "../components/DateWheelPicker";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import ViewShot, { captureRef } from "react-native-view-shot";
 import { shareImage } from "../utils/shareImage";
@@ -989,17 +989,18 @@ export default function PaymentsScreen({ route }) {
             >
               {date}
             </Button>
-            {showDate && (
-              <DateTimePicker
-                value={new Date(date)}
-                mode="date"
-                display="default"
-                onChange={(_, selected) => {
-                  setShowDate(false);
-                  if (selected) setDate(selected.toISOString().slice(0, 10));
-                }}
-              />
-            )}
+            <DateWheelPicker
+              visible={!!showDate}
+              title="Fecha del pago"
+              value={date}
+              minYear={new Date().getFullYear() - 3}
+              maxYear={new Date().getFullYear() + 1}
+              onCancel={() => setShowDate(false)}
+              onConfirm={(iso) => {
+                setShowDate(false);
+                if (iso) setDate(iso);
+              }}
+            />
 
             <Text style={{ marginTop: SPACING.md, fontWeight: "700", color: COLORS.text }}>Forma de pago</Text>
             <View style={styles.chipsRow}>

@@ -110,9 +110,16 @@ export default function CustomerSearchScreen({ navigation }) {
         renderItem={({ item }) => (
           <Card
             style={styles.row}
-            onPress={() => navigation.navigate("CustomerDetail", { customerId: item.id })}
+            onPress={() =>
+              Number(item.is_prospect) === 1
+                ? navigation.navigate("CustomerSetup", { customerId: item.id, customerName: item.customer_name })
+                : navigation.navigate("CustomerDetail", { customerId: item.id })
+            }
           >
             <Text style={styles.name}>{item.customer_name}</Text>
+            {Number(item.is_prospect) === 1 && (
+              <Text style={[styles.id, { color: COLORS.warning, fontWeight: "700" }]}>Pendiente de aprobación (su solicitud)</Text>
+            )}
             {!!item.customer_code && <Text style={styles.id}>Código: {item.customer_code}</Text>}
             <CopyableId label="Cédula: " value={item.identification} textStyle={styles.id} />
             <AddressLines customer={item} />

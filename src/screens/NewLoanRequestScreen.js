@@ -1,10 +1,11 @@
-import React, { useContext, useEffect, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { View, StyleSheet, FlatList, Alert, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Card, Button, Chip, ActivityIndicator, HelperText, IconButton, Checkbox, Portal, Modal } from "react-native-paper";
 import Animated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateWheelPicker from "../components/DateWheelPicker";
 import { SessionContext } from "../auth/SessionContext";
 import { searchCustomers, getCustomer, saveCustomerGuarantees } from "../api/customerApi";
 import { getAccessibleBranches } from "../api/branchApi";
@@ -272,6 +273,18 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     cachedFetch(key("guarantees"), () => getCustomerGuarantees(session.token, customer.id)).then((r) => setGuarantees(r.data || [])).catch(() => setGuarantees([]));
     cachedFetch(key("checklist"), () => getCustomerChecklist(session.token, customer.id)).then((r) => setChecklist(Array.isArray(r.data) ? r.data : [])).catch(() => setChecklist([]));
   }, [customer?.id, session.token]);
+
+  // Cliente nuevo pendiente de aprobación: la evaluación financiera es obligatoria y se digita
+  // en su pantalla; al volver aquí se vuelve a consultar (también la copia guardada sin señal).
+  const perms = session?.permissions || [];
+  const canSeeEvaluation = perms.includes("clientes.evaluacion.insertar") || perms.includes("clientes.evaluacion.ver");
+  const isProspect = Number(customer?.is_prospect) === 1 && canSeeEvaluation;
+  useFocusEffect(
+    useCallback(() => {
+      if (!isProspect || !customer?.id || isLocalCustomerId(customer.id)) return;
+      getCurrentEvaluation(session.token, customer.id).then((r) => setEvaluation(r?.data?.id ? r.data : null)).catch(() => {});
+    }, [isProspect, customer?.id, session.token]),
+  );
 
   // Prellena los catálogos complementarios con la fila "por defecto" del
   // tenant, igual que la web — el usuario puede cambiarlos con el picker.
@@ -644,6 +657,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   const validateStep1 = () => {
     const amt = toNumber(amount);
     const trm = Number(term);
+    if (isProspect && !evaluation?.id) return "Falta digitar la evaluación financiera del cliente: es obligatoria para este cliente nuevo.";
     if (!branchId) return "Seleccione una sucursal";
     if (!amt || amt <= 0) return "Ingrese un monto válido";
     if (!trm || trm <= 0) return "Ingrese un plazo válido";
@@ -839,6 +853,9 @@ export default function NewLoanRequestScreen({ route, navigation }) {
               renderItem={({ item }) => (
                 <Card style={styles.row} onPress={() => pickCustomer(item)}>
                   <Text style={styles.name}>{item.customer_name}</Text>
+                  {Number(item.is_prospect) === 1 && (
+                    <Text style={[styles.muted, { color: COLORS.warning, fontWeight: "700" }]}>Pendiente de aprobación</Text>
+                  )}
                   {!!item.customer_code && <Text style={styles.muted}>Código: {item.customer_code}</Text>}
                   <CopyableId label="Cédula: " value={item.identification} textStyle={styles.muted} />
                 </Card>
@@ -869,6 +886,26 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                 <Chip icon="chart-line" style={{ marginTop: SPACING.sm, alignSelf: "flex-start", backgroundColor: COLORS.successSoft }}>
                   Evaluación financiera #{evaluation.id} vigente
                 </Chip>
+              )}
+              {isProspect && !evaluation?.id && (
+                <View style={{ marginTop: SPACING.sm, gap: SPACING.xs }}>
+                  <Text style={{ color: COLORS.warning, fontWeight: "700" }}>
+                    Cliente pendiente de aprobación: falta digitar su evaluación financiera (obligatoria).
+                  </Text>
+                  <Button
+                    mode="contained-tonal"
+                    icon="chart-box-outline"
+                    onPress={() =>
+                      navigation.navigate("Clientes", {
+                        screen: "CustomerEvaluation",
+                        params: { customerId: customer.id, customerName: customer.customer_name },
+                      })
+                    }
+                    style={{ borderRadius: RADIUS.md }}
+                  >
+                    Digitar evaluación financiera
+                  </Button>
+                </View>
               )}
             </View>
 
@@ -944,21 +981,21 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                   Vencimiento: {dueDate}
                 </Button>
               )}
-              {showDate && (
-                <DateTimePicker
-                  value={new Date(showDate === "request" ? requestDate : dueDate)}
-                  mode="date"
-                  display="default"
-                  onChange={(_, selected) => {
-                    const target = showDate;
-                    setShowDate(null);
-                    if (!selected) return;
-                    const iso = selected.toISOString().slice(0, 10);
-                    if (target === "request") setRequestDate(iso);
-                    else setDueDate(iso);
-                  }}
-                />
-              )}
+              <DateWheelPicker
+                visible={!!showDate}
+                title={showDate === "request" ? "Fecha de solicitud" : "Fecha de vencimiento"}
+                value={showDate === "request" ? requestDate : dueDate}
+                minYear={new Date().getFullYear() - 1}
+                maxYear={new Date().getFullYear() + 15}
+                onCancel={() => setShowDate(null)}
+                onConfirm={(iso) => {
+                  const target = showDate;
+                  setShowDate(null);
+                  if (!iso) return;
+                  if (target === "request") setRequestDate(iso);
+                  else setDueDate(iso);
+                }}
+              />
             </View>
 
             <View style={styles.card}>
@@ -1143,6 +1180,28 @@ export default function NewLoanRequestScreen({ route, navigation }) {
               >
                 Agregar garantía
               </Button>
+            )}
+
+            {canUploadDocs && checklist.length === 0 && customer?.id && !isLocalCustomerId(customer.id) && (
+              <View style={[styles.card, { marginTop: SPACING.md }]}>
+                <Text style={styles.cardTitle}>Documentos del cliente</Text>
+                <Text style={{ color: COLORS.muted, marginBottom: SPACING.xs }}>
+                  Suba la cédula, comprobantes y demás archivos del cliente.
+                </Text>
+                <Button
+                  mode="contained-tonal"
+                  icon="folder-image"
+                  onPress={() =>
+                    navigation.navigate("Clientes", {
+                      screen: "CustomerFile",
+                      params: { customerId: customer.id, customerName: customer.customer_name },
+                    })
+                  }
+                  style={{ borderRadius: RADIUS.md }}
+                >
+                  Subir documentos
+                </Button>
+              </View>
             )}
 
             {canUploadDocs && checklist.length > 0 && (
