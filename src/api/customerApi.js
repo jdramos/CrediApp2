@@ -1,4 +1,5 @@
-import { credimasterGet, credimasterPost, credimasterPut } from "./credimasterClient";
+import { Platform } from "react-native";
+import { credimasterGet, credimasterPost, credimasterPut, credimasterUpload } from "./credimasterClient";
 
 // Búsqueda liviana por nombre o identificación (GET /getCustomerList,
 // permiso clientes.ver) — pensada para autocompletar, no trae todos los
@@ -14,6 +15,22 @@ export const searchCustomers = (token, query) =>
 // trae `err.data.errors = [{ field, message }]` y un 409 es cédula repetida.
 export const createCustomer = (token, payload) =>
   credimasterPost("/api/customers", payload, token);
+
+// Lectura de la cédula con IA (POST /api/customers/id-scan, permiso clientes.insertar y módulo id_scan
+// de pago). `front` y `back` son fotos { uri, name, type }; el reverso es opcional. Necesita señal.
+// Responde { ok, data: { fields, warnings, legible } } con customer_name, identification, birth_date,
+// identity_issue_date, identity_expiration_date, sex ("M"/"F") y home_address, solo lo que se leyó.
+// 422 NOT_AN_ID = la foto no es una cédula; 429 = tope de lecturas; 403 MODULE_DISABLED = sin el complemento.
+export const scanIdCard = (token, { front, back }) => {
+  const form = new FormData();
+  if (Platform.OS === "web") {
+    form.__webFile = { fieldName: "front", file: front }; // en el navegador solo el frente
+  } else {
+    form.append("front", { uri: front.uri, name: front.name, type: front.type });
+    if (back) form.append("back", { uri: back.uri, name: back.name, type: back.type });
+  }
+  return credimasterUpload("/api/customers/id-scan", form, token);
+};
 
 // Registro completo del cliente (GET /:customerId, permiso clientes.ver).
 // Necesario antes de guardar una ubicación: el backend espera el objeto

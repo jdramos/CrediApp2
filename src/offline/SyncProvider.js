@@ -4,6 +4,7 @@ import { subscribeToConnectivity, isConnected } from "./network";
 import { flushQueue } from "./syncManager";
 import { queueCount } from "./queue";
 import { prefetchOfflineData } from "./prefetch";
+import { flushTracking } from "../tracking/tracker";
 
 export const SyncContext = createContext({
   pendingCount: 0,
@@ -64,6 +65,7 @@ export function SyncProvider({ children }) {
       .then((on) => {
         if (!on) return;
         syncNow(); // lo que este usuario dejó pendiente la vez anterior
+        flushTracking().catch(() => {}); // y los puntos de ruta que quedaron sin enviar
         prefetchOffline();
       })
       .catch(() => {});
@@ -78,6 +80,7 @@ export function SyncProvider({ children }) {
     const unsubscribe = subscribeToConnectivity((online) => {
       if (online) {
         syncNow();
+        flushTracking().catch(() => {}); // vuelve la señal: la ruta pendiente sale de inmediato
         prefetchOffline();
       }
     });

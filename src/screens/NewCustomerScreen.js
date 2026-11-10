@@ -1,9 +1,11 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Button, ActivityIndicator, HelperText, Chip } from "react-native-paper";
 import { SessionContext } from "../auth/SessionContext";
-import { createCustomer } from "../api/customerApi";
+import { createCustomer, scanIdCard } from "../api/customerApi";
+import { getSessionModules } from "../api/financeApi";
+import { pickImage } from "../utils/imagePicker";
 import { getAccessibleBranches } from "../api/branchApi";
 import {
   getCountries, getProvinces, getMunicipalities, getGenres, getMaritalStatuses,
@@ -78,6 +80,19 @@ export default function NewCustomerScreen({ navigation }) {
   const [activities, setActivities] = useState(null);
   const [activitiesError, setActivitiesError] = useState("");
   const [branches, setBranches] = useState([]);
+
+  // Lectura de la cédula con IA: complemento de pago que activa el superadmin por empresa.
+  const [idScanEnabled, setIdScanEnabled] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState(null); // { filled: [etiquetas], warnings: [] }
+  const [scanError, setScanError] = useState("");
+  useEffect(() => {
+    if (!canCreate) return;
+    getSessionModules(session.token)
+      .then((r) => setIdScanEnabled(r?.data?.id_scan_enabled === true))
+      .catch(() => setIdScanEnabled(false)); // sin señal no se ofrece: la lectura la necesita
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canCreate]);
 
   const loadCatalogs = async () => {
     setCatError("");
@@ -165,6 +180,64 @@ export default function NewCustomerScreen({ navigation }) {
       return next;
     });
     setErrors((prev) => ({ ...prev, identity_issue_date: undefined, identity_expiration_date: undefined }));
+  };
+
+  const askBack = () =>
+    new Promise((resolve) => {
+      Alert.alert(
+        "Reverso de la cédula",
+        "¿Quiere agregar también la foto del reverso? Ayuda a leer más datos.",
+        [
+          { text: "Solo el frente", onPress: () => resolve(false) },
+          { text: "Agregar reverso", onPress: () => resolve(true) },
+        ],
+        { cancelable: false },
+      );
+    });
+
+  // Fotografía la cédula, la manda a leer y llena el formulario (el cobrador revisa y corrige).
+  const scanCedula = async () => {
+    if (scanning) return;
+    setScanError("");
+    setScanResult(null);
+    try {
+      const front = await pickImage();
+      if (!front) return;
+      let back = null;
+      if (await askBack()) back = await pickImage();
+      setScanning(true);
+      const res = await scanIdCard(session.token, { front, back });
+      const f = res?.data?.fields || {};
+      const filled = [];
+      const genreId = f.sex
+        ? (cat?.genres || []).find((g) => (f.sex === "M" ? /^(m|masc|hombre|varon)/i : /^(f|fem|mujer)/i).test(String(g.label || "").trim()))?.id
+        : null;
+      setForm((prev) => {
+        const next = { ...prev };
+        if (f.customer_name) { next.customer_name = f.customer_name; filled.push("nombre"); }
+        if (f.identification) {
+          next.identity_type = CEDULA_TYPE_ID;
+          next.identification = normalizeCedula(f.identification);
+          filled.push("cédula");
+        }
+        if (f.birth_date) { next.birth_date = f.birth_date; next.age = ageFromBirth(f.birth_date); filled.push("nacimiento"); }
+        if (f.identity_issue_date) { next.identity_issue_date = f.identity_issue_date; filled.push("emisión"); }
+        if (f.identity_expiration_date) { next.identity_expiration_date = f.identity_expiration_date; filled.push("vencimiento"); }
+        if (genreId != null) { next.genre_id = genreId; filled.push("género"); }
+        if (f.home_address && !String(prev.home_address || "").trim()) { next.home_address = f.home_address; filled.push("dirección"); }
+        return next;
+      });
+      setErrors((prev) => ({ ...prev, customer_name: undefined, identification: undefined, birth_date: undefined, age: undefined, identity_issue_date: undefined, identity_expiration_date: undefined, genre_id: undefined }));
+      setScanResult({ filled, warnings: res?.data?.warnings || [] });
+    } catch (e) {
+      setScanError(
+        isNetworkError(e)
+          ? "Sin señal: la lectura de la cédula necesita conexión. Digite los datos a mano."
+          : e?.message || "No se pudo leer la cédula. Intente de nuevo o digite los datos.",
+      );
+    } finally {
+      setScanning(false);
+    }
   };
 
   const onProvince = (id) => {
@@ -387,6 +460,33 @@ export default function NewCustomerScreen({ navigation }) {
       case 0:
         return (
           <View style={styles.card}>
+            {idScanEnabled && (
+              <View style={{ gap: SPACING.xs, marginBottom: SPACING.sm }}>
+                <Button
+                  mode="contained-tonal"
+                  icon="card-account-details-outline"
+                  onPress={scanCedula}
+                  loading={scanning}
+                  disabled={scanning}
+                  style={{ borderRadius: RADIUS.md }}
+                >
+                  {scanning ? "Leyendo la cédula…" : "Leer la cédula con la cámara"}
+                </Button>
+                {!!scanError && <HelperText type="error" visible>{scanError}</HelperText>}
+                {!!scanResult && (
+                  <View>
+                    <Text style={{ color: COLORS.success, fontWeight: "700" }}>
+                      {scanResult.filled.length
+                        ? `Se llenó: ${scanResult.filled.join(", ")}. Revise que todo coincida con la cédula.`
+                        : "No se pudo leer ningún dato. Intente con otra foto o digite a mano."}
+                    </Text>
+                    {scanResult.warnings.map((w) => (
+                      <Text key={w} style={{ color: COLORS.warning, fontWeight: "600", fontSize: 12 }}>• {w}</Text>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
             {text("customer_name", "Nombre y apellidos", { autoCapitalize: "words" })}
             {text("public_name", "Nombre conocido públicamente", { autoCapitalize: "words" })}
             {pick("genre_id", "Género", cat.genres)}

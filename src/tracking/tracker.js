@@ -18,6 +18,10 @@ import { credimasterPost, isNetworkError } from "../api/credimasterClient";
 
 const STATE_KEY = "TRACKING_STATE_V1";
 const BUFFER_KEY = "TRACKING_BUFFER_V1";
+// Puntos que quedaron SIN enviar al cerrar sesión (o de otro usuario): se conservan a nombre de su dueño y se
+// envían la próxima vez que ese usuario inicie sesión con señal. El servidor acepta puntos de hasta 7 días.
+const PENDING_KEY = "TRACKING_PENDING_V1";
+const MAX_POINT_AGE_MS = 6.9 * 24 * 3600 * 1000;
 
 const SAMPLE_MS = 30 * 1000;
 const SAMPLE_METERS = 25;
@@ -92,6 +96,93 @@ const withBufferLock = (fn) => {
   return run;
 };
 
+// Igual que el buffer: los accesos a los pendientes van de a uno.
+let pendingLock = Promise.resolve();
+const withPendingLock = (fn) => {
+  const run = pendingLock.then(fn, fn);
+  pendingLock = run.catch(() => {});
+  return run;
+};
+const sameOwner = (a, b) => a != null && b != null && String(a) === String(b);
+
+// Guarda lo que no se pudo enviar a nombre de quien inició esa jornada.
+async function stashForOwner(state, buffer) {
+  const userId = state?.userId;
+  if (userId == null || !state?.sessionKey) return;
+  const now = Date.now();
+  const fresh = (Array.isArray(buffer) ? buffer : []).filter((p) => now - p.t <= MAX_POINT_AGE_MS);
+  if (!fresh.length && state.startSent) return;
+  await withPendingLock(async () => {
+    const list = await readJson(PENDING_KEY, []);
+    const at = list.findIndex((e) => e.sessionKey === state.sessionKey && sameOwner(e.userId, userId));
+    if (at >= 0) {
+      list[at] = { ...list[at], startSent: list[at].startSent || !!state.startSent, points: [...list[at].points, ...fresh] };
+    } else {
+      list.push({ userId, sessionKey: state.sessionKey, startedAt: state.startedAt, startSent: !!state.startSent, points: fresh });
+    }
+    await writeJson(PENDING_KEY, list);
+  });
+}
+
+const updatePending = (mutator) =>
+  withPendingLock(async () => {
+    const list = await readJson(PENDING_KEY, []);
+    await writeJson(PENDING_KEY, mutator(list));
+  });
+
+let flushingPending = false;
+// Envía los puntos que este usuario dejó pendientes de una sesión anterior. Un error de red los deja
+// guardados; un 400 (lote inválido) descarta ese lote.
+export async function flushPendingTracking() {
+  if (flushingPending) return;
+  const sess = sessionGetter();
+  const token = sess?.token;
+  if (!token) return;
+  flushingPending = true;
+  try {
+    // Limpieza: puntos demasiado viejos (el servidor ya no los acepta) y entradas vacías.
+    const now = Date.now();
+    await updatePending((list) =>
+      list
+        .map((e) => ({ ...e, points: (e.points || []).filter((p) => now - p.t <= MAX_POINT_AGE_MS) }))
+        .filter((e) => e.points.length > 0),
+    );
+    const mine = (await withPendingLock(() => readJson(PENDING_KEY, []))).filter((e) => sameOwner(e.userId, sess.userId));
+    for (const entry of mine) {
+      const isEntry = (x) => x.sessionKey === entry.sessionKey && sameOwner(x.userId, entry.userId);
+      try {
+        if (!entry.startSent) {
+          await credimasterPost("/api/tracking/sessions/start", { session_key: entry.sessionKey, started_at: entry.startedAt }, token);
+          await updatePending((list) => list.map((x) => (isEntry(x) ? { ...x, startSent: true } : x)));
+        }
+        let points = entry.points;
+        while (points.length) {
+          const chunk = points.slice(0, FLUSH_BATCH);
+          try {
+            await credimasterPost(
+              "/api/tracking/points",
+              {
+                session_key: entry.sessionKey,
+                points: chunk.map((p) => ({ lat: p.lat, lng: p.lng, accuracy: p.accuracy, speed: p.speed, t: p.t })),
+              },
+              token,
+            );
+          } catch (e) {
+            if (isNetworkError(e) || e?.status !== 400) throw e; // 400: lote inválido, se descarta
+          }
+          points = points.slice(chunk.length);
+          await updatePending((list) => list.map((x) => (isEntry(x) ? { ...x, points: x.points.slice(chunk.length) } : x)));
+        }
+        await updatePending((list) => list.filter((x) => !isEntry(x)));
+      } catch {
+        break; // sin señal o error del servidor: queda guardado para la próxima
+      }
+    }
+  } finally {
+    flushingPending = false;
+  }
+}
+
 function appendPoint(point) {
   return withBufferLock(async () => {
     const buffer = await readJson(BUFFER_KEY, []);
@@ -132,6 +223,7 @@ export async function flushTracking() {
     // teléfono (la sesión anterior se cerró sin pasar por signOut), no se
     // envían con su token -- se descartan.
     if (state?.userId != null && sess.userId != null && state.userId !== sess.userId) {
+      await stashForOwner(state, await withBufferLock(() => readJson(BUFFER_KEY, [])));
       await AsyncStorage.multiRemove([STATE_KEY, BUFFER_KEY]).catch(() => {});
       status = { ...status, active: false, buffered: 0 };
       stopWatching();
@@ -166,6 +258,7 @@ export async function flushTracking() {
       status = { ...status, buffered: remaining, lastFlushAt: Date.now() };
     }
     emit();
+    flushPendingTracking().catch(() => {});
   } finally {
     flushing = false;
   }
@@ -305,6 +398,7 @@ export async function resumeTrackingIfActive() {
   if (!state) return;
   const userId = sessionGetter()?.userId;
   if (state.userId != null && userId != null && state.userId !== userId) {
+    await stashForOwner(state, await readJson(BUFFER_KEY, []));
     await AsyncStorage.multiRemove([STATE_KEY, BUFFER_KEY]).catch(() => {});
     return;
   }
@@ -324,11 +418,19 @@ export async function resumeTrackingIfActive() {
 }
 
 // Al cerrar sesión: los puntos pertenecen a quien los generó -- se intenta
-// enviar lo pendiente y se borra todo del teléfono.
+// enviar lo pendiente; lo que no salió (sin señal) NO se borra: queda guardado a nombre de este usuario
+// (flushPendingTracking) y se envía cuando vuelva a iniciar sesión con señal.
 export async function resetTracking() {
   stopWatching();
   await flushTracking().catch(() => {});
   await sendSessionMarkers().catch(() => {});
+  try {
+    const state = await readJson(STATE_KEY, null);
+    const buffer = await withBufferLock(() => readJson(BUFFER_KEY, []));
+    await stashForOwner(state, buffer);
+  } catch {
+    // best-effort
+  }
   try {
     await AsyncStorage.multiRemove([STATE_KEY, BUFFER_KEY]);
   } catch {
