@@ -6,6 +6,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeInDown, FadeIn, ZoomIn } from "react-native-reanimated";
 import { SessionContext } from "../auth/SessionContext";
 import { loadRememberedUser, saveRememberedUser } from "../storage/session";
+import { isNetworkError } from "../api/credimasterClient";
+import { isConnected } from "../offline/network";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
@@ -48,6 +50,10 @@ const styles = StyleSheet.create({
   footer: { marginTop: SPACING.md, alignItems: "center" },
   footerText: { opacity: 0.75, color: COLORS.muted },
 });
+
+// Sin internet el login fallaba con un texto técnico ("Network request failed"). Mensajes claros para el cobrador.
+const NO_INTERNET = "No hay conexión a internet. Active los datos móviles o conéctese a una red Wi‑Fi e intente de nuevo.";
+const NO_SERVER = "No se pudo comunicar con el servidor. La señal es muy débil o no hay internet. Revise su conexión e intente de nuevo.";
 
 export default function LoginScreen() {
   const { signIn, signInWithMfa } = useContext(SessionContext);
@@ -97,6 +103,10 @@ export default function LoginScreen() {
 
     try {
       setLoading(true);
+      if (!(await isConnected().catch(() => true))) {
+        setError(NO_INTERNET);
+        return;
+      }
       await signIn({ username: u, password: p });
       await saveRememberedUser(rememberUser, u);
     } catch (e) {
@@ -107,7 +117,7 @@ export default function LoginScreen() {
       } else if (e?.data?.code === "MFA_ENROLL_REQUIRED") {
         setError("Tu usuario debe activar la verificación en dos pasos. Hacelo una vez desde la plataforma web y volvé a entrar aquí.");
       } else {
-        setError(e?.message ?? "Error al iniciar sesión");
+        setError(isNetworkError(e) ? NO_SERVER : e?.message ?? "Error al iniciar sesión");
       }
     } finally {
       setLoading(false);
@@ -131,7 +141,7 @@ export default function LoginScreen() {
         setMfaToken(null);
         setPassword("");
       }
-      setError(e?.message ?? "No se pudo verificar el código");
+      setError(isNetworkError(e) ? NO_SERVER : e?.message ?? "No se pudo verificar el código");
     } finally {
       setLoading(false);
     }
