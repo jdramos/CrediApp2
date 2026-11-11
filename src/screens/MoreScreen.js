@@ -198,7 +198,7 @@ export default function MoreScreen() {
           <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.card}>
             <List.Item
               title="Recordatorios de cobro"
-              description="Aviso a las 7:15 para iniciar tu jornada, a las 7:30 con lo que vence hoy y a las 6:00 pm con lo de mañana"
+              description="Aviso a las 7:15 para iniciar tu jornada, a las 7:30 con las cuotas que toca cobrar hoy y a las 6:00 pm con las de mañana"
               descriptionNumberOfLines={3}
               left={(props) => <List.Icon {...props} icon="bell-ring-outline" color={COLORS.primary} />}
               right={() => <Switch value={remindersOn} onValueChange={toggleReminders} />}

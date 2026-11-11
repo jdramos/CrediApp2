@@ -5,7 +5,9 @@ import { Text, TextInput, Button, ActivityIndicator, HelperText, Chip } from "re
 import { SessionContext } from "../auth/SessionContext";
 import { createCustomer, scanIdCard } from "../api/customerApi";
 import { getSessionModules } from "../api/financeApi";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { pickImage } from "../utils/imagePicker";
+import { setPickerContext, takeRecoveredPhoto } from "../utils/crashLog";
 import { getAccessibleBranches } from "../api/branchApi";
 import {
   getCountries, getProvinces, getMunicipalities, getGenres, getMaritalStatuses,
@@ -93,6 +95,13 @@ export default function NewCustomerScreen({ navigation }) {
       .catch(() => setIdScanEnabled(false)); // sin señal no se ofrece: la lectura la necesita
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canCreate]);
+
+  // Borrador (2026-11-11): si Android cierra la app mientras la cámara está abierta, lo digitado se pierde. Se guarda
+  // en el teléfono mientras se llena y al volver a abrir la pantalla se ofrece continuarlo. Se borra al guardar.
+  const draftKey = `CM_NEW_CUSTOMER_DRAFT_V1:${session?.user?.id ?? "x"}`;
+  const [draftReady, setDraftReady] = useState(false);
+  const hasContent = (f) => !!(String(f?.customer_name || "").trim() || String(f?.identification || "").trim() || String(f?.home_address || "").trim());
+  const clearDraft = () => AsyncStorage.removeItem(draftKey).catch(() => {});
 
   const loadCatalogs = async () => {
     setCatError("");
@@ -196,14 +205,17 @@ export default function NewCustomerScreen({ navigation }) {
     });
 
   // Fotografía la cédula, la manda a leer y llena el formulario (el cobrador revisa y corrige).
-  const scanCedula = async () => {
+  // recovered: la foto del frente que se rescató si Android cerró la app con la cámara abierta.
+  const scanCedula = async (recovered) => {
     if (scanning) return;
     setScanError("");
     setScanResult(null);
     try {
-      const front = await pickImage();
+      setPickerContext("idscan-front");
+      const front = recovered?.uri ? recovered : await pickImage();
       if (!front) return;
       let back = null;
+      setPickerContext("idscan-back");
       if (await askBack()) back = await pickImage();
       setScanning(true);
       const res = await scanIdCard(session.token, { front, back });
@@ -236,9 +248,74 @@ export default function NewCustomerScreen({ navigation }) {
           : e?.message || "No se pudo leer la cédula. Intente de nuevo o digite los datos.",
       );
     } finally {
+      setPickerContext(null);
       setScanning(false);
     }
   };
+
+  // Al tener los catálogos: ofrece continuar el borrador y, si la app se cerró con la cámara abierta, usar la foto rescatada.
+  useEffect(() => {
+    if (!canCreate || !cat || draftReady) return undefined;
+    let alive = true;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(draftKey);
+        const draft = raw ? JSON.parse(raw) : null;
+        if (alive && draft?.form && hasContent(draft.form) && Date.now() - Number(draft.savedAt || 0) < 48 * 3600 * 1000) {
+          const keep = await new Promise((resolve) => {
+            Alert.alert(
+              "Cliente a medias",
+              `Quedó sin guardar el registro de ${String(draft.form.customer_name || draft.form.identification || "un cliente").trim()}. ¿Quiere continuarlo?`,
+              [
+                { text: "Empezar de nuevo", style: "destructive", onPress: () => resolve(false) },
+                { text: "Continuar", onPress: () => resolve(true) },
+              ],
+              { cancelable: false },
+            );
+          });
+          if (!alive) return;
+          if (keep) {
+            setForm((prev) => ({ ...prev, ...draft.form }));
+            setStep(Math.min(Math.max(Number(draft.step) || 0, 0), STEPS.length - 1));
+          } else {
+            await clearDraft();
+          }
+        }
+      } catch {
+        // un borrador dañado no debe impedir registrar clientes
+      }
+      if (alive) setDraftReady(true);
+      try {
+        const photo = await takeRecoveredPhoto("idscan-front");
+        if (alive && photo) {
+          Alert.alert(
+            "Foto recuperada",
+            "La app se cerró mientras tomaba la foto de la cédula, pero la foto se alcanzó a guardar. ¿Leer los datos con ella?",
+            [
+              { text: "No", style: "cancel" },
+              { text: "Leer la cédula", onPress: () => scanCedula(photo) },
+            ],
+          );
+        }
+      } catch {
+        // sin foto rescatada
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canCreate, cat]);
+
+  // Guarda el borrador mientras se llena (sin esperar a que se cierre la app).
+  useEffect(() => {
+    if (!draftReady || !hasContent(form)) return undefined;
+    const t = setTimeout(() => {
+      AsyncStorage.setItem(draftKey, JSON.stringify({ form, step, savedAt: Date.now() })).catch(() => {});
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, step, draftReady]);
 
   const onProvince = (id) => {
     setForm((prev) => ({ ...prev, province_id: id, municipality_id: null }));
@@ -366,6 +443,7 @@ export default function NewCustomerScreen({ navigation }) {
         payload: { localId, body: { ...buildCustomerPayload(form), prospect_request: true } },
       });
       refreshPendingCount();
+      await clearDraft();
       navigation.replace("CustomerSetup", { customerId: localId, customerName: form.customer_name.trim() });
     } catch (err) {
       setGeneral([err?.message ?? "No se pudo guardar el cliente en el teléfono"]);
@@ -381,6 +459,7 @@ export default function NewCustomerScreen({ navigation }) {
       // cliente solo queda guardado cuando se apruebe su solicitud de crédito (CustomerSetupScreen).
       const res = await createCustomer(session.token, { ...buildCustomerPayload(form), prospect_request: true });
       const id = res?.data?.id ?? res?.id;
+      await clearDraft();
       // Ya con el cliente creado: ubicación y fotos, documentos obligatorios, evaluación
       // financiera y la solicitud de crédito (CustomerSetupScreen).
       if (id) navigation.replace("CustomerSetup", { customerId: id, customerName: form.customer_name.trim() });
@@ -465,7 +544,7 @@ export default function NewCustomerScreen({ navigation }) {
                 <Button
                   mode="contained-tonal"
                   icon="card-account-details-outline"
-                  onPress={scanCedula}
+                  onPress={() => scanCedula()}
                   loading={scanning}
                   disabled={scanning}
                   style={{ borderRadius: RADIUS.md }}

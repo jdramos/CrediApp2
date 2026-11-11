@@ -1,6 +1,7 @@
 import { Alert, Platform } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import { markPickerOpen, clearPickerMark } from "./crashLog";
 
 const buildFile = (asset) => {
   const uri = asset.uri;
@@ -49,11 +50,15 @@ async function launchCamera() {
   if (!perm.granted) throw new Error("Se necesita permiso de cámara para tomar la foto.");
   purgeOldPickerCache();
   let res;
+  // Marca: si Android cierra la app con la cámara abierta, al arrancar se reporta y se rescata la foto.
+  await markPickerOpen("camera");
   try {
     res = await ImagePicker.launchCameraAsync({ quality: 0.7, mediaTypes: ["images"] });
   } catch (e) {
+    await clearPickerMark();
     throw friendlyPickerError(e);
   }
+  await clearPickerMark();
   if (res.canceled || !res.assets?.[0]) return null;
   return buildFile(res.assets[0]);
 }
@@ -63,11 +68,14 @@ async function launchLibrary() {
   if (!perm.granted) throw new Error("Se necesita permiso para acceder a tus fotos.");
   purgeOldPickerCache();
   let res;
+  await markPickerOpen("library");
   try {
     res = await ImagePicker.launchImageLibraryAsync({ quality: 0.7, mediaTypes: ["images"] });
   } catch (e) {
+    await clearPickerMark();
     throw friendlyPickerError(e);
   }
+  await clearPickerMark();
   if (res.canceled || !res.assets?.[0]) return null;
   return buildFile(res.assets[0]);
 }

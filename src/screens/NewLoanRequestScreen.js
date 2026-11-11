@@ -294,7 +294,8 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   useFocusEffect(
     useCallback(() => {
       if (!canSeeEvaluation || !customer?.id || isLocalCustomerId(customer.id)) return;
-      getCurrentEvaluation(session.token, customer.id).then((r) => setEvaluation(r?.data?.id ? r.data : null)).catch(() => {});
+      // El servidor devuelve la evaluación vigente tal cual (o null), sin envolverla en { data }.
+      getCurrentEvaluation(session.token, customer.id).then((r) => setEvaluation(r?.id ? r : null)).catch(() => {});
     }, [canSeeEvaluation, customer?.id, session.token]),
   );
 

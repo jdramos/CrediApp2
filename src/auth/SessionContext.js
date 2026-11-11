@@ -14,6 +14,7 @@ import { isConnected } from "../offline/network";
 import { confirmAction } from "../utils/confirm";
 import { setNoticeReporter } from "../utils/contact";
 import { reportPaymentNotice } from "../api/paymentNoticeApi";
+import { flushCrashReports } from "../utils/crashLog";
 
 export const SessionContext = createContext(null);
 
@@ -70,6 +71,10 @@ export function SessionProvider({ children }) {
     });
     return () => setNoticeReporter(null);
   }, []);
+  // Con sesión abierta se mandan al servidor los errores y cierres inesperados guardados (utils/crashLog.js).
+  useEffect(() => {
+    if (session?.token) flushCrashReports(session.token);
+  }, [session?.token]);
   useEffect(() => {
     setUnauthorizedHandler(() => {
       Alert.alert(

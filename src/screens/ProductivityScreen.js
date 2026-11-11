@@ -271,8 +271,8 @@ export default function ProductivityScreen() {
             <View style={styles.card}>
               <Text variant="titleMedium" style={styles.cardTitle}>Agenda de hoy</Text>
 
-              <Text style={styles.subTitle}>Vencen hoy ({agenda.due_today.length})</Text>
-              {agenda.due_today.length === 0 && <Text style={styles.agendaSub}>No hay cuotas que venzan hoy.</Text>}
+              <Text style={styles.subTitle}>Cuotas de hoy ({agenda.due_today.length})</Text>
+              {agenda.due_today.length === 0 && <Text style={styles.agendaSub}>No hay cuotas para hoy.</Text>}
               {agenda.due_today.map((r) => (
                 <AgendaItem
                   key={`due-${r.loan_id}`}
@@ -381,7 +381,7 @@ export default function ProductivityScreen() {
                   color={COLORS.warning}
                 />
               )}
-              <Row label="Vence hoy" value={`${money(p.due_today_amount)} (${p.due_today_installments} cuotas)`} />
+              <Row label="Cuotas de hoy" value={`${money(p.due_today_amount)} (${p.due_today_installments} cuotas)`} />
               <Row label="Gestiones de cobro" value={String(t.actions)} />
               <Row label="Visitas" value={String(t.visits)} />
             </View>

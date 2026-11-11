@@ -346,7 +346,7 @@ export default function ClientPortfolioScreen() {
   };
 
   // Filtros rápidos. "Por visitar hoy" = lo que hoy pide una visita (en mora,
-  // cuota que vence hoy, promesa de pago ya cumplida en fecha o seguimiento
+  // cuota que toca hoy, promesa de pago ya cumplida en fecha o seguimiento
   // agendado para hoy o antes) y todavía no se
   // gestionó hoy (ni en el servidor ni en la cola sin conexión).
   const today = todayISO();
@@ -354,7 +354,11 @@ export default function ClientPortfolioScreen() {
   const FILTERS = [
     ["all", "Todos", () => true],
     ["mora", "En mora", (l) => Number(l.days_overdue) > 0],
-    ["today", "Vencen hoy", (l) => Number(l.due_today) === 1],
+    ["today", "Cuota hoy", (l) => Number(l.due_today) === 1],
+    // El CRÉDITO vence hoy: hoy es su fecha final, la que debería quedar cancelado.
+    ["matures", "Vencen hoy", (l) => Number(l.matures_today) === 1],
+    // El crédito ya pasó su fecha final y sigue sin cancelarse.
+    ["expired", "Vencidos", (l) => Number(l.loan_days_past_due) > 0],
     ["promise", "Con promesa", (l) => !!l.promised_date],
     ["follow", "Seguimiento", (l) => !!l.followup_date && l.followup_date <= today && !isManaged(l)],
     [
@@ -364,6 +368,8 @@ export default function ClientPortfolioScreen() {
         !isManaged(l) &&
         (Number(l.days_overdue) > 0 ||
           Number(l.due_today) === 1 ||
+          Number(l.matures_today) === 1 ||
+          Number(l.loan_days_past_due) > 0 ||
           (!!l.promised_date && String(l.promised_date).slice(0, 10) <= today) ||
           (!!l.followup_date && l.followup_date <= today)),
     ],
@@ -698,9 +704,19 @@ export default function ClientPortfolioScreen() {
                 <View style={styles.rowTop}>
                   <Text style={styles.name}>{item.customer_name || "Cliente"}</Text>
                   <View style={styles.rowTags}>
+                  {Number(item.matures_today) === 1 && (
+                    <Chip compact style={{ backgroundColor: COLORS.dangerSoft }} textStyle={{ color: COLORS.danger, fontWeight: "700" }}>
+                      Vence hoy
+                    </Chip>
+                  )}
+                  {Number(item.loan_days_past_due) > 0 && (
+                    <Chip compact style={{ backgroundColor: COLORS.dangerSoft }} textStyle={{ color: COLORS.danger, fontWeight: "700" }}>
+                      {Number(item.loan_days_past_due) === 1 ? "1 día vencido" : `${Number(item.loan_days_past_due)} días vencidos`}
+                    </Chip>
+                  )}
                   {Number(item.due_today) === 1 && (
                     <Chip compact style={{ backgroundColor: COLORS.warningSoft }} textStyle={{ color: COLORS.warning, fontWeight: "700" }}>
-                      Vence hoy
+                      Cuota hoy
                     </Chip>
                   )}
                   {["OVERDUE", "DUE_SOON"].includes(infoDue.get(Number(item.customer_id))) && (

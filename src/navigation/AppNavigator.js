@@ -21,6 +21,7 @@ import { ActivityIndicator } from "react-native-paper";
 import { View } from "react-native";
 import { COLORS } from "../theme/colors";
 import { handleNotificationResponse } from "../notifications/pushNotifications";
+import { setCurrentScreen } from "../utils/crashLog";
 
 const Stack = createNativeStackNavigator();
 
@@ -52,7 +53,11 @@ export default function AppNavigator() {
     <NavigationContainer
       ref={navigationRef}
       onReady={() => setRouteName(navigationRef.getCurrentRoute()?.name ?? null)}
-      onStateChange={() => setRouteName(navigationRef.getCurrentRoute()?.name ?? null)}
+      onStateChange={() => {
+        const name = navigationRef.getCurrentRoute()?.name ?? null;
+        setCurrentScreen(name);
+        setRouteName(name);
+      }}
     >
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {session ? (
