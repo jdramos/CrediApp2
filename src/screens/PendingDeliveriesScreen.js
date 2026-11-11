@@ -1,10 +1,10 @@
-import React, { useCallback, useContext, useState } from "react";
+import React, { useCallback, useContext, useRef, useState } from "react";
 import { View, StyleSheet, FlatList, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, Card, Button, ActivityIndicator, HelperText, IconButton, Portal, Modal, TextInput, Chip } from "react-native-paper";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
-import { getPendingDeliveries, markDelivered, MAX_DELIVERY_PHOTOS } from "../api/remittanceApi";
+import { getPendingDeliveries, markDelivered, reportNotDelivered, MAX_DELIVERY_PHOTOS } from "../api/remittanceApi";
 import { getCreditPolicies } from "../api/creditPolicyApi";
 import { takePhoto } from "../utils/imagePicker";
 import { confirmAction } from "../utils/confirm";
@@ -19,6 +19,14 @@ import useKeyboardModalStyle from "../components/useKeyboardModalStyle";
 const IMAGE_REQUIRED_TRUE = ["true", "1", "si", "sí"];
 
 const METHOD_LABEL = { CHEQUE: "Cheque", TRANSFERENCIA: "Transferencia", EFECTIVO: "Efectivo" };
+
+// Motivos de «No se pudo entregar» (mismos códigos que el servidor).
+const FAILED_REASONS = [
+  ["CLIENTE_AUSENTE", "Cliente no estaba"],
+  ["CLIENTE_DESISTE", "Ya no quiere el crédito"],
+  ["DIRECCION_INCORRECTA", "Dirección incorrecta"],
+  ["OTRO", "Otro"],
+];
 
 // De dónde sale el dinero: número de cheque y cuenta, o la caja.
 const sourceLabel = (item) => {
@@ -72,6 +80,11 @@ export default function PendingDeliveriesScreen() {
   const [imageRequired, setImageRequired] = useState(null);
 
   const [active, setActive] = useState(null); // remesa seleccionada para confirmar
+  // "deliver" = Marcar entregado; "failed" = No se pudo entregar.
+  const [mode, setMode] = useState("deliver");
+  const [reason, setReason] = useState("");
+  const [notice, setNotice] = useState("");
+  const savingRef = useRef(false);
   const [notes, setNotes] = useState("");
   const [photos, setPhotos] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -103,8 +116,11 @@ export default function PendingDeliveriesScreen() {
     }, [session.token]),
   );
 
-  const openConfirm = (item) => {
+  const openConfirm = (item, nextMode = "deliver") => {
     setActive(item);
+    setMode(nextMode);
+    setReason("");
+    setNotice("");
     setNotes("");
     setPhotos([]);
     setModalError("");
@@ -120,6 +136,8 @@ export default function PendingDeliveriesScreen() {
   };
 
   const submitDelivery = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
     try {
       setSaving(true);
       setModalError("");
@@ -129,8 +147,43 @@ export default function PendingDeliveriesScreen() {
     } catch (e) {
       setModalError(e?.message ?? "No se pudo registrar la entrega");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
+  };
+
+  const submitNotDelivered = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    try {
+      setSaving(true);
+      setModalError("");
+      const res = await reportNotDelivered(session.token, active.loan_id, { reasonCode: reason, notes, files: photos });
+      setActive(null);
+      setNotice(res?.message || "Quedó reportado. Devolvé el dinero a la oficina.");
+      load();
+    } catch (e) {
+      setModalError(e?.message ?? "No se pudo registrar el reporte");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  const confirmNotDelivered = () => {
+    if (!reason) {
+      setModalError("Elegí el motivo por el que no se pudo entregar.");
+      return;
+    }
+    if (reason === "OTRO" && notes.trim().length < 5) {
+      setModalError("Explicá el motivo en la nota (al menos 5 letras).");
+      return;
+    }
+    confirmAction(
+      "No se pudo entregar",
+      `¿Confirmás que NO entregaste el dinero a ${active?.customer_name}? Tenés que devolverlo a la oficina.`,
+      submitNotDelivered,
+    );
   };
 
   const confirmDelivery = () => {
@@ -150,6 +203,11 @@ export default function PendingDeliveriesScreen() {
       <Text style={styles.sub}>Créditos ya desembolsados que faltan entregar al cliente</Text>
 
       <HelperText type="error" visible={!!error} style={{ marginHorizontal: SPACING.lg }}>{error}</HelperText>
+      {!!notice && (
+        <Card style={{ marginHorizontal: SPACING.lg, marginBottom: SPACING.sm, padding: SPACING.md, backgroundColor: COLORS.primarySoft }}>
+          <Text style={{ color: COLORS.text }}>{notice}</Text>
+        </Card>
+      )}
       {loading && <ActivityIndicator style={{ marginTop: SPACING.lg }} />}
 
       {!loading && (
@@ -180,6 +238,16 @@ export default function PendingDeliveriesScreen() {
                   Marcar entregado
                 </Button>
               </View>
+              <Button
+                mode="text"
+                compact
+                icon="close-circle-outline"
+                textColor={COLORS.danger}
+                onPress={() => openConfirm(item, "failed")}
+                style={{ alignSelf: "flex-end", marginTop: SPACING.xs }}
+              >
+                No se pudo entregar
+              </Button>
             </Card>
           )}
         />
@@ -188,8 +256,8 @@ export default function PendingDeliveriesScreen() {
       <Portal>
         <Modal visible={!!active} onDismiss={() => setActive(null)} contentContainerStyle={modalStyle}>
           <KeyboardAwareScroll style={{ maxHeight: 520 }}>
-            <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text }}>
-              Confirmar entrega
+            <Text variant="titleMedium" style={{ fontWeight: "800", color: mode === "failed" ? COLORS.danger : COLORS.text }}>
+              {mode === "failed" ? "No se pudo entregar" : "Confirmar entrega"}
             </Text>
             <Text style={{ color: COLORS.muted, marginTop: 2 }}>{withCode(active?.customer_name, active?.customer_code)}</Text>
             <Text style={{ color: COLORS.muted }}>
@@ -197,9 +265,30 @@ export default function PendingDeliveriesScreen() {
               {(active && sourceLabel(active)) || METHOD_LABEL[active?.disbursement_method] || active?.disbursement_method}
             </Text>
 
+            {mode === "failed" && (
+              <>
+                <Text style={{ color: COLORS.text, fontWeight: "700", marginTop: SPACING.md }}>¿Por qué no se entregó?</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs, marginTop: SPACING.xs }}>
+                  {FAILED_REASONS.map(([code, label]) => (
+                    <Chip
+                      key={code}
+                      selected={reason === code}
+                      onPress={() => setReason(code)}
+                      style={{ backgroundColor: reason === code ? COLORS.primarySoft : COLORS.bg }}
+                    >
+                      {label}
+                    </Chip>
+                  ))}
+                </View>
+                <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: SPACING.xs }}>
+                  El dinero se devuelve a la oficina. Ellos deciden si se intenta otra vez o si se anula.
+                </Text>
+              </>
+            )}
+
             <TextInput
               mode="outlined"
-              label="Notas de la entrega (opcional)"
+              label={mode === "failed" ? (reason === "OTRO" ? "Explicá qué pasó" : "Nota (opcional)") : "Notas de la entrega (opcional)"}
               value={notes}
               onChangeText={setNotes}
               multiline
@@ -208,10 +297,14 @@ export default function PendingDeliveriesScreen() {
             />
 
             <Text style={{ color: COLORS.text, fontWeight: "700", marginTop: SPACING.md }}>
-              Fotos de la entrega{imageRequired === true ? " (obligatoria, al menos una)" : imageRequired === false ? " (opcional)" : ""}
+              {mode === "failed"
+                ? "Fotos (opcional)"
+                : `Fotos de la entrega${imageRequired === true ? " (obligatoria, al menos una)" : imageRequired === false ? " (opcional)" : ""}`}
             </Text>
             <Text style={{ color: COLORS.muted, fontSize: 12 }}>
-              Evidencia de que le entregaste el dinero al cliente: el recibido, la firma o el dinero en la mano.
+              {mode === "failed"
+                ? "Por ejemplo, la casa o el negocio cerrado."
+                : "Evidencia de que le entregaste el dinero al cliente: el recibido, la firma o el dinero en la mano."}
             </Text>
 
             {photos.length > 0 && (
@@ -246,13 +339,14 @@ export default function PendingDeliveriesScreen() {
 
             <Button
               mode="contained"
-              onPress={confirmDelivery}
+              onPress={mode === "failed" ? confirmNotDelivered : confirmDelivery}
               loading={saving}
               disabled={saving}
+              buttonColor={mode === "failed" ? COLORS.danger : undefined}
               style={{ marginTop: SPACING.md, borderRadius: RADIUS.md }}
               contentStyle={{ height: 46 }}
             >
-              Confirmar entrega
+              {mode === "failed" ? "Reportar no entregado" : "Confirmar entrega"}
             </Button>
           </KeyboardAwareScroll>
         </Modal>

@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useMemo, useState } from "react";
+import React, { useCallback, useContext, useMemo, useRef, useState } from "react";
 import { View, StyleSheet, FlatList, Alert, Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -21,6 +21,8 @@ import useKeyboardModalStyle from "../components/useKeyboardModalStyle";
 import * as Location from "expo-location";
 import { SessionContext } from "../auth/SessionContext";
 import { getAssignedLoans, logVisit, getMyLoanPayments } from "../api/collectionsApi";
+import { sendAutoSms } from "../utils/paymentSms";
+import { buildShortVisitSms } from "../utils/visitSms";
 import { isNetworkError } from "../api/credimasterClient";
 import { getCustomer, saveCustomerLocation, getInfoUpdatesDue } from "../api/customerApi";
 import { confirmAction } from "../utils/confirm";
@@ -197,6 +199,12 @@ export default function ClientPortfolioScreen() {
   const [gestionForm, setGestionForm] = useState(emptyGestionForm);
   const [gestionError, setGestionError] = useState("");
   const [savingGestion, setSavingGestion] = useState(false);
+  // Doble toque (2026-11-10): el botón se bloqueaba recién después de pedir el
+  // GPS, que puede tardar segundos; cada toque grababa otra gestión. La ref
+  // bloquea desde el primer toque y la referencia identifica la gestión en el
+  // servidor (no la graba dos veces, ni al reintentar desde la cola).
+  const savingGestionRef = useRef(false);
+  const gestionRefRef = useRef(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showPromiseDatePicker, setShowPromiseDatePicker] = useState(false);
   const [cachedAt, setCachedAt] = useState(null);
@@ -447,6 +455,7 @@ export default function ClientPortfolioScreen() {
   const openGestion = async (item) => {
     // Jornada obligatoria (ver tracking/workday.js).
     if (!(await ensureWorkday(session, "gestiones y visitas"))) return;
+    gestionRefRef.current = `visit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
     setGestionItem(item);
     setGestionForm(emptyGestionForm);
     setGestionError("");
@@ -463,7 +472,9 @@ export default function ClientPortfolioScreen() {
   const setG = (field, value) => setGestionForm((prev) => ({ ...prev, [field]: value }));
 
   const saveGestion = async () => {
-    if (!gestionItem) return;
+    if (!gestionItem || savingGestionRef.current) return;
+    savingGestionRef.current = true;
+    setSavingGestion(true);
     setGestionError("");
 
     // La ubicación es best-effort: si el cobrador niega el permiso, el GPS
@@ -498,14 +509,39 @@ export default function ClientPortfolioScreen() {
       next_action_date: gestionForm.next_action_date || undefined,
       visit_lat: visitLat,
       visit_lng: visitLng,
+      client_reference_id: gestionRefRef.current || undefined,
+    };
+
+    // SMS al cliente con la gestión (dueño, 2026-11-10). Sale del celular del
+    // cobrador, así que funciona también sin datos; nunca bloquea la gestión.
+    const item = gestionItem;
+    const notifyCustomer = async () => {
+      const sms = await sendAutoSms({
+        token: session.token,
+        kind: "VISIT",
+        phone: item.cellphone || item.telephone,
+        loanId: item.loan_id,
+        message: buildShortVisitSms({
+          tenantName: session?.tenant?.commercial_name || session?.tenant?.legal_name,
+          actionType: payload.action_type,
+          result: payload.result,
+          actionDate: payload.action_date,
+          promisedAmount: payload.promised_amount,
+          promisedDate: payload.promised_date,
+          overdueAmount: item.overdue_amount,
+          loanLabel: item.credit_code || item.loan_id,
+        }),
+      });
+      return sms.state === "failed" ? `No se envió el SMS al cliente: ${sms.error}` : "";
     };
 
     try {
-      setSavingGestion(true);
       await logVisit(session.token, payload);
       setFollowup(gestionItem.loan_id, payload.next_action_date);
       setManagedIds((prev) => new Set(prev).add(gestionItem.loan_id));
       setGestionItem(null);
+      // Sin esperar: el envío puede tardar hasta 20 s en confirmarse.
+      notifyCustomer().then((problem) => problem && Alert.alert("Gestión registrada", problem));
     } catch (e) {
       if (isNetworkError(e)) {
         try {
@@ -519,6 +555,7 @@ export default function ClientPortfolioScreen() {
           setManagedIds((prev) => new Set(prev).add(gestionItem.loan_id));
           setGestionItem(null);
           Alert.alert("Sin conexión", "La gestión se guardó en el equipo y se registrará sola cuando vuelva la señal.");
+          notifyCustomer().then((problem) => problem && Alert.alert("Gestión guardada", problem));
         } catch (queueErr) {
           setGestionError(queueErr?.message ?? "No se pudo guardar la gestión para registrarla después");
         }
@@ -526,6 +563,7 @@ export default function ClientPortfolioScreen() {
       }
       setGestionError(e?.message ?? "No se pudo registrar la gestión");
     } finally {
+      savingGestionRef.current = false;
       setSavingGestion(false);
     }
   };

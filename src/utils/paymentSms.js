@@ -6,7 +6,7 @@ export const SMS_MAX_LENGTH = 120;
 
 // Solo caracteres básicos del alfabeto GSM: una tilde o una ñ pasa el mensaje de
 // 160 a 70 caracteres por SMS (más costo en el plan del cobrador).
-const toAscii = (s) =>
+export const toAscii = (s) =>
   String(s ?? "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -14,10 +14,10 @@ const toAscii = (s) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const amountText = (n) => (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const amountText = (n) => (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // "2026-11-01" -> "01/11/26"
-const shortDate = (iso) => {
+export const shortDate = (iso) => {
   const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : toAscii(iso);
 };
@@ -53,20 +53,21 @@ const askSendSmsPermission = async () => {
   if (hasSendSmsPermission()) return true;
   const res = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.SEND_SMS, {
     title: "Enviar SMS a los clientes",
-    message: "CrediApp enviará al cliente un SMS con su pago y saldo, con el plan de este teléfono.",
+    message: "CrediApp enviará al cliente un SMS con su pago, saldo o gestión, con el plan de este teléfono.",
     buttonPositive: "Permitir",
     buttonNegative: "Ahora no",
   });
   return res === PermissionsAndroid.RESULTS.GRANTED;
 };
 
-// Envía el SMS de confirmación del pago, solo, desde el celular del cobrador, y
-// reporta el resultado a la oficina. NUNCA lanza: el pago ya está grabado.
+// Envía un SMS automático, solo, desde el celular del cobrador, y reporta el
+// resultado a la oficina. NUNCA lanza: el pago o la gestión ya están grabados.
+// `kind`: PAYMENT (política auto_sms) o VISIT (gestión, política auto_visit_sms).
 // Devuelve { state: "sent" | "failed" | "disabled" | "unavailable", error? }.
-export async function sendAutoPaymentSms({ token, phone, message, paymentId, loanId }) {
+export async function sendAutoSms({ token, kind = "PAYMENT", phone, message, paymentId, loanId }) {
   const report = (status, error) =>
     reportPaymentNotice(token, {
-      kind: "PAYMENT",
+      kind,
       channel: "AUTO_SMS",
       status,
       payment_id: paymentId,
@@ -77,9 +78,10 @@ export async function sendAutoPaymentSms({ token, phone, message, paymentId, loa
     }).catch(() => {});
 
   try {
-    // Sin conexión con la política se asume encendida: el pago ya se grabó en línea.
+    // Sin conexión con la política se asume encendida (el SMS no necesita datos).
     const policy = await getNoticePolicy(token).catch(() => null);
-    if (policy && policy.auto_sms === false) return { state: "disabled" };
+    const policyFlag = kind === "VISIT" ? policy?.auto_visit_sms : policy?.auto_sms;
+    if (policy && policyFlag === false) return { state: "disabled" };
 
     // En la web (pruebas) no hay chip: el aviso queda para el botón manual.
     if (Platform.OS === "web") return { state: "unavailable" };
@@ -108,3 +110,7 @@ export async function sendAutoPaymentSms({ token, phone, message, paymentId, loa
     return { state: "failed", error };
   }
 }
+
+// SMS de confirmación del pago (ver sendAutoSms).
+export const sendAutoPaymentSms = ({ token, phone, message, paymentId, loanId }) =>
+  sendAutoSms({ token, kind: "PAYMENT", phone, message, paymentId, loanId });

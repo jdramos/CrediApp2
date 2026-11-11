@@ -26,7 +26,7 @@ export const getAssignedLoans = (token, params = {}) => {
 // poder verificar si realmente estuvo ahí.
 export const logVisit = (
   token,
-  { loan_id, action_type, action_date, result, stage, notes, promised_amount, promised_date, next_action_date, visit_lat, visit_lng } = {},
+  { loan_id, action_type, action_date, result, stage, notes, promised_amount, promised_date, next_action_date, visit_lat, visit_lng, client_reference_id } = {},
 ) =>
   credimasterPost(
     "/api/collections/actions",
@@ -42,6 +42,8 @@ export const logVisit = (
       next_action_date: next_action_date || undefined,
       visit_lat,
       visit_lng,
+      // Identifica la gestión: el servidor no la graba dos veces (doble toque o reintento de la cola).
+      client_reference_id: client_reference_id || undefined,
     },
     token,
   );
