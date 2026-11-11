@@ -42,6 +42,31 @@ function appHeaders(headers) {
   return headers;
 }
 
+// Mensajes para el cobrador (2026-11-11). Sin señal, fetch lanza "Network request failed" y muchas pantallas
+// mostraban ese texto técnico tal cual. Aquí se convierte UNA vez, para todas las pantallas: el error sigue sin
+// `.status`, así que isNetworkError lo sigue reconociendo y las acciones se siguen encolando igual.
+export const MSG_NO_CONNECTION =
+  "No hay conexión con el servidor. Revise su internet o la señal del teléfono e intente de nuevo.";
+export const MSG_SLOW_CONNECTION =
+  "La conexión es muy lenta y no se pudo completar. Intente de nuevo cuando tenga mejor señal.";
+const MSG_SERVER_DOWN = "El servidor no está disponible en este momento. Intente de nuevo en unos minutos.";
+
+function networkFailure(original) {
+  const raw = String(original?.message || original || "");
+  const err = new TypeError(/timed out|timeout/i.test(raw) ? MSG_SLOW_CONNECTION : MSG_NO_CONNECTION);
+  err.original = raw; // el texto técnico queda disponible para el registro de errores
+  return err; // sin .status: es un fallo de red, no una respuesta del servidor
+}
+
+// Texto del error HTTP cuando el servidor no mandó uno propio (por ejemplo, la página de error de un proxy).
+function httpErrorMessage(status, data) {
+  const own = data?.message || data?.error;
+  if (own) return own;
+  if (status === 408 || status === 504) return MSG_SLOW_CONNECTION;
+  if (status >= 500) return MSG_SERVER_DOWN;
+  return `No se pudo completar la operación (código ${status}).`;
+}
+
 // Cliente HTTP para el backend real de CrediMaster (Node/Express, JWT).
 async function request(method, path, { body, token } = {}) {
   if (!BASE_URL) throw new Error("Falta EXPO_PUBLIC_CREDIMASTER_API_URL en .env");
@@ -49,11 +74,16 @@ async function request(method, path, { body, token } = {}) {
   const headers = appHeaders({ "Content-Type": "application/json" });
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  let response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) {
+    throw networkFailure(e);
+  }
 
   const text = await response.text();
   let data = null;
@@ -68,8 +98,7 @@ async function request(method, path, { body, token } = {}) {
     checkOutsideSchedule(response.status, data);
     // Algunos controladores del backend responden { error } (aprobaciones, por
     // ejemplo) y otros { message }: se muestra el motivo real en cualquier caso.
-    const message = data?.message || data?.error || `Error HTTP ${response.status}`;
-    const err = new Error(message);
+    const err = new Error(httpErrorMessage(response.status, data));
     err.status = response.status;
     err.data = data;
     throw err;
@@ -116,10 +145,15 @@ export async function credimasterUpload(path, formData, token, method = "POST") 
     }
   }
 
-  const response =
-    Platform.OS === "web"
-      ? await fetch(`${BASE_URL}${path}`, { method, headers, body: formData })
-      : await nativeMultipartSend(`${BASE_URL}${path}`, method, headers, formData);
+  let response;
+  try {
+    response =
+      Platform.OS === "web"
+        ? await fetch(`${BASE_URL}${path}`, { method, headers, body: formData })
+        : await nativeMultipartSend(`${BASE_URL}${path}`, method, headers, formData);
+  } catch (e) {
+    throw networkFailure(e);
+  }
 
   const text = await response.text();
   let data = null;
@@ -134,8 +168,7 @@ export async function credimasterUpload(path, formData, token, method = "POST") 
     checkOutsideSchedule(response.status, data);
     // Algunos controladores del backend responden { error } (aprobaciones, por
     // ejemplo) y otros { message }: se muestra el motivo real en cualquier caso.
-    const message = data?.message || data?.error || `Error HTTP ${response.status}`;
-    const err = new Error(message);
+    const err = new Error(httpErrorMessage(response.status, data));
     err.status = response.status;
     err.data = data;
     throw err;
