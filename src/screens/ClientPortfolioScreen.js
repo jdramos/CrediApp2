@@ -27,6 +27,7 @@ import { isNetworkError } from "../api/credimasterClient";
 import { getCustomer, saveCustomerLocation, getInfoUpdatesDue } from "../api/customerApi";
 import { confirmAction } from "../utils/confirm";
 import { enqueue } from "../offline/queue";
+import { isConnected } from "../offline/network";
 import { useSync } from "../offline/SyncProvider";
 import { money, toNumber } from "../utils/format";
 import { todayISO, shiftDay } from "../utils/date";
@@ -493,11 +494,20 @@ export default function ClientPortfolioScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === "granted") {
-        const position = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        visitLat = position.coords.latitude;
-        visitLng = position.coords.longitude;
+        // Rápido (2026-11-11): sin señal el GPS puede tardar medio minuto en dar una posición nueva y el cobrador se
+        // quedaba esperando al grabar. Primero la última posición conocida si es reciente (el rastreo la mantiene al
+        // día); si no, una nueva con tope de 6 s y, de último, la última conocida aunque sea vieja.
+        let position = await Location.getLastKnownPositionAsync({ maxAge: 3 * 60 * 1000 }).catch(() => null);
+        if (!position) {
+          position = await Promise.race([
+            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 6000)),
+          ]).catch(() => Location.getLastKnownPositionAsync().catch(() => null));
+        }
+        if (position?.coords) {
+          visitLat = position.coords.latitude;
+          visitLng = position.coords.longitude;
+        }
       }
     } catch {
       // sin ubicación, se sigue igual
@@ -542,7 +552,13 @@ export default function ClientPortfolioScreen() {
     };
 
     try {
-      await logVisit(session.token, payload);
+      // Sin conexión no se intenta el envío (esperaba el tiempo de la red antes de guardarla en el equipo); con una
+      // señal que no responde se espera máximo 15 s. Si el envío sí llegó, client_reference_id evita duplicarla.
+      if (!(await isConnected().catch(() => true))) throw new TypeError("Sin conexión");
+      await Promise.race([
+        logVisit(session.token, payload),
+        new Promise((_, reject) => setTimeout(() => reject(new TypeError("Network request timed out")), 15000)),
+      ]);
       setFollowup(gestionItem.loan_id, payload.next_action_date);
       setManagedIds((prev) => new Set(prev).add(gestionItem.loan_id));
       setGestionItem(null);
