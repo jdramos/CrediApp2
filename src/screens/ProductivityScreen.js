@@ -425,24 +425,6 @@ export default function ProductivityScreen() {
               )}
               <Row label="Pagos recibidos" value={String(m.payments_count)} />
               <Row label="Gestiones / visitas" value={`${m.actions} / ${m.visits}`} />
-              {m.visit_verification?.total > 0 && (
-                <>
-                  <Row
-                    label={`Visitas verificadas por GPS (≤ ${m.visit_verification.radius_meters} m)`}
-                    value={`${m.visit_verification.verified} de ${m.visit_verification.total}`}
-                    color={m.visit_verification.verified === m.visit_verification.total ? COLORS.success : undefined}
-                  />
-                  {m.visit_verification.far > 0 && (
-                    <Row label="Visitas lejos del domicilio" value={String(m.visit_verification.far)} color={COLORS.danger} />
-                  )}
-                  {m.visit_verification.no_gps > 0 && (
-                    <Row label="Visitas sin ubicación GPS" value={String(m.visit_verification.no_gps)} color={COLORS.warning} />
-                  )}
-                  {m.visit_verification.no_customer_location > 0 && (
-                    <Row label="Clientes sin ubicación guardada" value={String(m.visit_verification.no_customer_location)} />
-                  )}
-                </>
-              )}
               <Row
                 label="Promesas de pago"
                 value={`${m.promises.total} (${m.promises.kept} cumplidas, ${m.promises.broken} rotas, ${m.promises.pending} pendientes)`}
