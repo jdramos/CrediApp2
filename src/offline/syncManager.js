@@ -166,6 +166,13 @@ export async function flushQueue(token, { onProgress } = {}) {
         if (e?.status === 403 && e?.data?.code === "OUTSIDE_SCHEDULE") {
           break;
         }
+        // Día de la sucursal sin abrir (o el de ayer sin cerrar), 423: tampoco es un error
+        // del ítem; queda pendiente y se envía cuando la oficina abra el día. El servidor
+        // registra el cobro con la fecha de ese día y guarda la fecha real (auditoría run-2).
+        if (e?.status === 423) {
+          waiting += 1;
+          continue;
+        }
         failed += 1;
         await updateQueueItem(item.id, {
           status: "FAILED",

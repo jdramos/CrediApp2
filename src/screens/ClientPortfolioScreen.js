@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useMemo, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { View, StyleSheet, FlatList, Alert, Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -214,11 +214,22 @@ export default function ClientPortfolioScreen() {
 
   const canLogVisit = session?.permissions?.includes("cobranza.gestionar");
 
+  // Búsqueda con pausa (auditoría run-2): cada letra recargaba la cartera
+  // completa desde el servidor. Se espera a que deje de escribir, y una
+  // respuesta vieja no pisa a la más nueva.
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+  const loadSeq = useRef(0);
+
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     try {
       setLoading(true);
       setError("");
-      const q = search.trim();
+      const q = debouncedSearch.trim();
       const cacheKey = `${session.user.id}:portfolio`;
       let res;
       let stamp = null;
@@ -247,6 +258,7 @@ export default function ClientPortfolioScreen() {
           stamp = cached.cachedAt;
         }
       }
+      if (seq !== loadSeq.current) return;
       setLoans(res?.data || []);
       setMessage(res?.message || "");
       setCachedAt(stamp);
@@ -258,11 +270,11 @@ export default function ClientPortfolioScreen() {
         })
         .catch(() => {});
     } catch (e) {
-      setError(e?.message ?? "Error cargando tu cartera");
+      if (seq === loadSeq.current) setError(e?.message ?? "Error cargando tu cartera");
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
-  }, [session.token, session.user.id, search]);
+  }, [session.token, session.user.id, debouncedSearch]);
 
   useFocusEffect(useCallback(() => { setManagedIds(new Set()); load(); }, [load]));
 
