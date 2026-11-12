@@ -169,6 +169,9 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       editLoanId && String(g.committed_loan_id) === String(editLoanId) ? { ...g, is_committed: false, available_value: g.value } : g,
     );
   const { session } = useContext(SessionContext);
+  // Crédito sin interés (tasa 0%): solo con el permiso especial (dueño,
+  // 2026-11-12; el servidor también lo exige).
+  const canZeroRate = (session?.permissions || []).includes("especial.creditos.tasa_cero");
   const { refreshPendingCount } = useSync();
   const guaranteeModalStyle = useKeyboardModalStyle({ backgroundColor: COLORS.card, margin: SPACING.lg, borderRadius: RADIUS.lg, padding: SPACING.md });
   const [step, setStep] = useState(route?.params?.editLoanId ? 1 : 0);
@@ -550,7 +553,8 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     const amt = toNumber(amount);
     const months = Number(term);
     const rate = Number(String(interestRate).replace(",", "."));
-    if (!(amt > 0) || !(months > 0) || !(rate > 0) || !quoteTag || !branchId) {
+    const rateOk = rate > 0 || (rate === 0 && canZeroRate && String(interestRate ?? "").trim() !== "");
+    if (!(amt > 0) || !(months > 0) || !rateOk || !quoteTag || !branchId) {
       setQuote(null);
       return undefined;
     }
@@ -584,7 +588,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       alive = false;
       clearTimeout(timer);
     };
-  }, [canQuote, amount, term, interestRate, quoteTag, branchId, requestDate, fee, insurance, otherCharges, session.token, firstPaymentAuto, firstPaymentAuto ? "" : firstPaymentDate]);
+  }, [canQuote, canZeroRate, amount, term, interestRate, quoteTag, branchId, requestDate, fee, insurance, otherCharges, session.token, firstPaymentAuto, firstPaymentAuto ? "" : firstPaymentDate]);
 
   // Sube una foto a la garantía; sin señal la deja en la cola para enviarla sola
   // después. Devuelve "ok", "queued" o null si falló (el error queda en pantalla).
@@ -712,7 +716,11 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     if (!amt || amt <= 0) return "Ingrese un monto válido";
     if (!trm || trm <= 0) return "Ingrese un plazo válido";
     if (frecuencies.length > 0 && !frequencyId) return "Seleccione la frecuencia de pago";
-    if (!interestRate || Number(interestRate) <= 0) return "Ingrese la tasa de interés";
+    if (String(interestRate ?? "").trim() === "" || Number.isNaN(Number(interestRate))) return "Ingrese la tasa de interés";
+    if (Number(interestRate) < 0) return "La tasa de interés no puede ser negativa";
+    if (Number(interestRate) === 0 && !canZeroRate) {
+      return "Un crédito sin interés (tasa 0%) requiere el permiso «Registrar crédito sin interés».";
+    }
     if (selectedFrequency?.tag === "V" && !dueDate) return "Ingrese la fecha de vencimiento";
 
     // Políticas de crédito (igual que la web, useLoanForm.js::validateForm)
