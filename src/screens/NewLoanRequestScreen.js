@@ -197,7 +197,11 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   const [frequencyId, setFrequencyId] = useState(sim?.frequencyId ?? null);
   const [requestDate, setRequestDate] = useState(todayISO());
   const [dueDate, setDueDate] = useState(todayISO());
-  const [showDate, setShowDate] = useState(null); // "request" | "due" | null
+  const [showDate, setShowDate] = useState(null); // "request" | "due" | "first" | null
+  // Primera cuota (dueño, 2026-11-12): se sugiere la de la tabla y se puede
+  // cambiar. Sugerida (auto) no se envía: al desembolsar otro día se recalcula.
+  const [firstPaymentDate, setFirstPaymentDate] = useState("");
+  const [firstPaymentAuto, setFirstPaymentAuto] = useState(true);
   const [interestRate, setInterestRate] = useState(sim?.interestRate ? String(sim.interestRate) : "");
   const [defaultedRate, setDefaultedRate] = useState("");
   const [fee, setFee] = useState(sim?.fee ? formatAmountInput(String(sim.fee)) : "");
@@ -563,9 +567,14 @@ export default function NewLoanRequestScreen({ route, navigation }) {
         other_charges: toNumber(otherCharges),
         frequency_id: quoteTag,
         branch_id: branchId,
+        ...(!firstPaymentAuto && firstPaymentDate && quoteTag !== "V" ? { first_payment_date: firstPaymentDate } : {}),
       })
         .then((table) => {
-          if (alive) setQuote({ loading: false, summary: summarizeSchedule(table) });
+          if (!alive) return;
+          const summary = summarizeSchedule(table);
+          setQuote({ loading: false, summary });
+          const first = summary?.rows?.[0]?.paymentDate;
+          if (firstPaymentAuto && first) setFirstPaymentDate(String(first).slice(0, 10));
         })
         .catch((e) => {
           if (alive) setQuote({ loading: false, summary: null, error: true, offline: isNetworkError(e) });
@@ -575,7 +584,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       alive = false;
       clearTimeout(timer);
     };
-  }, [canQuote, amount, term, interestRate, quoteTag, branchId, requestDate, fee, insurance, otherCharges, session.token]);
+  }, [canQuote, amount, term, interestRate, quoteTag, branchId, requestDate, fee, insurance, otherCharges, session.token, firstPaymentAuto, firstPaymentAuto ? "" : firstPaymentDate]);
 
   // Sube una foto a la garantía; sin señal la deja en la cola para enviarla sola
   // después. Devuelve "ok", "queued" o null si falló (el error queda en pantalla).
@@ -771,6 +780,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       deduction: toNumber(deduction) || 0,
       term: Number(term),
       due_date: selectedFrequency?.tag === "V" ? dueDate : null,
+      first_payment_date: !firstPaymentAuto && firstPaymentDate && selectedFrequency?.tag !== "V" ? firstPaymentDate : null,
       interest_type_id: 1,
       interest_type_name: "compound",
       interest_rate: interestRate ? Number(interestRate) : 0,
@@ -896,6 +906,10 @@ export default function NewLoanRequestScreen({ route, navigation }) {
         setVendorId(loan.vendor_id ?? null);
         if (loan.request_date) setRequestDate(String(loan.request_date).slice(0, 10));
         if (loan.due_date) setDueDate(String(loan.due_date).slice(0, 10));
+        if (loan.first_payment_date) {
+          setFirstPaymentDate(String(loan.first_payment_date).slice(0, 10));
+          setFirstPaymentAuto(false);
+        }
         const keep = {};
         COMPLEMENTARY_FIELDS.forEach(({ key }) => { if (loan[key] != null) keep[key] = loan[key]; });
         setExtra(keep);
@@ -1124,10 +1138,32 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                   Vencimiento: {dueDate}
                 </Button>
               )}
+              {selectedFrequency && selectedFrequency.tag !== "V" && !!firstPaymentDate && (
+                <View style={{ marginTop: SPACING.sm }}>
+                  <Button
+                    mode="outlined"
+                    onPress={() => setShowDate("first")}
+                    style={{ borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+                    icon="calendar-start"
+                  >
+                    Primera cuota: {firstPaymentDate}
+                  </Button>
+                  <HelperText type="info" visible style={{ paddingHorizontal: 0 }}>
+                    {firstPaymentAuto
+                      ? "Sugerida por la frecuencia. Tóquela para cambiarla."
+                      : "Fecha pactada con el cliente."}
+                  </HelperText>
+                  {!firstPaymentAuto && (
+                    <Button compact mode="text" onPress={() => setFirstPaymentAuto(true)} style={{ alignSelf: "flex-start" }}>
+                      Usar la fecha sugerida
+                    </Button>
+                  )}
+                </View>
+              )}
               <DateWheelPicker
                 visible={!!showDate}
-                title={showDate === "request" ? "Fecha de solicitud" : "Fecha de vencimiento"}
-                value={showDate === "request" ? requestDate : dueDate}
+                title={showDate === "request" ? "Fecha de solicitud" : showDate === "first" ? "Fecha de la primera cuota" : "Fecha de vencimiento"}
+                value={showDate === "request" ? requestDate : showDate === "first" ? firstPaymentDate : dueDate}
                 minYear={new Date().getFullYear() - 1}
                 maxYear={new Date().getFullYear() + 15}
                 onCancel={() => setShowDate(null)}
@@ -1136,7 +1172,10 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                   setShowDate(null);
                   if (!iso) return;
                   if (target === "request") setRequestDate(iso);
-                  else setDueDate(iso);
+                  else if (target === "first") {
+                    setFirstPaymentDate(iso);
+                    setFirstPaymentAuto(false);
+                  } else setDueDate(iso);
                 }}
               />
             </View>

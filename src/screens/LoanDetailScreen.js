@@ -8,10 +8,10 @@ import { SessionContext } from "../auth/SessionContext";
 import { getLoanDetail, getLoanAmortization } from "../api/loanApi";
 import { getLoanApprovalHistory } from "../api/approvalApi";
 import { money } from "../utils/format";
-import { canRequestRestructure } from "../utils/restructure";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import { withCode } from "../utils/customerLabel";
+import { canRequestRestructure } from "../utils/restructure";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -72,7 +72,9 @@ export default function LoanDetailScreen({ route }) {
           getLoanAmortization(session.token, loanId),
         ]);
         setLoan(detailRes?.data || null);
-        setRows(Array.isArray(amortRes) ? amortRes : amortRes?.data || []);
+        // Sin la fila 0 (origen del crédito, no es una cuota; dueño 2026-11-12).
+        const amortRows = Array.isArray(amortRes) ? amortRes : amortRes?.data || [];
+        setRows(amortRows.filter((r) => Number(r.payment_number ?? r.paymentNumber) > 0));
       } catch (e) {
         setError(e?.message ?? "Error cargando el crédito");
       } finally {

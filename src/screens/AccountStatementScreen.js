@@ -101,7 +101,9 @@ export default function AccountStatementScreen({ route }) {
         // se aplanan en un solo objeto porque toda la pantalla lee los
         // campos de "header" (customer_name, capital_balance, etc.) al
         // nivel raíz de `statement`.
-        setStatement(res?.header ? { ...res.header, movements: res.movements, payments: res.payments || [] } : null);
+        // Sin la fila 0 (origen del crédito, no es una cuota; dueño 2026-11-12).
+        const movements = (res?.movements || []).filter((m) => Number(m.payment_number) > 0);
+        setStatement(res?.header ? { ...res.header, movements, payments: res.payments || [] } : null);
       } catch (e) {
         setError(
           isNetworkError(e)
