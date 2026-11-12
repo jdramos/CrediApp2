@@ -22,8 +22,12 @@ export function SyncProvider({ children }) {
   const { session } = useContext(SessionContext);
   const [pendingCount, setPendingCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  // Con la contraseña temporal sin cambiar el servidor no acepta nada más: no se envía
+  // lo pendiente ni se descargan datos hasta que la cambie (ForcePasswordChangeScreen).
+  const passwordChangeRequired = !!session?.user?.must_change_password;
+  const activeToken = passwordChangeRequired ? null : session?.token || null;
   const tokenRef = useRef(null);
-  tokenRef.current = session?.token || null;
+  tokenRef.current = activeToken;
 
   const refreshPendingCount = useCallback(async () => {
     setPendingCount(await queueCount());
@@ -60,7 +64,7 @@ export function SyncProvider({ children }) {
   // Iniciar sesión con conexión también deja los datos guardados (el listener de abajo solo
   // reacciona a cambios de conexión).
   useEffect(() => {
-    if (!session?.token) return;
+    if (!activeToken) return;
     isConnected()
       .then((on) => {
         if (!on) return;
@@ -69,7 +73,7 @@ export function SyncProvider({ children }) {
         prefetchOffline();
       })
       .catch(() => {});
-  }, [session?.token, prefetchOffline, syncNow]);
+  }, [activeToken, prefetchOffline, syncNow]);
 
   // Al cambiar de usuario cambia la cola visible: se recalcula el contador.
   useEffect(() => {
@@ -78,7 +82,7 @@ export function SyncProvider({ children }) {
 
   useEffect(() => {
     const unsubscribe = subscribeToConnectivity((online) => {
-      if (online) {
+      if (online && tokenRef.current) {
         syncNow();
         flushTracking().catch(() => {}); // vuelve la señal: la ruta pendiente sale de inmediato
         prefetchOffline();

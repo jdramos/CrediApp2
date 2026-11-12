@@ -2,7 +2,7 @@ import React, { createContext, useEffect, useMemo, useRef, useState } from "reac
 import { Alert, Platform } from "react-native";
 import { clearSession, loadSession, saveSession, getTrustedDeviceToken, saveTrustedDeviceToken } from "../storage/session";
 import { credimasterLoginRequest, credimasterMfaVerify } from "../api/credimasterAuthApi";
-import { setUnauthorizedHandler } from "../api/credimasterClient";
+import { setUnauthorizedHandler, setPasswordChangeRequiredHandler } from "../api/credimasterClient";
 import { registerPushToken, unregisterPushToken } from "../api/pushApi";
 import { registerForPushNotificationsAsync } from "../notifications/pushNotifications";
 import { cancelReminders } from "../notifications/reminders";
@@ -71,10 +71,29 @@ export function SessionProvider({ children }) {
     });
     return () => setNoticeReporter(null);
   }, []);
+  // Contraseña temporal sin cambiar (ver passwordChangeRequired abajo): la app solo
+  // muestra la pantalla obligatoria y no manda nada más al servidor.
+  const passwordChangeRequired = !!session?.user?.must_change_password;
+
   // Con sesión abierta se mandan al servidor los errores y cierres inesperados guardados (utils/crashLog.js).
   useEffect(() => {
-    if (session?.token) flushCrashReports(session.token);
-  }, [session?.token]);
+    if (session?.token && !passwordChangeRequired) flushCrashReports(session.token);
+  }, [session?.token, passwordChangeRequired]);
+
+  // El servidor dice que la contraseña es temporal aunque la sesión guardada no lo
+  // sabía (por ejemplo, una sesión abierta antes de esta versión de la app): se marca
+  // y la app pasa a la pantalla obligatoria.
+  useEffect(() => {
+    setPasswordChangeRequiredHandler(() => {
+      const current = sessionRef.current;
+      if (!current?.token || current.user?.must_change_password) return;
+      const next = { ...current, user: { ...current.user, must_change_password: true } };
+      sessionRef.current = next;
+      setSession(next);
+      saveSession(next).catch(() => {});
+    });
+    return () => setPasswordChangeRequiredHandler(null);
+  }, []);
   useEffect(() => {
     setUnauthorizedHandler(() => {
       Alert.alert(
@@ -104,6 +123,10 @@ export function SessionProvider({ children }) {
         // Horario de uso de la app (se administra desde la web): { restricted, allowed, windows }.
         app_schedule: res.app_schedule || null,
         branches: res.branches || [],
+        // Contraseña temporal (usuario nuevo o restablecida por un administrador):
+        // la app muestra solo la pantalla de cambio obligatorio hasta que la cambie.
+        // Va guardado en la sesión para que reabrir la app no se la salte.
+        must_change_password: res.must_change_password === true,
       },
       tenant: res.tenant,
     };
@@ -111,16 +134,33 @@ export function SessionProvider({ children }) {
     setSession(newSession);
     await saveSession(newSession);
 
+    // Con la contraseña temporal el registro de push espera al cambio (completePasswordChange).
+    if (!newSession.user.must_change_password) registerPush(newSession.token);
+
+    return newSession;
+  };
+
+  const registerPush = (token) => {
     // Best-effort: registrar el token de push del dispositivo para este
     // usuario. Si falla (sin permiso, emulador, falta projectId de EAS)
     // la app sigue funcionando normal, solo sin notificaciones push.
     registerForPushNotificationsAsync()
       .then((deviceToken) => {
-        if (deviceToken) return registerPushToken(newSession.token, deviceToken, Platform.OS);
+        if (deviceToken) return registerPushToken(token, deviceToken, Platform.OS);
       })
       .catch(() => {});
+  };
 
-    return newSession;
+  // La pantalla obligatoria ya cambió la contraseña en el servidor (que conserva
+  // esta misma sesión): se libera la marca y la app entra normal.
+  const completePasswordChange = async () => {
+    const current = sessionRef.current;
+    if (!current?.token) return;
+    const next = { ...current, user: { ...current.user, must_change_password: false } };
+    sessionRef.current = next;
+    setSession(next);
+    await saveSession(next);
+    registerPush(next.token);
   };
 
   // Si el usuario ya verificó este dispositivo, se manda su token y el servidor
@@ -156,8 +196,9 @@ export function SessionProvider({ children }) {
   const signOut = async ({ force = false, silent = false } = {}) => {
     if (!force) {
       let pending = await queueCount();
-      // Con señal se intenta enviar todo ahora, mientras todavía hay sesión.
-      if (pending > 0 && session?.token) {
+      // Con señal se intenta enviar todo ahora, mientras todavía hay sesión (con la
+      // contraseña temporal el servidor no lo acepta: se queda para el próximo ingreso).
+      if (pending > 0 && session?.token && !session.user?.must_change_password) {
         try {
           if (await isConnected()) {
             await flushQueue(session.token);
@@ -208,7 +249,17 @@ export function SessionProvider({ children }) {
   };
 
   const value = useMemo(
-    () => ({ loadingBoot, session, setSession, signIn, signInWithMfa, signOut, hasPerm }),
+    () => ({
+      loadingBoot,
+      session,
+      setSession,
+      signIn,
+      signInWithMfa,
+      signOut,
+      hasPerm,
+      passwordChangeRequired,
+      completePasswordChange,
+    }),
     [loadingBoot, session]
   );
 

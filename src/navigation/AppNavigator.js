@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import * as Notifications from "expo-notifications";
 import { SessionContext } from "../auth/SessionContext";
 import LoginScreen from "../screens/LoginScreen";
+import ForcePasswordChangeScreen from "../screens/ForcePasswordChangeScreen";
 import PendingSyncScreen from "../screens/PendingSyncScreen";
 import ProductivityScreen from "../screens/ProductivityScreen";
 import DayCloseScreen from "../screens/DayCloseScreen";
@@ -28,7 +29,10 @@ const Stack = createNativeStackNavigator();
 export const navigationRef = createNavigationContainerRef();
 
 export default function AppNavigator() {
-  const { loadingBoot, session } = useContext(SessionContext);
+  const { loadingBoot, session, passwordChangeRequired } = useContext(SessionContext);
+  // Con la contraseña temporal sin cambiar solo existe la pantalla obligatoria (ni pestañas,
+  // ni avisos de ubicación u horario encima): no hay forma de llegar a otra.
+  const fullApp = !!session && !passwordChangeRequired;
   const responseListener = useRef();
   // Pantalla actual: ScheduleGate deja usar solo algunas fuera del horario de la app.
   const [routeName, setRouteName] = useState(null);
@@ -60,7 +64,9 @@ export default function AppNavigator() {
       }}
     >
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {session ? (
+        {session && passwordChangeRequired ? (
+          <Stack.Screen name="ForcePasswordChange" component={ForcePasswordChangeScreen} options={{ gestureEnabled: false }} />
+        ) : session ? (
           <>
             <Stack.Screen name="App" component={AppTabs} />
             <Stack.Screen name="PendingSync" component={PendingSyncScreen} options={{ presentation: "modal" }} />
@@ -80,9 +86,9 @@ export default function AppNavigator() {
       </Stack.Navigator>
     </NavigationContainer>
     {/* Sin ubicación activa no se puede operar: bloquea toda la app (no el login). */}
-    {session ? <LocationGate /> : null}
+    {fullApp ? <LocationGate /> : null}
     {/* Fuera del horario de uso de la app (lo define la oficina): solo pendientes y cierre del día. */}
-    {session ? <ScheduleGate routeName={routeName} onOpenRoute={(name) => navigationRef.isReady() && navigationRef.navigate(name)} /> : null}
+    {fullApp ? <ScheduleGate routeName={routeName} onOpenRoute={(name) => navigationRef.isReady() && navigationRef.navigate(name)} /> : null}
     </>
   );
 }

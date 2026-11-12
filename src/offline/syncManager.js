@@ -166,6 +166,11 @@ export async function flushQueue(token, { onProgress } = {}) {
         if (e?.status === 403 && e?.data?.code === "OUTSIDE_SCHEDULE") {
           break;
         }
+        // Contraseña temporal sin cambiar: el servidor no acepta nada hasta que la cambie. Lo
+        // pendiente se queda tal cual y sale después del cambio.
+        if (e?.status === 403 && e?.data?.code === "PASSWORD_CHANGE_REQUIRED") {
+          break;
+        }
         // Día de la sucursal sin abrir (o el de ayer sin cerrar), 423: tampoco es un error
         // del ítem; queda pendiente y se envía cuando la oficina abra el día. El servidor
         // registra el cobro con la fecha de ese día y guarda la fecha real (auditoría run-2).

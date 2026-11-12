@@ -30,6 +30,18 @@ function checkOutsideSchedule(status, data) {
   if (status === 403 && data?.code === "OUTSIDE_SCHEDULE") onOutsideSchedule?.(data);
 }
 
+// Contraseña temporal sin cambiar (users.must_change_password): el servidor responde 403
+// con code PASSWORD_CHANGE_REQUIRED a todo salvo el cambio de contraseña y el cierre de
+// sesión. SessionContext registra aquí qué hacer (marcar la sesión para que la app muestre
+// la pantalla obligatoria), por ejemplo con una sesión guardada de antes de esta versión.
+let onPasswordChangeRequired = null;
+export function setPasswordChangeRequiredHandler(fn) {
+  onPasswordChangeRequired = fn;
+}
+function checkPasswordChangeRequired(status, data) {
+  if (status === 403 && data?.code === "PASSWORD_CHANGE_REQUIRED") onPasswordChangeRequired?.(data);
+}
+
 // Identifica a la app ante el servidor (el horario de uso solo aplica a la app, no a
 // la web) y marca el envío de lo pendiente sin señal, que se permite fuera de horario.
 let offlineSyncMode = false;
@@ -96,6 +108,7 @@ async function request(method, path, { body, token } = {}) {
   if (!response.ok) {
     checkUnauthorized(response.status, !!token);
     checkOutsideSchedule(response.status, data);
+    checkPasswordChangeRequired(response.status, data);
     // Algunos controladores del backend responden { error } (aprobaciones, por
     // ejemplo) y otros { message }: se muestra el motivo real en cualquier caso.
     const err = new Error(httpErrorMessage(response.status, data));
@@ -166,6 +179,7 @@ export async function credimasterUpload(path, formData, token, method = "POST") 
   if (!response.ok) {
     checkUnauthorized(response.status, !!token);
     checkOutsideSchedule(response.status, data);
+    checkPasswordChangeRequired(response.status, data);
     // Algunos controladores del backend responden { error } (aprobaciones, por
     // ejemplo) y otros { message }: se muestra el motivo real en cualquier caso.
     const err = new Error(httpErrorMessage(response.status, data));
