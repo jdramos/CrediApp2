@@ -33,7 +33,7 @@ const styles = StyleSheet.create({
 });
 
 const subtypeLabel = (item) => {
-  if (item.item_type === "LOAN") return "Solicitud nueva";
+  if (item.item_type === "LOAN") return item.item_subtype === "REESTRUCTURACION" ? "Reestructuración (crédito nuevo)" : "Solicitud nueva";
   const map = { PRORROGA: "Prórroga", REESTRUCTURACION: "Reestructuración", REFINANCIAMIENTO: "Refinanciamiento" };
   return map[item.item_subtype] || "Modificación";
 };

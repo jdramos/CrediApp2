@@ -54,6 +54,7 @@ import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
+import { canRequestRestructure } from "../utils/restructure";
 
 const emptyGestionForm = {
   action_type: "VISIT",
@@ -213,6 +214,7 @@ export default function ClientPortfolioScreen() {
   const [infoDue, setInfoDue] = useState(() => new Map());
 
   const canLogVisit = session?.permissions?.includes("cobranza.gestionar");
+  const canRestructure = canRequestRestructure(session);
 
   // Búsqueda con pausa (auditoría run-2): cada letra recargaba la cartera
   // completa desde el servidor. Se espera a que deje de escribir, y una
@@ -957,6 +959,23 @@ export default function ClientPortfolioScreen() {
                     </Button>
                   )}
                 </View>
+                {canRestructure && (
+                  <Button
+                    compact
+                    mode="text"
+                    icon="swap-horizontal"
+                    onPress={() =>
+                      navigation.navigate("Restructure", {
+                        loanId: item.loan_id,
+                        customerName: item.customer_name,
+                        creditCode: item.credit_code,
+                      })
+                    }
+                    style={{ alignSelf: "flex-start" }}
+                  >
+                    Solicitar reestructuración
+                  </Button>
+                )}
               </Card>
             );
           }}

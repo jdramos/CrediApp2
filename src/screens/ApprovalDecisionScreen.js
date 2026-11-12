@@ -33,7 +33,7 @@ const styles = StyleSheet.create({
 });
 
 const subtypeLabel = (item) => {
-  if (item.item_type === "LOAN") return "Solicitud nueva";
+  if (item.item_type === "LOAN") return item.item_subtype === "REESTRUCTURACION" ? "Reestructuración (crédito nuevo)" : "Solicitud nueva";
   const map = { PRORROGA: "Prórroga", REESTRUCTURACION: "Reestructuración", REFINANCIAMIENTO: "Refinanciamiento" };
   return map[item.item_subtype] || "Modificación";
 };
@@ -116,6 +116,11 @@ export default function ApprovalDecisionScreen() {
               <Chip compact icon="account-group" style={{ backgroundColor: COLORS.warningSoft }}>Comité de crédito</Chip>
             )}
           </View>
+          {!!item.restructuring_note && (
+            <View style={[styles.card, { marginTop: SPACING.md, backgroundColor: COLORS.warningSoft }]}>
+              <Text style={{ color: COLORS.text }}>{item.restructuring_note}</Text>
+            </View>
+          )}
 
           <View style={[styles.card, { marginTop: SPACING.md }]}>
             <View style={styles.row}>

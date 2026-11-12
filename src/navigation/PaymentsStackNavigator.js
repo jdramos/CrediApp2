@@ -5,6 +5,9 @@ import PaymentHistoryScreen from "../screens/PaymentHistoryScreen";
 import ClientPortfolioScreen from "../screens/ClientPortfolioScreen";
 import AccountStatementScreen from "../screens/AccountStatementScreen";
 import LoanActionsScreen from "../screens/LoanActionsScreen";
+import RestructureRequestScreen from "../screens/RestructureRequestScreen";
+import RestructureLoanScreen from "../screens/RestructureLoanScreen";
+import RestructureEntryScreen from "../screens/RestructureEntryScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -16,6 +19,9 @@ export default function PaymentsStackNavigator() {
       <Stack.Screen name="ClientPortfolio" component={ClientPortfolioScreen} />
       <Stack.Screen name="AccountStatement" component={AccountStatementScreen} />
       <Stack.Screen name="LoanActions" component={LoanActionsScreen} />
+      <Stack.Screen name="Restructure" component={RestructureEntryScreen} />
+      <Stack.Screen name="RestructureRequest" component={RestructureRequestScreen} />
+      <Stack.Screen name="RestructureLoan" component={RestructureLoanScreen} />
     </Stack.Navigator>
   );
 }

@@ -8,6 +8,7 @@ import { SessionContext } from "../auth/SessionContext";
 import { getLoanDetail, getLoanAmortization } from "../api/loanApi";
 import { getLoanApprovalHistory } from "../api/approvalApi";
 import { money } from "../utils/format";
+import { canRequestRestructure } from "../utils/restructure";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import { withCode } from "../utils/customerLabel";
@@ -164,6 +165,22 @@ export default function LoanDetailScreen({ route }) {
         >
           Ver estado de cuenta
         </Button>
+        {loan?.status === "DISBURSED" && canRequestRestructure(session) && (
+          <Button
+            mode="contained"
+            icon="swap-horizontal"
+            onPress={() =>
+              navigation.navigate("Pagos", {
+                screen: "Restructure",
+                params: { loanId, customerName: loan?.customer_name, creditCode: loan?.credit_code },
+              })
+            }
+            style={{ marginTop: SPACING.sm, borderRadius: RADIUS.md, backgroundColor: "rgba(255,255,255,0.18)", alignSelf: "flex-start" }}
+            labelStyle={{ color: COLORS.onGradient, fontWeight: "700" }}
+          >
+            Solicitar reestructuración
+          </Button>
+        )}
       </LinearGradient>
 
       <HelperText type="error" visible={!!error} style={{ marginHorizontal: SPACING.lg }}>{error}</HelperText>
