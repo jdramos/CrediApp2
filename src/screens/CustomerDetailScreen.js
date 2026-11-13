@@ -64,6 +64,9 @@ export default function CustomerDetailScreen({ route, navigation }) {
   // Expediente: plazo por nivel de riesgo, solo alerta (dueño, 2026-11-05).
   const canUpdateInfo = ["clientes.expediente.actualizar", "clientes.editar"].some((p) => session?.permissions?.includes(p));
   const [infoStatus, setInfoStatus] = useState(null);
+  // Ficha completa (mismos campos que la web) e historial crediticio.
+  const canEditCustomer = session?.permissions?.includes("clientes.editar");
+  const canSeeHistory = session?.permissions?.includes("clientes.ver");
 
   const [customer, setCustomer] = useState(null);
   const [loans, setLoans] = useState([]);
@@ -147,6 +150,26 @@ export default function CustomerDetailScreen({ route, navigation }) {
           >
             Ver / editar ubicación
           </Button>
+          {canEditCustomer && !!customer?.id && (
+            <Button
+              mode="outlined"
+              icon="pencil-outline"
+              onPress={() => navigation.navigate("CustomerEdit", { customerId })}
+              style={{ marginTop: SPACING.sm, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+            >
+              Editar ficha
+            </Button>
+          )}
+          {canSeeHistory && (
+            <Button
+              mode="outlined"
+              icon="history"
+              onPress={() => navigation.navigate("CustomerCreditHistory", { customerId, customerName: customer?.customer_name })}
+              style={{ marginTop: SPACING.sm, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+            >
+              Historial crediticio
+            </Button>
+          )}
           {canUpdateInfo && (
             <Button
               mode={["OVERDUE", "DUE_SOON"].includes(infoStatus?.status) ? "contained" : "outlined"}

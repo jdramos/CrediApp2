@@ -6,6 +6,7 @@ import CustomerLocationScreen from "../screens/CustomerLocationScreen";
 import CustomerFileScreen from "../screens/CustomerFileScreen";
 import CustomerInfoUpdateScreen from "../screens/CustomerInfoUpdateScreen";
 import NewCustomerScreen from "../screens/NewCustomerScreen";
+import CustomerCreditHistoryScreen from "../screens/CustomerCreditHistoryScreen";
 import CustomerSetupScreen from "../screens/CustomerSetupScreen";
 import CustomerEvaluationScreen from "../screens/CustomerEvaluationScreen";
 import LoanDetailScreen from "../screens/LoanDetailScreen";
@@ -47,6 +48,16 @@ export default function CustomerStackNavigator() {
         name="NewCustomer"
         component={NewCustomerScreen}
         options={{ title: "Nuevo cliente" }}
+      />
+      <Stack.Screen
+        name="CustomerEdit"
+        component={NewCustomerScreen}
+        options={{ title: "Editar cliente" }}
+      />
+      <Stack.Screen
+        name="CustomerCreditHistory"
+        component={CustomerCreditHistoryScreen}
+        options={{ title: "Historial crediticio" }}
       />
       <Stack.Screen
         name="CustomerSetup"

@@ -16,6 +16,17 @@ export const searchCustomers = (token, query) =>
 export const createCustomer = (token, payload) =>
   credimasterPost("/api/customers", payload, token);
 
+// Edición de la ficha completa (PUT /api/customers/:id, permiso clientes.editar). El servidor reemplaza TODAS las columnas
+// del `customer` que recibe, así que hay que mandar la ficha completa que devolvió getCustomer con lo editado encima
+// (nunca solo lo que cambió). `guarantees` y `custom_fields` solo se tocan si vienen en la petición.
+export const updateCustomer = (token, customerId, payload) =>
+  credimasterPut(`/api/customers/${customerId}`, payload, token);
+
+// Historial crediticio del cliente (GET /:id/credit-history, permiso clientes.ver): sus créditos con el comportamiento de
+// pago, un resumen y una calificación interna. Responde { ok, data: { summary, loans } }.
+export const getCustomerCreditHistory = (token, customerId) =>
+  credimasterGet(`/api/customers/${customerId}/credit-history`, token);
+
 // Lectura de la cédula con IA (POST /api/customers/id-scan, permiso clientes.insertar y módulo id_scan
 // de pago). `front` y `back` son fotos { uri, name, type }; el reverso es opcional. Necesita señal.
 // Responde { ok, data: { fields, warnings, legible } } con customer_name, identification, birth_date,
