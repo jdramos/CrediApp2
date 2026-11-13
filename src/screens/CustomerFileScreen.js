@@ -19,6 +19,7 @@ import { money, toNumber } from "../utils/format";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
+import GuaranteeExtraFields, { guaranteeExtraPayload } from "../components/GuaranteeExtraFields";
 import useKeyboardModalStyle from "../components/useKeyboardModalStyle";
 
 const styles = StyleSheet.create({
@@ -100,6 +101,7 @@ export default function CustomerFileScreen() {
   const [newBrand, setNewBrand] = useState("");
   const [newSeries, setNewSeries] = useState("");
   const [newValue, setNewValue] = useState("");
+  const [newExtra, setNewExtra] = useState({}); // modelo, color, años de uso, estado y ubicación (como la web)
   // Fotos de la garantía que se está creando (todavía sin guardar: se pueden
   // cambiar o quitar). Al guardar la garantía se suben a ella.
   const [newPhotos, setNewPhotos] = useState([]);
@@ -318,6 +320,7 @@ export default function CustomerFileScreen() {
         series: newSeries.trim() || null,
         brand: newBrand.trim() || null,
         value: toNumber(newValue) || null,
+        ...guaranteeExtraPayload(newExtra),
       };
       await saveCustomerGuarantees(session.token, customerId, fullCustomer, [...existing, created]);
 
@@ -355,6 +358,7 @@ export default function CustomerFileScreen() {
       setNewBrand("");
       setNewSeries("");
       setNewValue("");
+      setNewExtra({});
       setNewPhotos([]);
       setShowAddGuarantee(false);
       await load(true);
@@ -680,6 +684,7 @@ export default function CustomerFileScreen() {
             outlineStyle={{ borderRadius: RADIUS.md }}
             left={<TextInput.Icon icon="cash" />}
           />
+          <GuaranteeExtraFields value={newExtra} onChange={setNewExtra} disabled={savingGuarantee} />
           {canPhotoGuarantee && (
             <View style={{ marginTop: SPACING.md }}>
               <Text style={styles.title}>Fotos de la garantía (opcional)</Text>

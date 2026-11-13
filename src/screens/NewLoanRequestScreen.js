@@ -35,6 +35,7 @@ import CustomFieldInputs from "../components/CustomFieldInputs";
 import LoanAlerts, { isIdentityFrozen } from "../components/LoanAlerts";
 import LoanRiskSummary from "../components/LoanRiskSummary";
 import CatalogPickerField from "../components/CatalogPickerField";
+import GuaranteeExtraFields, { guaranteeExtraPayload } from "../components/GuaranteeExtraFields";
 import useKeyboardModalStyle from "../components/useKeyboardModalStyle";
 import { pickImage } from "../utils/imagePicker";
 import { isNetworkError } from "../api/credimasterClient";
@@ -249,6 +250,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   const [newSeries, setNewSeries] = useState("");
   const [newBrand, setNewBrand] = useState("");
   const [newValue, setNewValue] = useState("");
+  const [newExtra, setNewExtra] = useState({}); // modelo, color, años de uso, estado y ubicación (como la web)
   const [savingGuarantee, setSavingGuarantee] = useState(false);
   const [uploadingGuaranteeId, setUploadingGuaranteeId] = useState(null);
   // Fotos de la garantía que se está creando (aún sin guardar: se pueden
@@ -463,7 +465,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     setGuaranteePhotos({});
     setChecklist([]);
     setShowAddGuarantee(false);
-    setNewArticle(""); setNewSeries(""); setNewBrand(""); setNewValue("");
+    setNewArticle(""); setNewSeries(""); setNewBrand(""); setNewValue(""); setNewExtra({});
     setEvaluation(null);
     setResult(null);
     setError("");
@@ -531,6 +533,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
         series: newSeries.trim() || null,
         brand: newBrand.trim() || null,
         value: toNumber(newValue) || null,
+        ...guaranteeExtraPayload(newExtra),
       };
       await saveCustomerGuarantees(session.token, customer.id, fullCustomer, [...existingPayload, newPayload]);
       const rows = await getCustomerGuarantees(session.token, customer.id);
@@ -557,7 +560,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       }
 
       setGuarantees(asOwn(rows || []));
-      setNewArticle(""); setNewSeries(""); setNewBrand(""); setNewValue("");
+      setNewArticle(""); setNewSeries(""); setNewBrand(""); setNewValue(""); setNewExtra({});
       setNewPhotos([]);
       setShowAddGuarantee(false);
       if (photoProblem) setError(photoProblem);
@@ -1687,6 +1690,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                 outlineStyle={{ borderRadius: RADIUS.md }}
                 left={<TextInput.Icon icon="cash" />}
               />
+              <GuaranteeExtraFields value={newExtra} onChange={setNewExtra} disabled={savingGuarantee} />
               {canPhotoGuarantee && (
                 <View style={{ marginTop: SPACING.md }}>
                   <Text style={styles.name}>Fotos de la garantía (opcional)</Text>
