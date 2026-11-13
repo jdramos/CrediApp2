@@ -298,12 +298,23 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   const canSeeEvaluation = canEvaluate || perms.includes("clientes.evaluacion.ver");
   const isProspectCustomer = Number(customer?.is_prospect) === 1;
   const isProspect = isProspectCustomer && canSeeEvaluation;
+  // El servidor devuelve la evaluación vigente tal cual (o null), sin envolverla en { data }.
+  // Devuelve la evaluación encontrada (o null); si falla la consulta, deja lo que ya había.
+  const refreshEvaluation = useCallback(async () => {
+    if (!canSeeEvaluation || !customer?.id || isLocalCustomerId(customer.id)) return null;
+    try {
+      const r = await getCurrentEvaluation(session.token, customer.id);
+      const ev = r?.id ? r : null;
+      setEvaluation(ev);
+      return ev;
+    } catch {
+      return null;
+    }
+  }, [canSeeEvaluation, customer?.id, session.token]);
   useFocusEffect(
     useCallback(() => {
-      if (!canSeeEvaluation || !customer?.id || isLocalCustomerId(customer.id)) return;
-      // El servidor devuelve la evaluación vigente tal cual (o null), sin envolverla en { data }.
-      getCurrentEvaluation(session.token, customer.id).then((r) => setEvaluation(r?.id ? r : null)).catch(() => {});
-    }, [canSeeEvaluation, customer?.id, session.token]),
+      refreshEvaluation();
+    }, [refreshEvaluation]),
   );
 
   // Prellena los catálogos complementarios con la fila "por defecto" del
@@ -708,10 +719,10 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   // se exige (mismo criterio que la web, useLoanForm.js::getPolicy).
   const getPolicy = (key) => policies[key];
 
-  const validateStep1 = () => {
+  const validateStep1 = (freshEvaluation = null) => {
     const amt = toNumber(amount);
     const trm = Number(term);
-    if (isProspect && !evaluation?.id) return "Falta digitar la evaluación financiera del cliente: es obligatoria para este cliente nuevo.";
+    if (isProspect && !evaluation?.id && !freshEvaluation?.id) return "Falta digitar la evaluación financiera del cliente: es obligatoria para este cliente nuevo.";
     if (!branchId) return "Seleccione una sucursal";
     if (!amt || amt <= 0) return "Ingrese un monto válido";
     if (!trm || trm <= 0) return "Ingrese un plazo válido";
@@ -1286,8 +1297,11 @@ export default function NewLoanRequestScreen({ route, navigation }) {
 
             <Button
               mode="contained"
-              onPress={() => {
-                const v = validateStep1();
+              onPress={async () => {
+                // Cliente nuevo sin evaluación en pantalla: se consulta al servidor justo ahora, por si ya la
+                // digitaron en otra pantalla y esta no se enteró (así no se bloquea el paso por un dato viejo).
+                const fresh = isProspect && !evaluation?.id ? await refreshEvaluation() : null;
+                const v = validateStep1(fresh);
                 if (v) { setError(v); return; }
                 setError("");
                 setStep(2);
