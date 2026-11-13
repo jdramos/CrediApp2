@@ -57,7 +57,11 @@ export default function CustomerDetailScreen({ route, navigation }) {
   const canViewLoans = session?.permissions?.includes("creditos.ver");
   const canRequestLoan = session?.permissions?.includes("creditos.insertar");
   const canEvaluate = ["clientes.evaluacion.insertar", "clientes.evaluacion.ver"].some((p) => session?.permissions?.includes(p));
-  const canOpenFile = ["clientes.checklist.ver", "clientes.documentos.subir", "garantias.ver", "garantias.insertar"].some(
+  // Documentos y garantías, cada uno en su pantalla.
+  const canOpenDocuments = ["clientes.checklist.ver", "clientes.documentos.subir", "clientes.documentos.ver"].some(
+    (p) => session?.permissions?.includes(p),
+  );
+  const canOpenGuarantees = ["garantias.ver", "garantias.insertar", "clientes.editar"].some(
     (p) => session?.permissions?.includes(p),
   );
 
@@ -200,14 +204,24 @@ export default function CustomerDetailScreen({ route, navigation }) {
               Evaluación financiera
             </Button>
           )}
-          {canOpenFile && (
+          {canOpenDocuments && (
             <Button
               mode="outlined"
-              icon="folder-image"
-              onPress={() => navigation.navigate("CustomerFile", { customerId, customerName: customer?.customer_name })}
+              icon="file-document-outline"
+              onPress={() => navigation.navigate("CustomerDocuments", { customerId, customerName: customer?.customer_name })}
               style={{ marginTop: SPACING.sm, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
             >
-              Expediente y garantías (fotos)
+              Documentos del expediente
+            </Button>
+          )}
+          {canOpenGuarantees && (
+            <Button
+              mode="outlined"
+              icon="shield-check-outline"
+              onPress={() => navigation.navigate("CustomerGuarantees", { customerId, customerName: customer?.customer_name })}
+              style={{ marginTop: SPACING.sm, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+            >
+              Garantías (fotos)
             </Button>
           )}
         </View>

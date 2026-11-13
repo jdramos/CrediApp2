@@ -212,7 +212,7 @@ export default function CustomerSetupScreen({ route, navigation }) {
             doneLabel="Completos"
             pendingLabel={isLocal ? "En espera" : mandatory.length ? `Faltan ${mandatory.length - mandatoryDone}` : "Opcional"}
             actionLabel={docsDone ? "Ver expediente" : "Subir documentos"}
-            onPress={() => navigation.navigate("CustomerFile", params)}
+            onPress={() => navigation.navigate("CustomerDocuments", params)}
             disabledReason={isLocal ? "Podrá subir los documentos del expediente cuando el cliente quede registrado (al volver la señal)." : null}
           />
         )}
@@ -232,7 +232,7 @@ export default function CustomerSetupScreen({ route, navigation }) {
             doneLabel="Registradas"
             pendingLabel={isLocal ? "En espera" : "Opcional"}
             actionLabel={guaranteeCount > 0 ? "Ver / agregar garantías" : "Agregar garantías"}
-            onPress={() => navigation.navigate("CustomerFile", params)}
+            onPress={() => navigation.navigate("CustomerGuarantees", params)}
             disabledReason={isLocal ? "Podrá registrar las garantías cuando el cliente quede registrado (al volver la señal)." : null}
           />
         )}

@@ -1582,7 +1582,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                   icon="folder-image"
                   onPress={() =>
                     navigation.navigate("Clientes", {
-                      screen: "CustomerFile",
+                      screen: "CustomerDocuments",
                       params: { customerId: customer.id, customerName: customer.customer_name },
                     })
                   }

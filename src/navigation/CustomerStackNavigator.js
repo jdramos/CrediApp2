@@ -40,6 +40,16 @@ export default function CustomerStackNavigator() {
         options={{ title: "Expediente y garantías" }}
       />
       <Stack.Screen
+        name="CustomerDocuments"
+        component={CustomerFileScreen}
+        options={{ title: "Documentos del cliente" }}
+      />
+      <Stack.Screen
+        name="CustomerGuarantees"
+        component={CustomerFileScreen}
+        options={{ title: "Garantías del cliente" }}
+      />
+      <Stack.Screen
         name="CustomerInfoUpdate"
         component={CustomerInfoUpdateScreen}
         options={{ title: "Actualizar expediente" }}

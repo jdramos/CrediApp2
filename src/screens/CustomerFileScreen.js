@@ -56,8 +56,13 @@ const isOk = (status) => String(status || "").toUpperCase() === "OK";
 // así lo que se tome sin señal se sube solo después.
 export default function CustomerFileScreen() {
   const navigation = useNavigation();
-  const { params } = useRoute();
+  const route = useRoute();
+  const { params } = route;
   const { customerId, customerName } = params;
+  // La misma pantalla sirve a dos entradas separadas: Documentos del expediente y Garantías (cada una en su pantalla).
+  // "CustomerFile" (la antigua, con ambas) sigue registrada por si algo la abre.
+  const wantDocs = route.name !== "CustomerGuarantees";
+  const wantGuarantees = route.name !== "CustomerDocuments";
   const { session } = useContext(SessionContext);
   const { refreshPendingCount } = useSync();
   const guaranteeModalStyle = useKeyboardModalStyle(styles.modal);
@@ -71,8 +76,8 @@ export default function CustomerFileScreen() {
   // saveCustomerGuarantees), por eso pide clientes.editar y no garantias.insertar.
   const canCreateGuarantee = perms.includes("clientes.editar");
   // Se ofrece la sección con solo poder agregar (no hace falta poder ver el checklist o las garantías).
-  const showDocs = canSeeChecklist || canUploadDoc || canSeeDocs;
-  const showGuarantees = canSeeGuarantees || canCreateGuarantee || canPhotoGuarantee;
+  const showDocs = wantDocs && (canSeeChecklist || canUploadDoc || canSeeDocs);
+  const showGuarantees = wantGuarantees && (canSeeGuarantees || canCreateGuarantee || canPhotoGuarantee);
 
   const [checklist, setChecklist] = useState([]);
   const [otherDocs, setOtherDocs] = useState([]); // documentos subidos que no son de un ítem del checklist
@@ -114,9 +119,9 @@ export default function CustomerFileScreen() {
       setError("");
       try {
         const [cl, gs, docs] = await Promise.all([
-          canSeeChecklist ? getCustomerChecklist(session.token, customerId) : [],
-          canSeeGuarantees ? getCustomerGuarantees(session.token, customerId) : [],
-          canSeeDocs ? listCustomerDocuments(session.token, customerId).catch(() => []) : [],
+          wantDocs && canSeeChecklist ? getCustomerChecklist(session.token, customerId) : [],
+          wantGuarantees && canSeeGuarantees ? getCustomerGuarantees(session.token, customerId) : [],
+          wantDocs && canSeeDocs ? listCustomerDocuments(session.token, customerId).catch(() => []) : [],
         ]);
         const checklistRows = Array.isArray(cl) ? cl : [];
         setChecklist(checklistRows);
@@ -126,7 +131,7 @@ export default function CustomerFileScreen() {
         );
         const list = Array.isArray(gs) ? gs : [];
         setGuarantees(list);
-        if (canSeeGuarantees && list.length) {
+        if (wantGuarantees && canSeeGuarantees && list.length) {
           const entries = await Promise.all(
             list.map((g) =>
               listGuaranteePhotos(session.token, g.id)
@@ -145,7 +150,7 @@ export default function CustomerFileScreen() {
         setRefreshing(false);
       }
     },
-    [session.token, customerId, canSeeChecklist, canSeeGuarantees, canSeeDocs],
+    [session.token, customerId, canSeeChecklist, canSeeGuarantees, canSeeDocs, wantDocs, wantGuarantees],
   );
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -407,7 +412,7 @@ export default function CustomerFileScreen() {
         <HelperText type="error" visible={!!error}>{error}</HelperText>
         {loading && <ActivityIndicator color={COLORS.primary} />}
 
-        {sentNow.length > 0 && (
+        {wantDocs && sentNow.length > 0 && (
           <View style={styles.card}>
             <Text style={styles.title}>Enviado en esta visita</Text>
             {sentNow.map((s) => (
