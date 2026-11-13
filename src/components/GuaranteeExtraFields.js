@@ -27,6 +27,20 @@ export function guaranteeExtraPayload(extra = {}) {
   return out;
 }
 
+// Texto de una garantía guardada con sus datos opcionales ("Modelo: X · Color: Y · Estado: Bueno ..."); "" si no tiene ninguno.
+export function guaranteeExtraSummary(g = {}) {
+  const label = (options, id) => options.find((o) => o.id === String(id ?? "").toUpperCase())?.label || "";
+  return [
+    g.model ? `Modelo: ${g.model}` : "",
+    g.color ? `Color: ${g.color}` : "",
+    g.years_of_use ? `Años de uso: ${g.years_of_use}` : "",
+    label(CONDITION_OPTIONS, g.condition_code) ? `Estado: ${label(CONDITION_OPTIONS, g.condition_code)}` : "",
+    label(LOCATION_OPTIONS, g.location) ? `Ubicación: ${label(LOCATION_OPTIONS, g.location)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export default function GuaranteeExtraFields({ value = {}, onChange, disabled }) {
   const set = (key, v) => onChange({ ...value, [key]: v });
   const input = (key, label, maxLength) => (

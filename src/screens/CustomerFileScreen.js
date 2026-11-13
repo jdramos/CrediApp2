@@ -19,7 +19,7 @@ import { money, toNumber } from "../utils/format";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
-import GuaranteeExtraFields, { guaranteeExtraPayload } from "../components/GuaranteeExtraFields";
+import GuaranteeExtraFields, { guaranteeExtraPayload, guaranteeExtraSummary } from "../components/GuaranteeExtraFields";
 import useKeyboardModalStyle from "../components/useKeyboardModalStyle";
 
 const styles = StyleSheet.create({
@@ -556,6 +556,7 @@ export default function CustomerFileScreen() {
                     {[g.series ? `Serie: ${g.series}` : "", g.value ? money(g.value) : "Sin valor registrado"].filter(Boolean).join(" · ")}
                     {g.is_committed ? ` · En uso (crédito ${g.committed_credit_code || g.committed_loan_id})` : ""}
                   </Text>
+                  {!!guaranteeExtraSummary(g) && <Text style={styles.muted}>{guaranteeExtraSummary(g)}</Text>}
                   {list.length > 0 ? (
                     <View style={styles.thumbs}>
                       {list.map((p) => (

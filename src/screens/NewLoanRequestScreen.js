@@ -35,7 +35,7 @@ import CustomFieldInputs from "../components/CustomFieldInputs";
 import LoanAlerts, { isIdentityFrozen } from "../components/LoanAlerts";
 import LoanRiskSummary from "../components/LoanRiskSummary";
 import CatalogPickerField from "../components/CatalogPickerField";
-import GuaranteeExtraFields, { guaranteeExtraPayload } from "../components/GuaranteeExtraFields";
+import GuaranteeExtraFields, { guaranteeExtraPayload, guaranteeExtraSummary } from "../components/GuaranteeExtraFields";
 import useKeyboardModalStyle from "../components/useKeyboardModalStyle";
 import { pickImage } from "../utils/imagePicker";
 import { isNetworkError } from "../api/credimasterClient";
@@ -1527,6 +1527,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                         <View style={{ flex: 1 }}>
                           <Text style={styles.name}>{item.article}{item.brand ? ` · ${item.brand}` : ""}</Text>
                           <Text style={styles.muted}>{money2(item.available_value) || "Sin valor registrado"}</Text>
+                          {!!guaranteeExtraSummary(item) && <Text style={styles.muted}>{guaranteeExtraSummary(item)}</Text>}
                         </View>
                       </View>
                       {photoList.length > 0 && (
