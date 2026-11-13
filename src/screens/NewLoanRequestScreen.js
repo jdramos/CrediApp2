@@ -9,7 +9,7 @@ import DateWheelPicker from "../components/DateWheelPicker";
 import { SessionContext } from "../auth/SessionContext";
 import { searchCustomers, getCustomer, saveCustomerGuarantees } from "../api/customerApi";
 import { getAccessibleBranches } from "../api/branchApi";
-import { createLoanRequest, simulateLoan, updateLoanRequest, getLoanDetail } from "../api/loanApi";
+import { createLoanRequest, simulateLoan, updateLoanRequest, getLoanDetail, getCustomerActiveLoans } from "../api/loanApi";
 import { summarizeSchedule } from "../utils/loanSimulation";
 import { getLoanCatalogs } from "../api/conamiApi";
 import { getFrecuencies } from "../api/frecuencyApi";
@@ -20,6 +20,20 @@ import { uploadGuaranteePhoto, listGuaranteePhotos } from "../api/guaranteePhoto
 import { getCustomerChecklist, uploadCustomerDocument } from "../api/customerDocumentApi";
 import { getCurrentEvaluation } from "../api/customerEvaluationApi";
 import { getCreditPolicies } from "../api/creditPolicyApi";
+import { getLoanProducts, getLoanCustomFields, getIdentityStatus, getReprestamoEligibility } from "../api/loanFormApi";
+import {
+  availableProductsFor,
+  productViolationsMessage,
+  productPrefill,
+  insurancePremium,
+  chargeFromProduct,
+  lockedValues,
+  frequenciesOf,
+} from "../utils/loanProducts";
+import { fieldsInSection, firstCustomFieldError, customFieldsPayload, validateCustomFieldValues } from "../utils/customFields";
+import CustomFieldInputs from "../components/CustomFieldInputs";
+import LoanAlerts, { isIdentityFrozen } from "../components/LoanAlerts";
+import LoanRiskSummary from "../components/LoanRiskSummary";
 import CatalogPickerField from "../components/CatalogPickerField";
 import useKeyboardModalStyle from "../components/useKeyboardModalStyle";
 import { pickImage } from "../utils/imagePicker";
@@ -216,6 +230,18 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   const [showExtra, setShowExtra] = useState(false);
   const [extra, setExtra] = useState({});
 
+  // Como en la web: producto financiero (si la empresa los usa), datos adicionales (campos personalizados del
+  // crédito) y avisos del cliente (cédula, represtamo, deuda actual).
+  const [products, setProducts] = useState([]);
+  const [productsRegulated, setProductsRegulated] = useState(true);
+  const [productId, setProductId] = useState(null);
+  const [customFields, setCustomFields] = useState([]);
+  const [customValues, setCustomValues] = useState({});
+  const [customErrors, setCustomErrors] = useState({});
+  const [identityStatus, setIdentityStatus] = useState(null);
+  const [represtamo, setRepresamo] = useState(null);
+  const [activeSummary, setActiveSummary] = useState(null);
+
   // Garantías
   const [selectedGuaranteeIds, setSelectedGuaranteeIds] = useState([]);
   const [showAddGuarantee, setShowAddGuarantee] = useState(false);
@@ -265,6 +291,26 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       .catch(() => {});
   }, [session.token]);
 
+  // Productos financieros y campos personalizados del crédito: la última respuesta se guarda para usarla sin señal.
+  // Si la empresa no tiene ninguno, el formulario funciona como siempre.
+  useEffect(() => {
+    const key = (what) => `${session.user.id}:loanform:${what}`;
+    cachedFetch(key("products"), () => getLoanProducts(session.token))
+      .then((r) => {
+        setProducts(Array.isArray(r.data?.data) ? r.data.data : []);
+        setProductsRegulated(r.data?.regulated !== false);
+      })
+      .catch(() => setProducts([]));
+    cachedFetch(key(`customfields:${editLoanId || "new"}`), () => getLoanCustomFields(session.token, editLoanId))
+      .then((r) => {
+        const d = r.data?.data || {};
+        setCustomFields(Array.isArray(d.fields) ? d.fields : []);
+        if (editLoanId && d.values && typeof d.values === "object") setCustomValues(d.values);
+      })
+      .catch(() => setCustomFields([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.token, editLoanId]);
+
   useEffect(() => {
     if (!branchId) return;
     getPromotersByBranch(session.token, branchId).then((rows) => setPromoters(rows || [])).catch(() => setPromoters([]));
@@ -289,6 +335,14 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     cachedFetch(key("evaluation"), () => getCurrentEvaluation(session.token, customer.id)).then((r) => setEvaluation(r.data)).catch(() => setEvaluation(null));
     cachedFetch(key("guarantees"), () => getCustomerGuarantees(session.token, customer.id)).then((r) => setGuarantees(asOwn(r.data || []))).catch(() => setGuarantees([]));
     cachedFetch(key("checklist"), () => getCustomerChecklist(session.token, customer.id)).then((r) => setChecklist(Array.isArray(r.data) ? r.data : [])).catch(() => setChecklist([]));
+    // Avisos que también muestra la web: cédula vencida, represtamo y deuda actual con la institución.
+    // Son de ayuda: si no hay señal (o el rol no tiene el permiso) simplemente no se muestran.
+    setIdentityStatus(null);
+    setRepresamo(null);
+    setActiveSummary(null);
+    getIdentityStatus(session.token, customer.id).then((r) => setIdentityStatus(r?.data || null)).catch(() => {});
+    getReprestamoEligibility(session.token, customer.id).then((r) => setRepresamo(r?.data || null)).catch(() => {});
+    getCustomerActiveLoans(session.token, customer.id).then((r) => setActiveSummary(r || null)).catch(() => {});
   }, [customer?.id, session.token]);
 
   // Cliente nuevo pendiente de aprobación: la evaluación financiera es obligatoria y se digita
@@ -432,6 +486,15 @@ export default function NewLoanRequestScreen({ route, navigation }) {
 
   // Sin ninguna garantía seleccionada se pide confirmación antes de seguir.
   const continueFromGuarantees = () => {
+    // Datos adicionales de la sección "Garantías y documentos": los obligatorios deben estar llenos.
+    const guaranteeFields = fieldsInSection(customFields, "guarantees");
+    const customProblem = firstCustomFieldError(guaranteeFields, customValues);
+    if (customProblem) {
+      setCustomErrors((prev) => ({ ...prev, ...validateCustomFieldValues(guaranteeFields, customValues) }));
+      setError(customProblem);
+      return;
+    }
+    setError("");
     if (selectedGuaranteeIds.length === 0 && customer?.id && !isLocalCustomerId(customer.id)) {
       confirmAction(
         "Sin garantías",
@@ -582,12 +645,13 @@ export default function NewLoanRequestScreen({ route, navigation }) {
         other_charges: toNumber(otherCharges),
         frequency_id: quoteTag,
         branch_id: branchId,
+        ...(productId ? { product_id: productId } : {}),
         ...(!firstPaymentAuto && firstPaymentDate && quoteTag !== "V" ? { first_payment_date: firstPaymentDate } : {}),
       })
         .then((table) => {
           if (!alive) return;
           const summary = summarizeSchedule(table);
-          setQuote({ loading: false, summary });
+          setQuote({ loading: false, summary, table });
           const first = summary?.rows?.[0]?.paymentDate;
           if (firstPaymentAuto && first) setFirstPaymentDate(String(first).slice(0, 10));
         })
@@ -599,7 +663,61 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       alive = false;
       clearTimeout(timer);
     };
-  }, [canQuote, canZeroRate, amount, term, interestRate, quoteTag, branchId, requestDate, fee, insurance, otherCharges, session.token, firstPaymentAuto, firstPaymentAuto ? "" : firstPaymentDate]);
+  }, [canQuote, canZeroRate, amount, term, interestRate, quoteTag, branchId, requestDate, fee, insurance, otherCharges, productId, session.token, firstPaymentAuto, firstPaymentAuto ? "" : firstPaymentDate]);
+
+  // Producto financiero (igual que la web): elegirlo prellena sus condiciones, fija tipo de crédito/agrupación/moneda
+  // y limita monto, plazo, tasa y frecuencia. Si la empresa no tiene productos activos, nada de esto aparece.
+  const productsEnabled = products.some((p) => p.status === "ACTIVE");
+  const availableProducts = availableProductsFor(products, branchId, productId);
+  const selectedProduct = products.find((p) => String(p.id) === String(productId)) || null;
+  const lockedKeys = Object.keys(lockedValues(selectedProduct));
+  // El límite propio del producto reemplaza al de la política general, salvo en una empresa normada (ahí rigen ambos).
+  const productOverrides = (field) =>
+    Boolean(selectedProduct) && !productsRegulated && selectedProduct[field] !== null && selectedProduct[field] !== undefined;
+
+  const chooseProduct = (id) => {
+    setProductId(id || null);
+    const product = products.find((p) => String(p.id) === String(id)) || null;
+    if (!product) return;
+    const pre = productPrefill(product, { amount: toNumber(amount) || null, term: term || null });
+    if (pre.interestRate !== undefined) setInterestRate(pre.interestRate);
+    if (pre.defaultedRate !== undefined) setDefaultedRate(pre.defaultedRate);
+    if (pre.term !== undefined) setTerm(pre.term);
+    if (pre.amount !== undefined) setAmount(formatAmountInput(pre.amount));
+    const allowed = frequenciesOf(product);
+    if (allowed.length && !allowed.includes(String(selectedFrequency?.tag || "").toUpperCase())) {
+      const f = frecuencies.find((x) => String(x.tag).toUpperCase() === allowed[0]);
+      if (f) setFrequencyId(f.id);
+    }
+  };
+
+  // Si solo hay un producto disponible en la sucursal, se preselecciona.
+  useEffect(() => {
+    if (editLoanId || productId) return;
+    const offered = availableProductsFor(products, branchId, null);
+    if (offered.length === 1) chooseProduct(offered[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, branchId, editLoanId, frecuencies.length]);
+
+  // Comisión, otros cargos y seguro que fija el producto (se recalculan con el monto).
+  useEffect(() => {
+    if (!selectedProduct) return;
+    const amt = toNumber(amount);
+    const feeValue = chargeFromProduct(selectedProduct, "fee", amt);
+    if (feeValue !== null) setFee(formatAmountInput(feeValue.toFixed(2)));
+    const otherValue = chargeFromProduct(selectedProduct, "other", amt);
+    if (otherValue !== null) setOtherCharges(formatAmountInput(otherValue.toFixed(2)));
+    const premium = insurancePremium(selectedProduct, amt);
+    if (premium !== null) setInsurance(formatAmountInput(premium.toFixed(2)));
+  }, [selectedProduct, amount]);
+
+  // Tipo de crédito, agrupación y moneda que fija el producto: no se pueden cambiar.
+  useEffect(() => {
+    const locked = lockedValues(selectedProduct);
+    const keys = Object.keys(locked);
+    if (!keys.length) return;
+    setExtra((prev) => (keys.every((k) => String(prev[k]) === String(locked[k])) ? prev : { ...prev, ...locked }));
+  }, [selectedProduct, loanCatalogs]);
 
   // Sube una foto a la garantía; sin señal la deja en la cola para enviarla sola
   // después. Devuelve "ok", "queued" o null si falló (el error queda en pantalla).
@@ -723,7 +841,18 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     const amt = toNumber(amount);
     const trm = Number(term);
     if (isProspect && !evaluation?.id && !freshEvaluation?.id) return "Falta digitar la evaluación financiera del cliente: es obligatoria para este cliente nuevo.";
+    if (isIdentityFrozen(identityStatus)) return "La cédula del cliente está vencida y, por política de crédito, la solicitud está congelada. Actualice la fecha de vencimiento en su ficha.";
     if (!branchId) return "Seleccione una sucursal";
+    if (productsEnabled && !productId) return "Seleccione el producto financiero";
+    const productProblem = productViolationsMessage(selectedProduct, {
+      branch_id: branchId,
+      amount: amt || null,
+      term: trm || null,
+      interest_rate: String(interestRate ?? "").trim() === "" ? null : Number(interestRate),
+      defaulted_rate: String(defaultedRate ?? "").trim() === "" ? null : Number(defaultedRate),
+      frequency_id: selectedFrequency?.tag || null,
+    });
+    if (productProblem) return productProblem;
     if (!amt || amt <= 0) return "Ingrese un monto válido";
     if (!trm || trm <= 0) return "Ingrese un plazo válido";
     if (frecuencies.length > 0 && !frequencyId) return "Seleccione la frecuencia de pago";
@@ -741,13 +870,13 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     if (getPolicy("min_amount") && amt < Number(getPolicy("min_amount"))) {
       return `El monto es menor al mínimo permitido: C$${getPolicy("min_amount")}`;
     }
-    if (getPolicy("max_term_months") && trm > Number(getPolicy("max_term_months"))) {
+    if (!productOverrides("max_term_months") && getPolicy("max_term_months") && trm > Number(getPolicy("max_term_months"))) {
       return `El plazo excede el máximo permitido: ${getPolicy("max_term_months")} meses`;
     }
-    if (getPolicy("min_term_months") && trm < Number(getPolicy("min_term_months"))) {
+    if (!productOverrides("min_term_months") && getPolicy("min_term_months") && trm < Number(getPolicy("min_term_months"))) {
       return `El plazo es menor al mínimo permitido: ${getPolicy("min_term_months")} meses`;
     }
-    if (getPolicy("max_interest_rate") && Number(interestRate) * 12 > Number(getPolicy("max_interest_rate"))) {
+    if (!productOverrides("max_interest_rate") && getPolicy("max_interest_rate") && Number(interestRate) * 12 > Number(getPolicy("max_interest_rate"))) {
       return `La tasa anual excede lo permitido: ${getPolicy("max_interest_rate")}%`;
     }
     if (getPolicy("min_interest_rate") && Number(interestRate) < Number(getPolicy("min_interest_rate"))) {
@@ -759,6 +888,11 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     if (defaultedRate && getPolicy("max_late_interest_rate") && Number(defaultedRate) > Number(interestRate) / 4) {
       return "La tasa de mora excede el máximo permitido";
     }
+    // Datos adicionales (campos personalizados de la empresa) de esta sección.
+    const conditionFields = fieldsInSection(customFields, "conditions");
+    const customProblem = firstCustomFieldError(conditionFields, customValues);
+    setCustomErrors((prev) => ({ ...prev, ...validateCustomFieldValues(conditionFields, customValues) }));
+    if (customProblem) return customProblem;
     return "";
   };
 
@@ -817,6 +951,8 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       id_situacion_credito: 1,
       id_estado_credito: 1,
       guarantee_ids: selectedGuaranteeIds,
+      ...(productId ? { product_id: productId } : {}),
+      ...(customFields.length ? { custom_fields: customFieldsPayload(customFields, customValues) } : {}),
       ...extra,
     };
 
@@ -923,6 +1059,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
         setDeduction(Number(loan.deduction) ? formatAmountInput(String(loan.deduction)) : "");
         setPromoterId(loan.promoter_id ?? null);
         setVendorId(loan.vendor_id ?? null);
+        if (loan.product_id) setProductId(loan.product_id);
         if (loan.request_date) setRequestDate(String(loan.request_date).slice(0, 10));
         if (loan.due_date) setDueDate(String(loan.due_date).slice(0, 10));
         if (loan.first_payment_date) {
@@ -1032,6 +1169,8 @@ export default function NewLoanRequestScreen({ route, navigation }) {
               </View>
             )}
 
+            <LoanAlerts identityStatus={identityStatus} represtamo={represtamo} />
+
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Sucursal</Text>
               <View style={styles.chipsRow}>
@@ -1047,6 +1186,36 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                 ))}
               </View>
             </View>
+
+            {productsEnabled && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Producto financiero</Text>
+                <CatalogPickerField
+                  label="Producto"
+                  value={productId}
+                  options={availableProducts.map((p) => ({ id: p.id, label: `${p.code ? `${p.code} · ` : ""}${p.name}` }))}
+                  onChange={chooseProduct}
+                />
+                {!!selectedProduct && (
+                  <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: SPACING.xs }}>
+                    {[
+                      selectedProduct.min_amount != null || selectedProduct.max_amount != null
+                        ? `Monto: ${selectedProduct.min_amount != null ? money(selectedProduct.min_amount) : "—"} a ${selectedProduct.max_amount != null ? money(selectedProduct.max_amount) : "—"}`
+                        : null,
+                      selectedProduct.min_term_months != null || selectedProduct.max_term_months != null
+                        ? `Plazo: ${selectedProduct.min_term_months ?? "—"} a ${selectedProduct.max_term_months ?? "—"} meses`
+                        : null,
+                      selectedProduct.min_interest_rate != null || selectedProduct.max_interest_rate != null
+                        ? `Tasa mensual: ${selectedProduct.min_interest_rate ?? "—"}% a ${selectedProduct.max_interest_rate ?? "—"}%`
+                        : null,
+                      frequenciesOf(selectedProduct).length ? `Frecuencias: ${frequenciesOf(selectedProduct).join(", ")}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join("  ·  ") || "Sin límites propios: rige la política general."}
+                  </Text>
+                )}
+              </View>
+            )}
 
             {customer?.id && !isLocalCustomerId(customer.id) && (
               <View style={styles.card}>
@@ -1286,10 +1455,23 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                       value={extra[key]}
                       options={rows.map((r) => ({ id: r.id, label: r[labelField || "name"] || r.name || r.description || String(r.id) }))}
                       onChange={(id) => setExtra((prev) => ({ ...prev, [key]: id }))}
-                      allowClear
+                      allowClear={!lockedKeys.includes(key)}
+                      disabled={lockedKeys.includes(key)}
                     />
                   );
                 })}
+              </View>
+            )}
+
+            {fieldsInSection(customFields, "conditions").length > 0 && (
+              <View style={styles.card}>
+                <CustomFieldInputs
+                  fields={customFields}
+                  section="conditions"
+                  values={customValues}
+                  errors={customErrors}
+                  onChange={(k, v) => setCustomValues((prev) => ({ ...prev, [k]: v }))}
+                />
               </View>
             )}
 
@@ -1435,6 +1617,20 @@ export default function NewLoanRequestScreen({ route, navigation }) {
               </View>
             )}
 
+            {fieldsInSection(customFields, "guarantees").length > 0 && (
+              <View style={[styles.card, { marginTop: SPACING.md }]}>
+                <CustomFieldInputs
+                  fields={customFields}
+                  section="guarantees"
+                  values={customValues}
+                  errors={customErrors}
+                  onChange={(k, v) => setCustomValues((prev) => ({ ...prev, [k]: v }))}
+                />
+              </View>
+            )}
+
+            <HelperText type="error" visible={!!error}>{error}</HelperText>
+
             <Button
               mode="contained"
               onPress={continueFromGuarantees}
@@ -1571,6 +1767,23 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                   <Text style={{ color: COLORS.muted }}>Tasa de interés</Text>
                   <Text style={{ color: COLORS.text, fontWeight: "600" }}>{interestRate}%</Text>
                 </View>
+                {[
+                  selectedProduct ? ["Producto financiero", `${selectedProduct.code ? `${selectedProduct.code} · ` : ""}${selectedProduct.name}`] : null,
+                  Number(defaultedRate) > 0 ? ["Tasa de mora", `${defaultedRate}%`] : null,
+                  toNumber(fee) > 0 ? ["Comisión por desembolso", money(toNumber(fee))] : null,
+                  toNumber(insurance) > 0 ? ["Cargos por seguros", money(toNumber(insurance))] : null,
+                  toNumber(otherCharges) > 0 ? ["Cargos administrativos", money(toNumber(otherCharges))] : null,
+                  toNumber(deduction) > 0 ? ["Deducción", money(toNumber(deduction))] : null,
+                  selectedFrequency?.tag === "V" ? ["Fecha de vencimiento", dueDate] : null,
+                  selectedFrequency && selectedFrequency.tag !== "V" && firstPaymentDate ? ["Primera cuota", firstPaymentDate] : null,
+                ]
+                  .filter(Boolean)
+                  .map(([label, value]) => (
+                    <View key={label} style={styles.summaryRow}>
+                      <Text style={{ color: COLORS.muted }}>{label}</Text>
+                      <Text style={{ color: COLORS.text, fontWeight: "600", flexShrink: 1, textAlign: "right" }}>{value}</Text>
+                    </View>
+                  ))}
                 {selectedPromoter && (
                   <View style={styles.summaryRow}>
                     <Text style={{ color: COLORS.muted }}>Promotor</Text>
@@ -1587,6 +1800,21 @@ export default function NewLoanRequestScreen({ route, navigation }) {
             </View>
 
             {canQuote && <QuoteCard quote={quote} frequency={selectedFrequency} />}
+
+            {canQuote && (
+              <LoanRiskSummary
+                quote={quote}
+                termMonths={Number(term)}
+                amount={toNumber(amount)}
+                deduction={toNumber(deduction)}
+                evaluation={evaluation}
+                guaranteeValue={guarantees
+                  .filter((g) => selectedGuaranteeIds.includes(g.id))
+                  .reduce((sum, g) => sum + Number(g.available_value ?? g.value ?? 0), 0)}
+                minCoverage={getPolicy("min_collateral_coverage") != null && getPolicy("min_collateral_coverage") !== "" ? Number(getPolicy("min_collateral_coverage")) : null}
+                activeSummary={activeSummary}
+              />
+            )}
 
             <HelperText type="error" visible={!!error}>{error}</HelperText>
 

@@ -71,13 +71,15 @@ export const getAccountStatement = (token, loanId, date) =>
 // formulario. `term` va en MESES; la cantidad de cuotas sale de la frecuencia
 // (`frequency_id` es el tag: D, S, B, Q, M, BM, TM, CM, SM, A). Devuelve el
 // arreglo de cuotas con la fila 0 del desembolso.
-export const simulateLoan = (token, { amount, interest_rate, term, requestDate, fee, insurance, other_charges, frequency_id, branch_id, first_payment_date }) =>
+export const simulateLoan = (token, { amount, interest_rate, term, requestDate, fee, insurance, other_charges, frequency_id, branch_id, first_payment_date, product_id }) =>
   credimasterPost(
     "/api/loans/amortization",
     {
       amount, interest_rate, term, requestDate, fee: fee || 0, insurance: insurance || 0, other_charges: other_charges || 0, frequency_id, branch_id,
       // Primera cuota pactada (solo si se cambió la sugerida).
       ...(first_payment_date ? { first_payment_date } : {}),
+      // Producto financiero elegido (fija el tipo de interés si el producto lo define).
+      ...(product_id ? { product_id } : {}),
     },
     token,
   );
