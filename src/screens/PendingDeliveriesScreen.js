@@ -6,7 +6,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getPendingDeliveries, markDelivered, reportNotDelivered, MAX_DELIVERY_PHOTOS } from "../api/remittanceApi";
 import { getCreditPolicies } from "../api/creditPolicyApi";
-import { takePhoto } from "../utils/imagePicker";
+import InAppCameraModal from "../components/InAppCameraModal";
 import { confirmAction } from "../utils/confirm";
 import { money } from "../utils/format";
 import { COLORS } from "../theme/colors";
@@ -126,13 +126,15 @@ export default function PendingDeliveriesScreen() {
     setModalError("");
   };
 
-  const capturePhoto = async () => {
-    try {
-      const file = await takePhoto();
-      if (file) setPhotos((list) => [...list, file].slice(0, MAX_DELIVERY_PHOTOS));
-    } catch (e) {
-      setModalError(e?.message ?? "No se pudo capturar la foto");
-    }
+  // Cámara dentro de la app (components/InAppCameraModal.js): con la cámara del teléfono Android cerraba la app.
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const capturePhoto = () => {
+    setModalError("");
+    setCameraOpen(true);
+  };
+  const onPhotoCaptured = (file) => {
+    setCameraOpen(false);
+    if (file) setPhotos((list) => [...list, file].slice(0, MAX_DELIVERY_PHOTOS));
   };
 
   const submitDelivery = async () => {
@@ -351,6 +353,7 @@ export default function PendingDeliveriesScreen() {
           </KeyboardAwareScroll>
         </Modal>
       </Portal>
+      <InAppCameraModal visible={cameraOpen} onCapture={onPhotoCaptured} onClose={() => setCameraOpen(false)} />
     </SafeAreaView>
   );
 }
