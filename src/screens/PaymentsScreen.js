@@ -307,8 +307,15 @@ export default function PaymentsScreen({ route }) {
     };
   }, [session.token, canCreate, step]);
 
+  // Si lo que falta por pagar es menos que la cuota, se precarga el saldo (no se puede cobrar más de lo que debe).
+  // `display_balance` es el saldo total del plan (capital + interés que falta) de los créditos de interés fijo; en los
+  // de interés sobre saldo no existe y no se topa, porque ahí el saldo es solo capital y la última cuota lleva además
+  // el interés del período.
   const defaultAmountFor = (loanData) => {
-    const amt = Number(loanData?.next_installment_amount ?? loanData?.installment ?? 0);
+    let amt = Number(loanData?.next_installment_amount ?? loanData?.installment ?? 0);
+    const balance = loanData?.display_balance != null ? Number(loanData.display_balance) : null;
+    if (balance != null && Number.isFinite(balance) && balance > 0 && balance < amt) amt = balance;
+    amt = Math.round(amt * 100) / 100;
     return amt > 0 ? formatAmountInput(String(amt)) : "";
   };
 

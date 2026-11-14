@@ -2,6 +2,7 @@ import { Alert, Platform } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { markPickerOpen, clearPickerMark } from "./crashLog";
+import { inAppCameraAvailable, requestInAppPhoto } from "../components/InAppCameraHost";
 
 const buildFile = (asset) => {
   const uri = asset.uri;
@@ -46,6 +47,9 @@ const friendlyPickerError = (e) => {
 };
 
 async function launchCamera() {
+  // En el teléfono se usa la cámara de la app (components/InAppCameraHost.js): la de Samsung hacía que Android cerrara
+  // la app. En el navegador, o si el anfitrión no está montado, se mantiene la cámara del sistema.
+  if (Platform.OS !== "web" && inAppCameraAvailable()) return requestInAppPhoto();
   const perm = await ImagePicker.requestCameraPermissionsAsync();
   if (!perm.granted) throw new Error("Se necesita permiso de cámara para tomar la foto.");
   purgeOldPickerCache();

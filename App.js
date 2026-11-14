@@ -8,6 +8,7 @@ import AppNavigator from "./src/navigation/AppNavigator";
 import { SessionProvider } from "./src/auth/SessionContext";
 import { SyncProvider } from "./src/offline/SyncProvider";
 import PrinterHost from "./src/components/PrinterHost";
+import InAppCameraHost from "./src/components/InAppCameraHost";
 import { installCrashLogging, checkPreviousSession } from "./src/utils/crashLog";
 
 // Registro de errores y cierres inesperados (utils/crashLog.js).
@@ -23,6 +24,7 @@ export default function App() {
             <SyncProvider>
               <AppNavigator />
               <PrinterHost />
+              <InAppCameraHost />
             </SyncProvider>
           </SessionProvider>
         </PaperProvider>

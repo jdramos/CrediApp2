@@ -1,12 +1,12 @@
-import React, { useCallback, useContext, useRef, useState } from "react";
+import React, { useCallback, useContext, useMemo, useRef, useState } from "react";
 import { View, StyleSheet, FlatList, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Text, Card, Button, ActivityIndicator, HelperText, IconButton, Portal, Modal, TextInput, Chip } from "react-native-paper";
+import { Text, Card, Button, ActivityIndicator, HelperText, IconButton, Portal, Modal, TextInput, Chip, Searchbar } from "react-native-paper";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getPendingDeliveries, markDelivered, reportNotDelivered, MAX_DELIVERY_PHOTOS } from "../api/remittanceApi";
 import { getCreditPolicies } from "../api/creditPolicyApi";
-import InAppCameraModal from "../components/InAppCameraModal";
+import { takePhoto } from "../utils/imagePicker";
 import { confirmAction } from "../utils/confirm";
 import { money } from "../utils/format";
 import { COLORS } from "../theme/colors";
@@ -15,6 +15,14 @@ import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import { withCode } from "../utils/customerLabel";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 import useKeyboardModalStyle from "../components/useKeyboardModalStyle";
+
+// Para buscar sin importar mayúsculas ni tildes.
+const norm = (v) =>
+  String(v ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
 
 const IMAGE_REQUIRED_TRUE = ["true", "1", "si", "sí"];
 
@@ -73,6 +81,7 @@ export default function PendingDeliveriesScreen() {
   const { session } = useContext(SessionContext);
 
   const [deliveries, setDeliveries] = useState([]);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   // null = no se pudo leer la política (sin permiso de catálogos); el
@@ -89,6 +98,18 @@ export default function PendingDeliveriesScreen() {
   const [photos, setPhotos] = useState([]);
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState("");
+
+  // Busca por nombre, código o cédula del cliente, número de crédito, cheque o caja; varias palabras = todas deben coincidir.
+  const visibleDeliveries = useMemo(() => {
+    const words = norm(search).split(/\s+/).filter(Boolean);
+    if (!words.length) return deliveries;
+    return deliveries.filter((d) => {
+      const hay = norm(
+        [d.customer_name, d.customer_code, d.customer_identification, d.credit_code, d.loan_id, d.check_number, d.cash_register_name, d.bank_account_alias].join(" "),
+      );
+      return words.every((w) => hay.includes(w));
+    });
+  }, [deliveries, search]);
 
   const load = useCallback(async () => {
     try {
@@ -126,15 +147,14 @@ export default function PendingDeliveriesScreen() {
     setModalError("");
   };
 
-  // Cámara dentro de la app (components/InAppCameraModal.js): con la cámara del teléfono Android cerraba la app.
-  const [cameraOpen, setCameraOpen] = useState(false);
-  const capturePhoto = () => {
-    setModalError("");
-    setCameraOpen(true);
-  };
-  const onPhotoCaptured = (file) => {
-    setCameraOpen(false);
-    if (file) setPhotos((list) => [...list, file].slice(0, MAX_DELIVERY_PHOTOS));
+  // takePhoto usa la cámara dentro de la app (components/InAppCameraHost.js).
+  const capturePhoto = async () => {
+    try {
+      const file = await takePhoto();
+      if (file) setPhotos((list) => [...list, file].slice(0, MAX_DELIVERY_PHOTOS));
+    } catch (e) {
+      setModalError(e?.message ?? "No se pudo capturar la foto");
+    }
   };
 
   const submitDelivery = async () => {
@@ -210,14 +230,29 @@ export default function PendingDeliveriesScreen() {
           <Text style={{ color: COLORS.text }}>{notice}</Text>
         </Card>
       )}
+      {!loading && deliveries.length > 0 && (
+        <Searchbar
+          placeholder="Buscar por nombre, cédula o crédito"
+          value={search}
+          onChangeText={setSearch}
+          autoCorrect={false}
+          autoCapitalize="none"
+          style={{ marginHorizontal: SPACING.lg, marginBottom: SPACING.sm, backgroundColor: COLORS.card, borderRadius: RADIUS.md }}
+          inputStyle={{ minHeight: 0 }}
+        />
+      )}
       {loading && <ActivityIndicator style={{ marginTop: SPACING.lg }} />}
 
       {!loading && (
         <FlatList
-          data={deliveries}
+          data={visibleDeliveries}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.listContent}
-          ListEmptyComponent={<Text style={styles.empty}>No tenés entregas pendientes.</Text>}
+          ListEmptyComponent={
+            <Text style={styles.empty}>
+              {deliveries.length && search.trim() ? "Ninguna entrega coincide con la búsqueda." : "No tenés entregas pendientes."}
+            </Text>
+          }
           renderItem={({ item }) => (
             <Card style={styles.row}>
               <View style={styles.rowTop}>
@@ -353,7 +388,6 @@ export default function PendingDeliveriesScreen() {
           </KeyboardAwareScroll>
         </Modal>
       </Portal>
-      <InAppCameraModal visible={cameraOpen} onCapture={onPhotoCaptured} onClose={() => setCameraOpen(false)} />
     </SafeAreaView>
   );
 }
