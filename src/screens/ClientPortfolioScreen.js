@@ -828,7 +828,7 @@ export default function ClientPortfolioScreen() {
                     <Text style={styles.balanceValue}>{money(item.principal_balance)}</Text>
                   </View>
                   <View>
-                    <Text style={styles.balanceLabel}>Saldo interés</Text>
+                    <Text style={styles.balanceLabel}>Saldo interés y cargos</Text>
                     <Text style={styles.balanceValue}>{money(item.interest_balance)}</Text>
                   </View>
                   <View>
