@@ -20,7 +20,7 @@ import { uploadGuaranteePhoto, listGuaranteePhotos } from "../api/guaranteePhoto
 import { getCustomerChecklist, uploadCustomerDocument } from "../api/customerDocumentApi";
 import { getCurrentEvaluation } from "../api/customerEvaluationApi";
 import { getCreditPolicies } from "../api/creditPolicyApi";
-import { getLoanProducts, getLoanCustomFields, getIdentityStatus, getReprestamoEligibility } from "../api/loanFormApi";
+import { getLoanProducts, getLoanCustomFields, getIdentityStatus, getReprestamoEligibility, getInsuranceOptions } from "../api/loanFormApi";
 import {
   availableProductsFor,
   productViolationsMessage,
@@ -226,6 +226,13 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   const [insurance, setInsurance] = useState(sim?.insurance ? formatAmountInput(String(sim.insurance)) : "");
   const [otherCharges, setOtherCharges] = useState(sim?.otherCharges ? formatAmountInput(String(sim.otherCharges)) : "");
   const [deduction, setDeduction] = useState("");
+  // Seguro escogido en la solicitud (igual que la web, 2026-11-13). insuranceChoice: "" = el del producto;
+  // "none" = sin seguro; id = ese seguro. insuranceMode: "" = la del producto; CUOTAS / DESEMBOLSO.
+  const [insuranceOptions, setInsuranceOptions] = useState({ enabled: false, data: [] });
+  const [insuranceChoice, setInsuranceChoice] = useState("");
+  const [insuranceMode, setInsuranceMode] = useState("");
+  const [beneficiaryName, setBeneficiaryName] = useState("");
+  const [beneficiaryRelationship, setBeneficiaryRelationship] = useState("");
   const [promoterId, setPromoterId] = useState(null);
   const [vendorId, setVendorId] = useState(null);
   const [showExtra, setShowExtra] = useState(false);
@@ -303,6 +310,9 @@ export default function NewLoanRequestScreen({ route, navigation }) {
         setProductsRegulated(r.data?.regulated !== false);
       })
       .catch(() => setProducts([]));
+    cachedFetch(key("insurance-options"), () => getInsuranceOptions(session.token))
+      .then((r) => setInsuranceOptions({ enabled: Boolean(r.data?.enabled), data: Array.isArray(r.data?.data) ? r.data.data : [] }))
+      .catch(() => setInsuranceOptions({ enabled: false, data: [] }));
     cachedFetch(key(`customfields:${editLoanId || "new"}`), () => getLoanCustomFields(session.token, editLoanId))
       .then((r) => {
         const d = r.data?.data || {};
@@ -452,6 +462,10 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     setDefaultedRate("");
     setFee("");
     setInsurance("");
+    setInsuranceChoice("");
+    setInsuranceMode("");
+    setBeneficiaryName("");
+    setBeneficiaryRelationship("");
     setOtherCharges("");
     setDeduction("");
     setPromoterId(null);
@@ -625,48 +639,6 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   const canQuote = session?.permissions?.includes("creditos.amortizacion.ver");
   const [quote, setQuote] = useState(null); // { loading, summary, error }
   const quoteTag = selectedFrequency?.tag;
-  useEffect(() => {
-    if (!canQuote) return undefined;
-    const amt = toNumber(amount);
-    const months = Number(term);
-    const rate = Number(String(interestRate).replace(",", "."));
-    const rateOk = rate > 0 || (rate === 0 && canZeroRate && String(interestRate ?? "").trim() !== "");
-    if (!(amt > 0) || !(months > 0) || !rateOk || !quoteTag || !branchId) {
-      setQuote(null);
-      return undefined;
-    }
-    let alive = true;
-    setQuote((q) => ({ loading: true, summary: q?.summary || null }));
-    const timer = setTimeout(() => {
-      simulateLoan(session.token, {
-        amount: amt,
-        interest_rate: rate,
-        term: months,
-        requestDate,
-        fee: toNumber(fee),
-        insurance: toNumber(insurance),
-        other_charges: toNumber(otherCharges),
-        frequency_id: quoteTag,
-        branch_id: branchId,
-        ...(productId ? { product_id: productId } : {}),
-        ...(!firstPaymentAuto && firstPaymentDate && quoteTag !== "V" ? { first_payment_date: firstPaymentDate } : {}),
-      })
-        .then((table) => {
-          if (!alive) return;
-          const summary = summarizeSchedule(table);
-          setQuote({ loading: false, summary, table });
-          const first = summary?.rows?.[0]?.paymentDate;
-          if (firstPaymentAuto && first) setFirstPaymentDate(String(first).slice(0, 10));
-        })
-        .catch((e) => {
-          if (alive) setQuote({ loading: false, summary: null, error: true, offline: isNetworkError(e) });
-        });
-    }, 600);
-    return () => {
-      alive = false;
-      clearTimeout(timer);
-    };
-  }, [canQuote, canZeroRate, amount, term, interestRate, quoteTag, branchId, requestDate, fee, insurance, otherCharges, productId, session.token, firstPaymentAuto, firstPaymentAuto ? "" : firstPaymentDate]);
 
   // Producto financiero (igual que la web): elegirlo prellena sus condiciones, fija tipo de crédito/agrupación/moneda
   // y limita monto, plazo, tasa y frecuencia. Si la empresa no tiene productos activos, nada de esto aparece.
@@ -702,17 +674,113 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, branchId, editLoanId, frecuencies.length]);
 
+  // Seguro del crédito (igual que la web): lo propone el producto; se puede cambiar por otro activo o quitar (salvo
+  // que el producto lo exija) y la prima se cobra en las cuotas o descontada al desembolsar.
+  const insuranceEnabled = insuranceOptions.enabled;
+  const insuranceRequired = insuranceEnabled && Number(selectedProduct?.insurance_required) === 1;
+  const effectiveInsuranceId = !insuranceEnabled
+    ? selectedProduct?.insurance_product_id || null
+    : insuranceChoice === "none"
+      ? null
+      : insuranceChoice || selectedProduct?.insurance_product_id || null;
+  const selectedInsurance = !effectiveInsuranceId
+    ? null
+    : insuranceOptions.data.find((o) => String(o.id) === String(effectiveInsuranceId)) ||
+      (String(selectedProduct?.insurance_product_id) === String(effectiveInsuranceId)
+        ? {
+            id: selectedProduct.insurance_product_id,
+            name: selectedProduct.insurance_product_name,
+            premium_type: selectedProduct.insurance_premium_type,
+            premium_value: selectedProduct.insurance_premium_value,
+          }
+        : null);
+  const insuranceChargeMode = insuranceEnabled
+    ? insuranceMode || selectedProduct?.insurance_charge_mode || "CUOTAS"
+    : "CUOTAS";
+  // Prima que se resta del neto al desembolsar (las cuotas no llevan seguro).
+  const insuranceUpfront = insuranceEnabled && effectiveInsuranceId && insuranceChargeMode === "DESEMBOLSO" ? toNumber(insurance) || 0 : 0;
+  const insurancePremiumLabel = (o) =>
+    o.premium_type === "PORCENTAJE_MONTO" ? `${Number(o.premium_value || 0)} % del monto` : `${money(Number(o.premium_value || 0))} fijo`;
+  const chooseInsurance = (id) => {
+    const value = id ? String(id) : "";
+    setInsuranceChoice(value);
+    if (value === "none") {
+      setInsurance("");
+      setBeneficiaryName("");
+      setBeneficiaryRelationship("");
+    }
+  };
+
   // Comisión, otros cargos y seguro que fija el producto (se recalculan con el monto).
   useEffect(() => {
-    if (!selectedProduct) return;
     const amt = toNumber(amount);
-    const feeValue = chargeFromProduct(selectedProduct, "fee", amt);
-    if (feeValue !== null) setFee(formatAmountInput(feeValue.toFixed(2)));
-    const otherValue = chargeFromProduct(selectedProduct, "other", amt);
-    if (otherValue !== null) setOtherCharges(formatAmountInput(otherValue.toFixed(2)));
-    const premium = insurancePremium(selectedProduct, amt);
+    if (selectedProduct) {
+      const feeValue = chargeFromProduct(selectedProduct, "fee", amt);
+      if (feeValue !== null) setFee(formatAmountInput(feeValue.toFixed(2)));
+      const otherValue = chargeFromProduct(selectedProduct, "other", amt);
+      if (otherValue !== null) setOtherCharges(formatAmountInput(otherValue.toFixed(2)));
+    }
+    // Prima del seguro escogido (o del producto, si la empresa aún no escoge seguro).
+    const premium = insuranceEnabled
+      ? selectedInsurance
+        ? insurancePremium(
+            {
+              insurance_product_id: selectedInsurance.id,
+              insurance_premium_type: selectedInsurance.premium_type,
+              insurance_premium_value: selectedInsurance.premium_value,
+            },
+            amt,
+          )
+        : null
+      : insurancePremium(selectedProduct, amt);
     if (premium !== null) setInsurance(formatAmountInput(premium.toFixed(2)));
-  }, [selectedProduct, amount]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProduct, amount, insuranceEnabled, selectedInsurance?.id, selectedInsurance?.premium_value]);
+
+  // Cuota estimada (ver canQuote arriba): va después del seguro porque depende de su forma de cobro.
+  useEffect(() => {
+    if (!canQuote) return undefined;
+    const amt = toNumber(amount);
+    const months = Number(term);
+    const rate = Number(String(interestRate).replace(",", "."));
+    const rateOk = rate > 0 || (rate === 0 && canZeroRate && String(interestRate ?? "").trim() !== "");
+    if (!(amt > 0) || !(months > 0) || !rateOk || !quoteTag || !branchId) {
+      setQuote(null);
+      return undefined;
+    }
+    let alive = true;
+    setQuote((q) => ({ loading: true, summary: q?.summary || null }));
+    const timer = setTimeout(() => {
+      simulateLoan(session.token, {
+        amount: amt,
+        interest_rate: rate,
+        term: months,
+        requestDate,
+        fee: toNumber(fee),
+        // Descontado al desembolsar: las cuotas no llevan seguro.
+        insurance: insuranceUpfront > 0 ? 0 : toNumber(insurance),
+        other_charges: toNumber(otherCharges),
+        frequency_id: quoteTag,
+        branch_id: branchId,
+        ...(productId ? { product_id: productId } : {}),
+        ...(!firstPaymentAuto && firstPaymentDate && quoteTag !== "V" ? { first_payment_date: firstPaymentDate } : {}),
+      })
+        .then((table) => {
+          if (!alive) return;
+          const summary = summarizeSchedule(table);
+          setQuote({ loading: false, summary, table });
+          const first = summary?.rows?.[0]?.paymentDate;
+          if (firstPaymentAuto && first) setFirstPaymentDate(String(first).slice(0, 10));
+        })
+        .catch((e) => {
+          if (alive) setQuote({ loading: false, summary: null, error: true, offline: isNetworkError(e) });
+        });
+    }, 600);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [canQuote, canZeroRate, amount, term, interestRate, quoteTag, branchId, requestDate, fee, insurance, insuranceUpfront, otherCharges, productId, session.token, firstPaymentAuto, firstPaymentAuto ? "" : firstPaymentDate]);
 
   // Tipo de crédito, agrupación y moneda que fija el producto: no se pueden cambiar.
   useEffect(() => {
@@ -865,6 +933,10 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       return "Un crédito sin interés (tasa 0%) requiere el permiso «Registrar crédito sin interés».";
     }
     if (selectedFrequency?.tag === "V" && !dueDate) return "Ingrese la fecha de vencimiento";
+    if (insuranceRequired && !effectiveInsuranceId) return "El producto exige seguro: escoja el seguro del crédito.";
+    if (insuranceUpfront > 0 && (toNumber(deduction) || 0) + insuranceUpfront >= amt) {
+      return "La deducción más el seguro descontado no pueden ser mayores o iguales al monto.";
+    }
 
     // Políticas de crédito (igual que la web, useLoanForm.js::validateForm)
     if (getPolicy("max_amount") && amt > Number(getPolicy("max_amount"))) {
@@ -955,6 +1027,15 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       id_estado_credito: 1,
       guarantee_ids: selectedGuaranteeIds,
       ...(productId ? { product_id: productId } : {}),
+      // Seguro escogido y su forma de cobro (el servidor reparte la prima). Sin la función no se manda nada.
+      ...(insuranceEnabled
+        ? {
+            insurance_product_id: effectiveInsuranceId ? Number(effectiveInsuranceId) : null,
+            insurance_charge_mode: insuranceChargeMode,
+            insurance_beneficiary_name: effectiveInsuranceId ? beneficiaryName.trim() || null : null,
+            insurance_beneficiary_relationship: effectiveInsuranceId ? beneficiaryRelationship.trim() || null : null,
+          }
+        : {}),
       ...(customFields.length ? { custom_fields: customFieldsPayload(customFields, customValues) } : {}),
       ...extra,
     };
@@ -1057,7 +1138,16 @@ export default function NewLoanRequestScreen({ route, navigation }) {
         setInterestRate(loan.interest_rate != null ? String(loan.interest_rate) : "");
         setDefaultedRate(loan.defaulted_rate ? String(loan.defaulted_rate) : "");
         setFee(Number(loan.fee) ? formatAmountInput(String(loan.fee)) : "");
-        setInsurance(Number(loan.insurance) ? formatAmountInput(String(loan.insurance)) : "");
+        // Descontado al desembolsar: la prima está en insurance_upfront.
+        const upfrontMode = String(loan.insurance_charge_mode || "").toUpperCase() === "DESEMBOLSO";
+        const premiumValue = upfrontMode ? loan.insurance_upfront : loan.insurance;
+        setInsurance(Number(premiumValue) ? formatAmountInput(String(premiumValue)) : "");
+        if (loan.insurance_charge_mode) {
+          setInsuranceChoice(loan.insurance_product_id ? String(loan.insurance_product_id) : "none");
+          setInsuranceMode(String(loan.insurance_charge_mode).toUpperCase());
+        }
+        setBeneficiaryName(loan.insurance_beneficiary_name || "");
+        setBeneficiaryRelationship(loan.insurance_beneficiary_relationship || "");
         setOtherCharges(Number(loan.other_charges) ? formatAmountInput(String(loan.other_charges)) : "");
         setDeduction(Number(loan.deduction) ? formatAmountInput(String(loan.deduction)) : "");
         setPromoterId(loan.promoter_id ?? null);
@@ -1405,9 +1495,10 @@ export default function NewLoanRequestScreen({ route, navigation }) {
               />
               <TextInput
                 mode="outlined"
-                label="Cargos por seguros (opcional)"
+                label={selectedInsurance && insuranceEnabled ? "Prima del seguro" : "Cargos por seguros (opcional)"}
                 value={insurance}
                 onChangeText={setInsurance}
+                disabled={Boolean(insuranceEnabled && selectedInsurance)}
                 keyboardType="decimal-pad"
                 style={{ backgroundColor: COLORS.card, marginTop: SPACING.sm }}
                 outlineStyle={{ borderRadius: RADIUS.md }}
@@ -1434,6 +1525,83 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                 left={<TextInput.Icon icon="cash-remove" />}
               />
             </View>
+
+            {insuranceEnabled && (insuranceOptions.data.length > 0 || insuranceRequired || selectedInsurance) && (
+              <View style={styles.card}>
+                <Text style={{ fontWeight: "800", color: COLORS.text, marginBottom: SPACING.sm }}>
+                  Seguro del crédito{insuranceRequired ? " (obligatorio en este producto)" : ""}
+                </Text>
+                <CatalogPickerField
+                  label="Seguro"
+                  value={effectiveInsuranceId ? String(effectiveInsuranceId) : "none"}
+                  options={[
+                    ...(insuranceRequired ? [] : [{ id: "none", label: "Sin seguro" }]),
+                    ...[
+                      ...insuranceOptions.data,
+                      ...(selectedInsurance && !insuranceOptions.data.some((o) => String(o.id) === String(selectedInsurance.id))
+                        ? [selectedInsurance]
+                        : []),
+                    ].map((o) => ({
+                      id: String(o.id),
+                      label: `${[o.provider_name, o.name].filter(Boolean).join(" · ")} — ${insurancePremiumLabel(o)}`,
+                    })),
+                  ]}
+                  onChange={chooseInsurance}
+                />
+                {selectedProduct?.insurance_product_id && String(selectedProduct.insurance_product_id) === String(effectiveInsuranceId) ? (
+                  <HelperText type="info" style={{ paddingHorizontal: 0 }}>Propuesto por el producto financiero.</HelperText>
+                ) : null}
+                {effectiveInsuranceId ? (
+                  <>
+                    <Text style={{ color: COLORS.text, fontWeight: "700", marginTop: SPACING.sm }}>
+                      Prima: {money(toNumber(insurance) || 0)}
+                    </Text>
+                    <Text style={{ color: COLORS.muted, marginTop: SPACING.sm }}>Forma de cobro de la prima</Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm, marginTop: SPACING.xs }}>
+                      {[
+                        ["CUOTAS", "En las cuotas"],
+                        ["DESEMBOLSO", "Descontada al desembolsar"],
+                      ].map(([mode, label]) => (
+                        <Chip
+                          key={mode}
+                          selected={insuranceChargeMode === mode}
+                          onPress={() => setInsuranceMode(mode)}
+                          showSelectedCheck
+                          mode={insuranceChargeMode === mode ? "flat" : "outlined"}
+                        >
+                          {label}
+                        </Chip>
+                      ))}
+                    </View>
+                    <HelperText type="info" style={{ paddingHorizontal: 0 }}>
+                      {insuranceChargeMode === "DESEMBOLSO"
+                        ? `Se descuentan ${money(toNumber(insurance) || 0)} del neto a entregar; las cuotas no llevan seguro.`
+                        : "La prima se suma a las cuotas del plan de pagos."}
+                    </HelperText>
+                    <TextInput
+                      mode="outlined"
+                      label="Beneficiario (opcional)"
+                      value={beneficiaryName}
+                      onChangeText={setBeneficiaryName}
+                      maxLength={150}
+                      style={{ backgroundColor: COLORS.card }}
+                      outlineStyle={{ borderRadius: RADIUS.md }}
+                      left={<TextInput.Icon icon="account-heart-outline" />}
+                    />
+                    <TextInput
+                      mode="outlined"
+                      label="Parentesco (opcional)"
+                      value={beneficiaryRelationship}
+                      onChangeText={setBeneficiaryRelationship}
+                      maxLength={100}
+                      style={{ backgroundColor: COLORS.card, marginTop: SPACING.sm }}
+                      outlineStyle={{ borderRadius: RADIUS.md }}
+                      left={<TextInput.Icon icon="account-group-outline" />}
+                    />
+                  </>
+                ) : null}
+              </View>
+            )}
 
             {canQuote && <QuoteCard quote={quote} frequency={selectedFrequency} showHint />}
 
@@ -1776,7 +1944,10 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                   selectedProduct ? ["Producto financiero", `${selectedProduct.code ? `${selectedProduct.code} · ` : ""}${selectedProduct.name}`] : null,
                   Number(defaultedRate) > 0 ? ["Tasa de mora", `${defaultedRate}%`] : null,
                   toNumber(fee) > 0 ? ["Comisión por desembolso", money(toNumber(fee))] : null,
-                  toNumber(insurance) > 0 ? ["Cargos por seguros", money(toNumber(insurance))] : null,
+                  insuranceEnabled && selectedInsurance ? ["Seguro", selectedInsurance.name || "—"] : null,
+                  toNumber(insurance) > 0
+                    ? [insuranceUpfront > 0 ? "Seguro (descontado al desembolsar)" : "Cargos por seguros", money(toNumber(insurance))]
+                    : null,
                   toNumber(otherCharges) > 0 ? ["Cargos administrativos", money(toNumber(otherCharges))] : null,
                   toNumber(deduction) > 0 ? ["Deducción", money(toNumber(deduction))] : null,
                   selectedFrequency?.tag === "V" ? ["Fecha de vencimiento", dueDate] : null,
@@ -1812,6 +1983,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                 termMonths={Number(term)}
                 amount={toNumber(amount)}
                 deduction={toNumber(deduction)}
+                insuranceUpfront={insuranceUpfront}
                 evaluation={evaluation}
                 guaranteeValue={guarantees
                   .filter((g) => selectedGuaranteeIds.includes(g.id))

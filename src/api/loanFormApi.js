@@ -21,3 +21,8 @@ export const getIdentityStatus = (token, customerId) =>
 // Política de represtamo: { data: { eligible, reasons: [...] } }. No bloquea; manda la solicitud a Comité de Crédito.
 export const getReprestamoEligibility = (token, customerId) =>
   credimasterGet(`/api/loans/customer/${customerId}/represtamo-eligibility`, token);
+
+// Seguros activos para escoger en la solicitud (dueño, 2026-11-13). Responde { enabled, data: [{ id, name,
+// provider_name, premium_type: "FIJO"|"PORCENTAJE_MONTO", premium_value }] }. enabled = false: la empresa aún no
+// tiene la función (el seguro del producto va en las cuotas, como antes).
+export const getInsuranceOptions = (token) => credimasterGet("/api/loans/insurance-options", token);

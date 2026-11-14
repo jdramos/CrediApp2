@@ -54,6 +54,8 @@ export default function LoanRiskSummary({
   termMonths,
   amount,
   deduction,
+  // Seguro descontado al desembolsar: sale del neto y no va en las cuotas.
+  insuranceUpfront = 0,
   evaluation,
   guaranteeValue,
   minCoverage,
@@ -66,10 +68,10 @@ export default function LoanRiskSummary({
   const view = useMemo(() => {
     if (!summary) return null;
     const amt = n(amount);
-    const net = amt - n(deduction);
+    const net = amt - n(deduction) - n(insuranceUpfront);
     const totalToPay = summary.total;
     return { amt, net, totalToPay };
-  }, [summary, amount, deduction]);
+  }, [summary, amount, deduction, insuranceUpfront]);
 
   const tcea = useMemo(() => (view && table.length ? tceaFromAmortizationTable(view.net, table) : null), [view, table]);
 
@@ -107,7 +109,7 @@ export default function LoanRiskSummary({
         <Line label="Costo total del crédito" value={money(view.totalToPay - view.net)} bold />
         <Line label="Intereses" value={money(totals.interest)} />
         <Line label="Comisiones" value={money(totals.fee + n(deduction))} />
-        <Line label="Seguros" value={money(totals.insurance)} />
+        <Line label="Seguros" value={money(totals.insurance + n(insuranceUpfront))} />
         <Line label="Otros cargos" value={money(totals.other)} />
         <Line label="TCEA" value={tcea != null ? `${tcea.toFixed(2)}%` : "—"} />
       </View>
