@@ -9,6 +9,7 @@ import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import { withCode } from "../utils/customerLabel";
+import useSheetRequest from "../hooks/useSheetRequest";
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg, padding: SPACING.lg },
@@ -35,6 +36,8 @@ export default function CustomerSearchScreen({ navigation }) {
   const { session } = useContext(SessionContext);
   // Registrar un cliente nuevo: solo con el permiso clientes.insertar.
   const canCreateCustomer = session?.permissions?.includes("clientes.insertar");
+  // JELDER: solicitud de crédito nuevo en una sola hoja (política solicitud_cliente_nuevo_hoja).
+  const sheetRequest = useSheetRequest(session?.token) && canCreateCustomer && session?.permissions?.includes("creditos.insertar");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -70,9 +73,20 @@ export default function CustomerSearchScreen({ navigation }) {
         Busque un cliente para ver sus créditos y ubicación.
       </Text>
 
-      {canCreateCustomer && (
+      {sheetRequest && (
         <Button
           mode="contained"
+          icon="file-document-edit-outline"
+          onPress={() => navigation.navigate("ClientRequestSheet")}
+          style={{ borderRadius: RADIUS.md, marginBottom: SPACING.sm }}
+        >
+          Solicitud de crédito nuevo
+        </Button>
+      )}
+
+      {canCreateCustomer && (
+        <Button
+          mode={sheetRequest ? "outlined" : "contained"}
           icon="account-plus"
           onPress={() => navigation.navigate("NewCustomer")}
           style={{ borderRadius: RADIUS.md, marginBottom: SPACING.md }}

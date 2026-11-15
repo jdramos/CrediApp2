@@ -158,7 +158,8 @@ export default function CustomerSetupScreen({ route, navigation }) {
     const chosen = isLocal
       ? { id: customerId, customer_name: customerName, identification: customer?.identification, conami_id_actividad_economica: customer?.conami_id_actividad_economica }
       : customer || { id: customerId, customer_name: customerName };
-    navigation.navigate("Creditos", { screen: "NewLoanRequest", params: { customer: chosen } });
+    // Con la hoja «Solicitud de crédito nuevo» (JELDER) el monto, plazo, frecuencia y tasa ya vienen puestos.
+    navigation.navigate("Creditos", { screen: "NewLoanRequest", params: { customer: chosen, ...(route?.params?.sheetLoan ? { sim: route.params.sheetLoan } : {}) } });
   };
 
   return (

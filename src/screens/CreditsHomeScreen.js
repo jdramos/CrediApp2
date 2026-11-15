@@ -10,6 +10,7 @@ import { SessionContext } from "../auth/SessionContext";
 import { getApprovalInbox } from "../api/approvalApi";
 import { getLoans } from "../api/loanApi";
 import { getPendingDeliveries } from "../api/remittanceApi";
+import useSheetRequest from "../hooks/useSheetRequest";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
@@ -61,6 +62,8 @@ export default function CreditsHomeScreen() {
   const [pendingDeliveries, setPendingDeliveries] = useState(0);
 
   const canCreate = session?.permissions?.includes("creditos.insertar");
+  // JELDER: solicitud de crédito nuevo en una sola hoja (política solicitud_cliente_nuevo_hoja).
+  const sheetRequest = useSheetRequest(session?.token) && canCreate && session?.permissions?.includes("clientes.insertar");
   const canSimulate = session?.permissions?.includes("creditos.amortizacion.ver");
   const canApprove = session?.permissions?.includes("aprobaciones.ver");
   const canView = session?.permissions?.includes("creditos.ver");
@@ -98,6 +101,16 @@ export default function CreditsHomeScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <Text variant="headlineSmall" style={styles.header}>Créditos</Text>
         <Text style={styles.sub}>Solicitudes y aprobaciones</Text>
+
+        {sheetRequest && (
+          <ActionCard
+            icon="file-document-edit-outline"
+            title="Solicitud de crédito nuevo"
+            subtitle="Cliente nuevo: llenar toda la hoja"
+            gradient={GRADIENTS.primary}
+            onPress={() => navigation.navigate("Clientes", { screen: "ClientRequestSheet" })}
+          />
+        )}
 
         {canCreate && (
           <ActionCard

@@ -448,6 +448,17 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [presetCustomer?.id]);
 
+  // Solicitud que viene de la hoja «Solicitud de crédito nuevo» (o del simulador con la pantalla ya abierta): monto, plazo,
+  // frecuencia y tasa ya puestos. Va después del efecto del cliente, que limpia el formulario si cambia.
+  useEffect(() => {
+    if (!sim || editLoanId) return;
+    if (sim.amount) setAmount(formatAmountInput(String(sim.amount)));
+    if (sim.term) setTerm(String(sim.term));
+    if (sim.frequencyId) setFrequencyId(sim.frequencyId);
+    if (sim.interestRate) setInterestRate(String(sim.interestRate));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sim]);
+
   const reset = () => {
     setStep(0);
     setQuery("");
@@ -655,7 +666,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     const product = products.find((p) => String(p.id) === String(id)) || null;
     if (!product) return;
     const pre = productPrefill(product, { amount: toNumber(amount) || null, term: term || null });
-    if (pre.interestRate !== undefined) setInterestRate(pre.interestRate);
+    if (pre.interestRate !== undefined) setInterestRate(sim?.fromSheet && sim?.interestRate ? String(sim.interestRate) : pre.interestRate);
     if (pre.defaultedRate !== undefined) setDefaultedRate(pre.defaultedRate);
     if (pre.term !== undefined) setTerm(pre.term);
     if (pre.amount !== undefined) setAmount(formatAmountInput(pre.amount));
