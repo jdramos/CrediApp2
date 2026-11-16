@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { money } from "./format";
 import { buildEscPos, TEST_LINES } from "./escpos";
 import { bytesToBase64 } from "./pdfBuilder";
-import { buildCompactStatementReceiptLines } from "./compactStatement";
+import { buildCompactStatementReceiptLines, wrapLine } from "./compactStatement";
 import {
   isBluetoothPrintAvailable,
   isBluetoothOn,
@@ -95,7 +95,8 @@ export function openPrinterPicker() {
 
 // Manda los bytes del ticket a la impresora indicada.
 async function sendTicket(printer, lines) {
-  const bytes = buildEscPos(lines, { accents: !!printer.accents });
+  // Toda línea más larga que el ticket se parte por palabras (nombre del oficial, direcciones, etc.).
+  const bytes = buildEscPos(lines.flatMap(wrapLine), { accents: !!printer.accents });
   await sendBytes(printer.address, bytesToBase64(bytes));
 }
 

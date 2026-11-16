@@ -75,9 +75,10 @@ export default function MyLoanRequestsScreen() {
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
 
-  const [mineOnly, setMineOnly] = useState(true);
-  const [showMore, setShowMore] = useState(false); // "Más filtros": quién la sometió y sucursal
   const canCreate = session?.permissions?.includes("creditos.insertar");
+  // Quien no puede registrar solicitudes (p. ej. el Desembolsador) nunca tiene «sometidas por mí»: abre viendo todas.
+  const [mineOnly, setMineOnly] = useState(!!canCreate);
+  const [showMore, setShowMore] = useState(false); // "Más filtros": quién la sometió y sucursal
   const [loans, setLoans] = useState([]);
   const [total, setTotal] = useState(0);
   const [pendingTotal, setPendingTotal] = useState(0);

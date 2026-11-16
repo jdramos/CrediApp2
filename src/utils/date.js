@@ -37,3 +37,9 @@ export function periodRange(key) {
       return { from: today, to: today };
   }
 }
+
+// "2026-12-28" (o "2026-12-28T06:00:00.000Z") -> "28/12/2026"; vacío si no hay fecha válida.
+export function ymdToDmy(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value ?? ""));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+}

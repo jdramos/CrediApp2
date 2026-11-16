@@ -107,6 +107,30 @@ const twoCol = (l, r) => {
   return a + " ".repeat(Math.max(1, WIDTH - a.length - b.length)) + b;
 };
 
+// Parte una línea más larga que el ticket (WIDTH columnas) por palabras, conservando su sangría; la continuación lleva 2
+// espacios más. Así «Oficial: 3-Eber Josué Hernández Osorio» o una dirección larga no se cortan a media palabra.
+export function wrapLine(line) {
+  const text = String(line ?? "");
+  if (text.length <= WIDTH) return [text];
+  const indent = /^ */.exec(text)[0];
+  const cont = `${indent}  `;
+  const out = [];
+  let cur = indent;
+  let has = false;
+  for (const word of text.slice(indent.length).split(" ").filter(Boolean)) {
+    const next = has ? `${cur} ${word}` : `${cur}${word}`;
+    if (next.length <= WIDTH || !has) {
+      cur = next;
+      has = true;
+    } else {
+      out.push(cur);
+      cur = `${cont}${word}`;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
 export function buildCompactStatementReceiptLines(statement, tenantName) {
   const cuotas = buildCuotaLines(statement.movements);
   const pagos = buildPaymentLines(statement);
@@ -150,5 +174,7 @@ export function buildCompactStatementReceiptLines(statement, tenantName) {
     twoCol("PAGO TOTAL", fmtAmount(totals.paid)),
     twoCol("SALDO TOTAL", fmtAmount(totals.balance)),
   ];
-  return lines;
+  // Una línea más larga que el ticket (p. ej. «Oficial: 3-Eber Josué Hernández Osorio») se parte por palabras en vez de dejar
+  // que la impresora la corte a media palabra.
+  return lines.flatMap(wrapLine);
 }

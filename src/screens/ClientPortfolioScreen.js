@@ -30,7 +30,7 @@ import { enqueue } from "../offline/queue";
 import { isConnected } from "../offline/network";
 import { useSync } from "../offline/SyncProvider";
 import { money, toNumber } from "../utils/format";
-import { todayISO, shiftDay } from "../utils/date";
+import { todayISO, shiftDay, ymdToDmy } from "../utils/date";
 import { ACTION_TYPES, RESULTS, STAGES } from "../utils/collectionsCatalog";
 import {
   openDirections,
@@ -87,10 +87,10 @@ const styles = StyleSheet.create({
   // por letra.
   rowTop: { gap: SPACING.xs },
   rowTags: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs },
-  name: { fontWeight: "700", color: COLORS.text },
+  name: { fontWeight: "700", color: COLORS.text, fontSize: 17 },
   chipRow: { gap: SPACING.xs, alignItems: "center", paddingRight: SPACING.lg },
   chipRowWrap: { marginTop: SPACING.xs, marginHorizontal: -SPACING.lg },
-  muted: { color: COLORS.muted, marginTop: 2, fontSize: 12 },
+  muted: { color: COLORS.muted, marginTop: 2, fontSize: 14 },
   overdueRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -101,16 +101,31 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     marginTop: SPACING.xs,
   },
-  overdueText: { color: COLORS.danger, fontWeight: "700", fontSize: 13 },
-  overdueAmount: { color: COLORS.danger, fontWeight: "800", fontSize: 15 },
+  overdueText: { color: COLORS.danger, fontWeight: "700", fontSize: 15 },
+  overdueAmount: { color: COLORS.danger, fontWeight: "800", fontSize: 17 },
   balancesRow: { flexDirection: "row", flexWrap: "wrap", columnGap: SPACING.lg, rowGap: SPACING.xs, marginTop: SPACING.sm },
-  balanceLabel: { color: COLORS.muted, fontSize: 11 },
-  balanceValue: { color: COLORS.text, fontWeight: "700" },
+  balanceLabel: { color: COLORS.muted, fontSize: 13 },
+  balanceValue: { color: COLORS.text, fontWeight: "700", fontSize: 16 },
   empty: { textAlign: "center", color: COLORS.muted, marginTop: SPACING.xl, paddingHorizontal: SPACING.xl },
   actionsRow: { flexDirection: "row", gap: SPACING.xs, marginTop: SPACING.md },
   actionBtn: { flex: 1, borderRadius: RADIUS.md },
-  actionBtnLabel: { fontSize: 11, marginVertical: 6 },
+  actionBtnLabel: { fontSize: 13, marginVertical: 6 },
 });
+
+// Datos del crédito de la tarjeta (los manda el servidor en /api/collections/assigned; sin ellos la fila no se muestra).
+const termLabel = (months) => {
+  const n = Number(months);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  const text = String(Math.round(n * 100) / 100);
+  return `${text} ${n === 1 ? "mes" : "meses"}`;
+};
+const rateLabel = (item) => {
+  if (item.loan_interest_rate == null) return "";
+  const rate = `${Math.round(Number(item.loan_interest_rate) * 100) / 100}%`;
+  const fixed = Number(item.loan_interest_fixed_amount);
+  // Muchos créditos se pactan con un interés en monto fijo: se muestra junto a la tasa que resulta.
+  return item.loan_interest_input_mode === "FIXED_AMOUNT" && fixed > 0 ? `${rate} · ${money(fixed)}` : rate;
+};
 
 export default function ClientPortfolioScreen() {
   const gestionModalStyle = useKeyboardModalStyle({
@@ -667,7 +682,7 @@ export default function ClientPortfolioScreen() {
         </ScrollView>
         {sortMode === "route" && myPos && !locating && shown.stats && (
           <View style={{ marginTop: SPACING.xs, gap: SPACING.xs }}>
-            <Text style={{ color: COLORS.muted, fontSize: 12 }}>
+            <Text style={{ color: COLORS.muted, fontSize: 14 }}>
               {shown.stats.stops === 0
                 ? "Ningún cliente de este filtro tiene ubicación guardada."
                 : `${shown.stats.stops} parada${shown.stats.stops === 1 ? "" : "s"} · ≈ ${formatDistance(shown.stats.meters)} en línea recta${
@@ -682,11 +697,11 @@ export default function ClientPortfolioScreen() {
           </View>
         )}
         {sortMode === "near" && myPos && !locating && (
-          <Text style={{ color: COLORS.muted, fontSize: 11, marginTop: SPACING.xs }}>
+          <Text style={{ color: COLORS.muted, fontSize: 13, marginTop: SPACING.xs }}>
             Distancia en línea recta desde tu ubicación. Tocá «Más cerca» para actualizarla.
           </Text>
         )}
-        {!!locError && <Text style={{ color: COLORS.danger, fontSize: 12, marginTop: SPACING.xs }}>{locError}</Text>}
+        {!!locError && <Text style={{ color: COLORS.danger, fontSize: 14, marginTop: SPACING.xs }}>{locError}</Text>}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -783,7 +798,7 @@ export default function ClientPortfolioScreen() {
                       size={14}
                       color={item._dist != null || item._stop ? COLORS.primary : COLORS.muted}
                     />
-                    <Text style={{ color: item._dist != null || item._stop ? COLORS.primary : COLORS.muted, fontSize: 12, fontWeight: "700" }}>
+                    <Text style={{ color: item._dist != null || item._stop ? COLORS.primary : COLORS.muted, fontSize: 14, fontWeight: "700" }}>
                       {item._stop
                         ? `Parada ${item._stop} · a ${formatDistance(item._leg)} ${item._stop === 1 ? "de tu ubicación" : "de la parada anterior"} (${item._distLabel})`
                         : item._dist != null
@@ -793,13 +808,13 @@ export default function ClientPortfolioScreen() {
                   </View>
                 )}
                 {!!item.promised_date && (
-                  <Text style={{ color: String(item.promised_date).slice(0, 10) < today ? COLORS.danger : COLORS.primary, fontSize: 12, fontWeight: "700", marginTop: 2 }}>
+                  <Text style={{ color: String(item.promised_date).slice(0, 10) < today ? COLORS.danger : COLORS.primary, fontSize: 14, fontWeight: "700", marginTop: 2 }}>
                     Promesa: {item.promised_amount != null ? `${money(item.promised_amount)} ` : ""}para el {String(item.promised_date).slice(0, 10)}
                     {String(item.promised_date).slice(0, 10) < today ? " (vencida)" : String(item.promised_date).slice(0, 10) === today ? " (hoy)" : ""}
                   </Text>
                 )}
                 {!!item.followup_date && (
-                  <Text style={{ color: item.followup_date < today ? COLORS.danger : COLORS.primary, fontSize: 12, fontWeight: "700", marginTop: 2 }}>
+                  <Text style={{ color: item.followup_date < today ? COLORS.danger : COLORS.primary, fontSize: 14, fontWeight: "700", marginTop: 2 }}>
                     Volver a visitar: {item.followup_date}
                     {item.followup_date < today ? " (vencida)" : item.followup_date === today ? " (hoy)" : ""}
                   </Text>
@@ -811,10 +826,42 @@ export default function ClientPortfolioScreen() {
                     icon="map-marker-plus-outline"
                     onPress={() => setPlaceItem(item)}
                     style={{ alignSelf: "flex-start", marginLeft: -SPACING.sm }}
-                    labelStyle={{ fontSize: 12 }}
+                    labelStyle={{ fontSize: 14 }}
                   >
                     Guardar ubicación
                   </Button>
+                )}
+                {item.loan_amount != null && (
+                  <View style={styles.balancesRow}>
+                    <View>
+                      <Text style={styles.balanceLabel}>Monto</Text>
+                      <Text style={styles.balanceValue}>{money(item.loan_amount)}</Text>
+                    </View>
+                    {!!termLabel(item.loan_term_months) && (
+                      <View>
+                        <Text style={styles.balanceLabel}>Plazo</Text>
+                        <Text style={styles.balanceValue}>{termLabel(item.loan_term_months)}</Text>
+                      </View>
+                    )}
+                    {!!rateLabel(item) && (
+                      <View>
+                        <Text style={styles.balanceLabel}>Tasa</Text>
+                        <Text style={styles.balanceValue}>{rateLabel(item)}</Text>
+                      </View>
+                    )}
+                    {!!item.loan_frequency_name && (
+                      <View>
+                        <Text style={styles.balanceLabel}>Frecuencia</Text>
+                        <Text style={styles.balanceValue}>{item.loan_frequency_name}</Text>
+                      </View>
+                    )}
+                    {!!ymdToDmy(item.loan_disbursement_date) && (
+                      <View>
+                        <Text style={styles.balanceLabel}>Desembolso</Text>
+                        <Text style={styles.balanceValue}>{ymdToDmy(item.loan_disbursement_date)}</Text>
+                      </View>
+                    )}
+                  </View>
                 )}
                 <View style={styles.balancesRow}>
                   <View>
@@ -837,6 +884,14 @@ export default function ClientPortfolioScreen() {
                       {money(item.display_balance ?? Number(item.principal_balance || 0) + Number(item.interest_balance || 0))}
                     </Text>
                   </View>
+                  {!!ymdToDmy(item.loan_due_date) && (
+                    <View>
+                      <Text style={styles.balanceLabel}>Vencimiento del crédito</Text>
+                      <Text style={[styles.balanceValue, Number(item.loan_days_past_due) > 0 && { color: COLORS.danger }]}>
+                        {ymdToDmy(item.loan_due_date)}
+                      </Text>
+                    </View>
+                  )}
                 </View>
                 {inArrears && Number(item.overdue_installments) > 0 && (
                   <View style={styles.overdueRow}>
@@ -847,7 +902,7 @@ export default function ClientPortfolioScreen() {
                   </View>
                 )}
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: SPACING.xs }}>
-                  <Text style={{ color: COLORS.muted, fontSize: 12, flex: 1 }}>
+                  <Text style={{ color: COLORS.muted, fontSize: 14, flex: 1 }}>
                     {item.last_payment_date
                       ? `Último pago: ${item.last_payment_date} · ${money(item.last_payment_amount)}`
                       : "Sin pagos registrados"}
@@ -858,7 +913,7 @@ export default function ClientPortfolioScreen() {
                       mode="text"
                       icon={historyOpen.has(item.loan_id) ? "chevron-up" : "history"}
                       onPress={() => toggleHistory(item.loan_id)}
-                      labelStyle={{ fontSize: 12 }}
+                      labelStyle={{ fontSize: 14 }}
                     >
                       {historyOpen.has(item.loan_id) ? "Ocultar" : "Ver pagos"}
                     </Button>
@@ -870,7 +925,7 @@ export default function ClientPortfolioScreen() {
                   icon="cash-check"
                   onPress={() => setPayoffFor(item)}
                   style={{ alignSelf: "flex-start", marginLeft: -SPACING.sm }}
-                  labelStyle={{ fontSize: 12 }}
+                  labelStyle={{ fontSize: 14 }}
                 >
                   Saldo para cancelar hoy
                 </Button>
@@ -878,7 +933,7 @@ export default function ClientPortfolioScreen() {
                   <View style={{ marginTop: SPACING.xs, gap: 6 }}>
                     {history[item.loan_id]?.loading && <ActivityIndicator size="small" />}
                     {!!history[item.loan_id]?.error && (
-                      <Text style={{ color: COLORS.danger, fontSize: 12 }}>{history[item.loan_id].error}</Text>
+                      <Text style={{ color: COLORS.danger, fontSize: 14 }}>{history[item.loan_id].error}</Text>
                     )}
                     {(history[item.loan_id]?.rows || []).map((p) => (
                       <Pressable
@@ -893,10 +948,10 @@ export default function ClientPortfolioScreen() {
                         }}
                       >
                         <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                          <Text style={{ color: COLORS.text, fontWeight: "700", fontSize: 13 }}>{p.payment_date}</Text>
-                          <Text style={{ color: COLORS.success, fontWeight: "800", fontSize: 13 }}>{money(p.amount)}</Text>
+                          <Text style={{ color: COLORS.text, fontWeight: "700", fontSize: 15 }}>{p.payment_date}</Text>
+                          <Text style={{ color: COLORS.success, fontWeight: "800", fontSize: 15 }}>{money(p.amount)}</Text>
                         </View>
-                        <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                        <Text style={{ color: COLORS.muted, fontSize: 13 }}>
                           Recibo {formatReceiptNumber(p.id)} · {p.forma_pago_name || "-"} · Capital {money(p.principal_payment)} · Interés{" "}
                           {money(p.interest_payment)}
                           {p.usd_amount ? ` · US$ ${Number(p.usd_amount).toFixed(2)}` : ""}
@@ -905,7 +960,7 @@ export default function ClientPortfolioScreen() {
                     ))}
                     {history[item.loan_id]?.total > (history[item.loan_id]?.rows || []).length && (
                       <View>
-                        <Text style={{ color: COLORS.muted, fontSize: 11 }}>
+                        <Text style={{ color: COLORS.muted, fontSize: 13 }}>
                           Mostrando {(history[item.loan_id]?.rows || []).length} de {history[item.loan_id].total} pagos.
                         </Text>
                         <Button
@@ -1025,7 +1080,7 @@ export default function ClientPortfolioScreen() {
             <>
               <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text }}>{contactItem.customer_name}</Text>
               <Text style={{ color: COLORS.muted }}>{phoneOf(contactItem)}</Text>
-              <Text style={{ color: COLORS.muted, fontSize: 12, marginTop: SPACING.xs }}>{reminderText(contactItem)}</Text>
+              <Text style={{ color: COLORS.muted, fontSize: 14, marginTop: SPACING.xs }}>{reminderText(contactItem)}</Text>
               <Button mode="contained" icon="phone" onPress={() => contactAction((i) => callPhone(phoneOf(i)))} style={{ borderRadius: RADIUS.md }}>
                 Llamar
               </Button>
@@ -1180,7 +1235,7 @@ export default function ClientPortfolioScreen() {
                 );
               })}
             </View>
-            <Text style={{ color: COLORS.muted, fontSize: 12, marginBottom: SPACING.md }}>
+            <Text style={{ color: COLORS.muted, fontSize: 14, marginBottom: SPACING.md }}>
               {gestionForm.next_action_date
                 ? `Te avisaremos el ${gestionForm.next_action_date}. Tocá la opción otra vez para quitarla.`
                 : "Opcional: la app te lo recuerda ese día y lo pone en «Por visitar hoy»."}
