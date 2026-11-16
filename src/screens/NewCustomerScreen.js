@@ -82,7 +82,9 @@ export default function NewCustomerScreen({ navigation, route }) {
     : session?.permissions?.includes("clientes.insertar");
   const regulated = session?.tenant?.conami_regulated !== false;
   const modules = session?.tenant?.enabled_modules;
-  const compliance = !Array.isArray(modules) || modules.includes("compliance");
+  // La declaración PEP (persona expuesta políticamente) solo la exige el cumplimiento regulado (CONAMI/PLA-FT); en una
+  // empresa no regulada no se pregunta ni se exige (el cliente queda guardado como «no PEP»).
+  const compliance = regulated && (!Array.isArray(modules) || modules.includes("compliance"));
   const opts = useMemo(() => ({ regulated, compliance }), [regulated, compliance]);
 
   const [form, setForm] = useState(EMPTY_FORM);

@@ -79,7 +79,9 @@ export default function ClientRequestSheetScreen({ navigation }) {
   const [installment, setInstallment] = useState({ loading: false, value: null, error: "" });
   const rateTouched = useRef(false);
 
-  const compliance = !Array.isArray(modules) || modules.includes("compliance");
+  // La declaración de persona expuesta políticamente (PEP) la exige el cumplimiento regulado (CONAMI/PLA-FT); la hoja de
+  // papel de una empresa no regulada no la trae, así que ahí no se pide (el cliente queda guardado como «no PEP»).
+  const compliance = regulated && (!Array.isArray(modules) || modules.includes("compliance"));
   const opts = useMemo(() => ({ regulated, compliance }), [regulated, compliance]);
 
   const loadCatalogs = async () => {
