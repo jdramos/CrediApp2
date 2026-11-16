@@ -3,5 +3,7 @@
   <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
   <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
   <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+  <!-- Solo para cancelDiscovery() antes de conectar (Android 12+); la app no busca dispositivos ni usa la ubicación. -->
+  <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
   <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 </manifest>

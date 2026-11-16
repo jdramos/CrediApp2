@@ -1,4 +1,4 @@
-import { Alert, PermissionsAndroid, Platform, ToastAndroid } from "react-native";
+import { Alert, Linking, PermissionsAndroid, Platform, ToastAndroid } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { money } from "./format";
 import { buildEscPos, TEST_LINES } from "./escpos";
@@ -6,7 +6,6 @@ import { bytesToBase64 } from "./pdfBuilder";
 import { buildCompactStatementReceiptLines } from "./compactStatement";
 import {
   isBluetoothPrintAvailable,
-  hasBluetoothPermission,
   isBluetoothOn,
   getPairedDevices as nativePairedDevices,
   sendBytes,
@@ -55,15 +54,28 @@ export async function ensureBluetoothReady() {
   if (!isBluetoothPrintAvailable()) {
     throw Object.assign(new Error("Este teléfono no puede imprimir por Bluetooth desde la app."), { code: "ERR_UNAVAILABLE" });
   }
-  if (Platform.OS === "android" && Platform.Version >= 31 && !hasBluetoothPermission()) {
-    const res = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT, {
-      title: "Permiso de Bluetooth",
-      message: "CrediApp necesita el permiso de Bluetooth para conectarse a la impresora de recibos.",
-      buttonPositive: "Permitir",
-      buttonNegative: "Ahora no",
-    });
-    if (res !== PermissionsAndroid.RESULTS.GRANTED) {
-      throw Object.assign(new Error("Sin el permiso de Bluetooth no se puede imprimir. Actívelo en los ajustes de la app."), { code: "ERR_NO_PERMISSION" });
+  if (Platform.OS === "android" && Platform.Version >= 31) {
+    // «Dispositivos cercanos» (Android 12+): CONNECT para hablar con la impresora y SCAN para cancelDiscovery() antes de
+    // conectar. Se piden juntos en un solo aviso del sistema, dentro de la propia app.
+    const { BLUETOOTH_CONNECT, BLUETOOTH_SCAN } = PermissionsAndroid.PERMISSIONS;
+    const missing = [];
+    for (const perm of [BLUETOOTH_CONNECT, BLUETOOTH_SCAN]) {
+      if (!(await PermissionsAndroid.check(perm))) missing.push(perm);
+    }
+    if (missing.length) {
+      const res = await PermissionsAndroid.requestMultiple(missing);
+      // Lo imprescindible es CONNECT; SCAN solo evita un error al conectar y la impresión sigue sin él.
+      if (res[BLUETOOTH_CONNECT] !== undefined && res[BLUETOOTH_CONNECT] !== PermissionsAndroid.RESULTS.GRANTED) {
+        const blocked = res[BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN;
+        throw Object.assign(
+          new Error(
+            blocked
+              ? "El permiso «Dispositivos cercanos» está bloqueado. Actívelo en los ajustes de la app para poder imprimir."
+              : "Sin el permiso «Dispositivos cercanos» no se puede imprimir. Vuelva a tocar Imprimir y toque Permitir.",
+          ),
+          { code: "ERR_NO_PERMISSION", blocked },
+        );
+      }
     }
   }
   if (!isBluetoothOn()) {
@@ -132,6 +144,9 @@ export async function printReceipt(lines) {
     Alert.alert(title, e?.message || "Intente de nuevo.", [
       ...(canChange
         ? [{ text: "Elegir otra impresora", onPress: () => { openPrinterPicker(); } }]
+        : []),
+      ...(code === "ERR_NO_PERMISSION"
+        ? [{ text: "Abrir ajustes", onPress: () => { Linking.openSettings().catch(() => {}); } }]
         : []),
       { text: "Cerrar", style: "cancel" },
     ]);
