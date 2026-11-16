@@ -127,7 +127,10 @@ class CredimasterPrinterModule : Module() {
             promise.reject("ERR_NOT_FOUND", "La impresora guardada ya no existe. Elíjala de nuevo.", null)
             return@Thread
           }
-          ad.cancelDiscovery()
+          // La app nunca busca dispositivos: esto solo evita que una búsqueda del sistema estorbe la conexión.
+          // Desde Android 12 cancelDiscovery() exige BLUETOOTH_SCAN (que no pedimos); sin ese permiso lanza
+          // SecurityException y se mostraba como «Falta el permiso de Bluetooth» aunque el de conexión estuviera dado.
+          try { ad.cancelDiscovery() } catch (_: SecurityException) {}
           socket = connect(device)
           stage = "write"
           val out = socket.outputStream
@@ -143,7 +146,8 @@ class CredimasterPrinterModule : Module() {
           Thread.sleep(700) // deja que la impresora termine de recibir antes de cerrar
           promise.resolve(true)
         } catch (e: SecurityException) {
-          promise.reject("ERR_NO_PERMISSION", "Falta el permiso de Bluetooth para la app", e)
+          // Se incluye el detalle del sistema para saber qué permiso pidió (ya no se confunde con el de conexión).
+          promise.reject("ERR_NO_PERMISSION", "Falta un permiso de Bluetooth para la app (${e.message ?: "sin detalle"})", e)
         } catch (e: IOException) {
           if (stage == "connect") {
             promise.reject("ERR_CONNECT", "No se pudo conectar con la impresora. Verifique que esté encendida, cerca y emparejada.", e)
