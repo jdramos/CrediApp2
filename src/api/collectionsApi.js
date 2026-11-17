@@ -11,6 +11,11 @@ export const getAssignedLoans = (token, params = {}) => {
   return credimasterGet(`/api/collections/assigned${qs ? `?${qs}` : ""}`, token);
 };
 
+// Gestores cuya cartera puede ver el usuario como supervisor (los que tiene
+// asignados y el suyo; todos si es administrador) — permiso
+// creditos.productividad.ver. Para el selector de "Mi cartera".
+export const getPortfolioCollectors = (token) => credimasterGet("/api/collections/productivity/collectors", token);
+
 // Registra una gestión de cobranza (bitácora real, tabla
 // collection_actions) — permiso cobranza.gestionar. Mismos campos y mismos
 // códigos (action_type/result/stage) que la bitácora web

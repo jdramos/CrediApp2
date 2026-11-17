@@ -20,7 +20,7 @@ import DateWheelPicker from "../components/DateWheelPicker";
 import useKeyboardModalStyle from "../components/useKeyboardModalStyle";
 import * as Location from "expo-location";
 import { SessionContext } from "../auth/SessionContext";
-import { getAssignedLoans, logVisit, getMyLoanPayments } from "../api/collectionsApi";
+import { getAssignedLoans, logVisit, getMyLoanPayments, getPortfolioCollectors } from "../api/collectionsApi";
 import { sendAutoSms } from "../utils/paymentSms";
 import { buildShortVisitSms } from "../utils/visitSms";
 import { isNetworkError } from "../api/credimasterClient";
@@ -146,6 +146,23 @@ export default function ClientPortfolioScreen() {
   const [message, setMessage] = useState("");
   const [managedIds, setManagedIds] = useState(new Set());
 
+  // Supervisores (dueño 2026-11-17: «la opción para los supervisores de hacer
+  // la gestión en la app»): además de su ruta ven la cartera de su equipo o la
+  // de un gestor, y desde ahí gestionan y cobran. "mine" = su ruta, "team" =
+  // todo su equipo, o el id del gestor. Sin ruta propia arranca en el equipo.
+  const ownCollectorId = session?.user?.collector_id ? Number(session.user.collector_id) : null;
+  const canSeeTeam = !!session?.permissions?.includes("creditos.productividad.ver");
+  const [scope, setScope] = useState(() => (!ownCollectorId && canSeeTeam ? "team" : "mine"));
+  const [teamCollectors, setTeamCollectors] = useState([]);
+  useEffect(() => {
+    if (!canSeeTeam) return;
+    cachedFetch(`${session.user.id}:portfolioCollectors`, () => getPortfolioCollectors(session.token))
+      .then((r) => setTeamCollectors((r?.data?.data || []).filter((c) => Number(c.id) !== ownCollectorId)))
+      .catch(() => {});
+  }, [canSeeTeam, session.token, session.user.id, ownCollectorId]);
+  const scopeName =
+    scope === "mine" ? null : scope === "team" ? "Mi equipo" : teamCollectors.find((c) => String(c.id) === String(scope))?.name || "Gestor";
+
   // Orden de la lista: "mora" (como lo manda el servidor: más atrasados primero)
   // o "near" (más cerca de la ubicación actual del cobrador, en línea recta,
   // usando la casa o el negocio guardados del cliente).
@@ -247,17 +264,20 @@ export default function ClientPortfolioScreen() {
       setLoading(true);
       setError("");
       const q = debouncedSearch.trim();
-      const cacheKey = `${session.user.id}:portfolio`;
+      // La ruta propia conserva su clave (la usa el cobro sin señal); el
+      // equipo y cada gestor se guardan aparte.
+      const cacheKey = scope === "mine" ? `${session.user.id}:portfolio` : `${session.user.id}:portfolio:${scope}`;
+      const collectorParam = scope === "mine" ? undefined : scope;
       let res;
       let stamp = null;
       if (!q) {
         // Cartera completa: se guarda para poder verla sin señal.
-        const r = await cachedFetch(cacheKey, () => getAssignedLoans(session.token));
+        const r = await cachedFetch(cacheKey, () => getAssignedLoans(session.token, { collector_id: collectorParam }));
         res = r.data;
         stamp = r.cachedAt;
       } else {
         try {
-          res = await getAssignedLoans(session.token, { search: q });
+          res = await getAssignedLoans(session.token, { search: q, collector_id: collectorParam });
         } catch (e) {
           if (!isNetworkError(e)) throw e;
           // Sin señal: se busca dentro de la última cartera guardada.
@@ -291,7 +311,7 @@ export default function ClientPortfolioScreen() {
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
-  }, [session.token, session.user.id, debouncedSearch]);
+  }, [session.token, session.user.id, debouncedSearch, scope]);
 
   useFocusEffect(useCallback(() => { setManagedIds(new Set()); load(); }, [load]));
 
@@ -623,8 +643,38 @@ export default function ClientPortfolioScreen() {
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.headerRow}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
-        <Text variant="headlineSmall" style={styles.title}>Mi cartera</Text>
+        <Text variant="headlineSmall" style={styles.title}>{scopeName ? `Cartera · ${scopeName}` : "Mi cartera"}</Text>
       </View>
+      {canSeeTeam && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[styles.chipRow, { paddingLeft: SPACING.lg, paddingBottom: SPACING.xs }]}
+          keyboardShouldPersistTaps="handled"
+        >
+          {[
+            ...(ownCollectorId ? [["mine", "Mi ruta", "account-outline"]] : []),
+            ["team", "Todo mi equipo", "account-group-outline"],
+            ...teamCollectors.map((c) => [String(c.id), c.name, "account-tie-outline"]),
+          ].map(([key, label, icon]) => (
+            <Chip
+              key={key}
+              compact
+              icon={icon}
+              selected={String(scope) === key}
+              showSelectedCheck={false}
+              onPress={() => {
+                if (String(scope) === key) return;
+                setLoans([]);
+                setScope(key);
+              }}
+              style={{ backgroundColor: String(scope) === key ? COLORS.primarySoft : COLORS.card }}
+            >
+              {label}
+            </Chip>
+          ))}
+        </ScrollView>
+      )}
       <Text style={styles.sub}>
         {loans.length} cliente{loans.length === 1 ? "" : "s"} asignado{loans.length === 1 ? "" : "s"}
         {overdueSummary.count > 0 ? ` · ${overdueSummary.count} en mora (${money(overdueSummary.amount)})` : ""}
@@ -790,6 +840,9 @@ export default function ClientPortfolioScreen() {
                   <CopyableId label="Cédula: " value={item.customer_identification} textStyle={styles.muted} />
                   <Text style={styles.muted}> · Crédito #{item.credit_code || item.loan_id}</Text>
                 </View>
+                {scope !== "mine" && !!item.collector_name && (
+                  <Text style={styles.muted}>Gestor: {item.collector_name}</Text>
+                )}
                 <AddressLines customer={item} />
                 {(sortMode === "near" || sortMode === "route") && myPos && (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 }}>
