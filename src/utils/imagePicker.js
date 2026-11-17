@@ -91,9 +91,22 @@ export function takePhoto() {
   return launchCamera();
 }
 
+// Permiso «Subir fotos desde la galería» (fotos.galeria; dueño 2026-11-17:
+// «en todos lados debe existir permiso para agregar fotos desde la
+// galería»). Lo fija SessionContext con los permisos del usuario; sin él,
+// toda foto se toma con la cámara en ese momento.
+export const GALLERY_PERMISSION = "fotos.galeria";
+let galleryAllowed = false;
+export function setGalleryAllowed(allowed) {
+  galleryAllowed = !!allowed;
+}
+export const isGalleryAllowed = () => galleryAllowed;
+
 // Muestra "Cámara / Galería / Cancelar" y devuelve { uri, name, type } listo
-// para meter en un FormData, o null si el usuario cancela.
+// para meter en un FormData, o null si el usuario cancela. Sin el permiso de
+// galería abre directo la cámara.
 export function pickImage() {
+  if (!galleryAllowed) return launchCamera();
   return new Promise((resolve, reject) => {
     Alert.alert(
       "Agregar foto",

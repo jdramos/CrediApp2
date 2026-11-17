@@ -6,7 +6,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { SessionContext } from "../auth/SessionContext";
 import { getPendingDeliveries, markDelivered, reportNotDelivered, MAX_DELIVERY_PHOTOS } from "../api/remittanceApi";
 import { getCreditPolicies } from "../api/creditPolicyApi";
-import { takePhoto } from "../utils/imagePicker";
+import { isGalleryAllowed, pickImage } from "../utils/imagePicker";
 import { confirmAction } from "../utils/confirm";
 import { ensureWorkday } from "../tracking/workday";
 import { money } from "../utils/format";
@@ -148,10 +148,11 @@ export default function PendingDeliveriesScreen() {
     setModalError("");
   };
 
-  // takePhoto usa la cámara dentro de la app (components/InAppCameraHost.js).
+  // Cámara dentro de la app (components/InAppCameraHost.js); con el permiso
+  // «Subir fotos desde la galería» también deja elegir de la galería.
   const capturePhoto = async () => {
     try {
-      const file = await takePhoto();
+      const file = await pickImage();
       if (file) setPhotos((list) => [...list, file].slice(0, MAX_DELIVERY_PHOTOS));
     } catch (e) {
       setModalError(e?.message ?? "No se pudo capturar la foto");
@@ -373,7 +374,7 @@ export default function PendingDeliveriesScreen() {
               disabled={photos.length >= MAX_DELIVERY_PHOTOS}
               style={{ marginTop: SPACING.sm, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
             >
-              {photos.length ? `Agregar otra foto (${photos.length}/${MAX_DELIVERY_PHOTOS})` : "Tomar foto"}
+              {photos.length ? `Agregar otra foto (${photos.length}/${MAX_DELIVERY_PHOTOS})` : isGalleryAllowed() ? "Agregar foto" : "Tomar foto"}
             </Button>
 
             <HelperText type="error" visible={!!modalError}>{modalError}</HelperText>

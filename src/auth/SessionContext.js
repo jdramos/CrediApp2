@@ -15,6 +15,7 @@ import { confirmAction } from "../utils/confirm";
 import { setNoticeReporter } from "../utils/contact";
 import { reportPaymentNotice } from "../api/paymentNoticeApi";
 import { flushCrashReports } from "../utils/crashLog";
+import { GALLERY_PERMISSION, setGalleryAllowed } from "../utils/imagePicker";
 
 export const SessionContext = createContext(null);
 
@@ -25,6 +26,10 @@ export const SessionContext = createContext(null);
 export function SessionProvider({ children }) {
   const [loadingBoot, setLoadingBoot] = useState(true);
   const [session, setSession] = useState(null); // { token, user, permissions, tenant }
+  // Fotos desde la galería solo con el permiso (utils/imagePicker.js).
+  useEffect(() => {
+    setGalleryAllowed(!!session?.permissions?.includes(GALLERY_PERMISSION));
+  }, [session?.permissions]);
 
   useEffect(() => {
     (async () => {
