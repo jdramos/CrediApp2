@@ -217,7 +217,7 @@ export default function DashboardScreen() {
             branchLabel={multiBranch ? `#${a.branchId}` : undefined}
           />
         ))}
-        {canPay && <WorkdayCard />}
+        {(canPay || canDeliver) && <WorkdayCard />}
         {session?.permissions?.includes("balances.ver") && <FinanceGlance />}
         <Text style={styles.sectionTitle}>Accesos rápidos</Text>
         <View style={styles.actionsGrid}>

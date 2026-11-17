@@ -8,6 +8,7 @@ import { getPendingDeliveries, markDelivered, reportNotDelivered, MAX_DELIVERY_P
 import { getCreditPolicies } from "../api/creditPolicyApi";
 import { takePhoto } from "../utils/imagePicker";
 import { confirmAction } from "../utils/confirm";
+import { ensureWorkday } from "../tracking/workday";
 import { money } from "../utils/format";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
@@ -159,6 +160,8 @@ export default function PendingDeliveriesScreen() {
 
   const submitDelivery = async () => {
     if (savingRef.current) return;
+    // Jornada obligatoria para quien entrega (ver tracking/workday.js): la ruta de sus entregas queda registrada.
+    if (!(await ensureWorkday(session, "entregas"))) return;
     savingRef.current = true;
     try {
       setSaving(true);
@@ -176,6 +179,7 @@ export default function PendingDeliveriesScreen() {
 
   const submitNotDelivered = async () => {
     if (savingRef.current) return;
+    if (!(await ensureWorkday(session, "entregas"))) return;
     savingRef.current = true;
     try {
       setSaving(true);

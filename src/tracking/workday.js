@@ -24,12 +24,17 @@ export const CONSENT_TEXT =
   "• Los puntos se guardan 90 días.\n" +
   "• La app debe estar abierta para registrar (con la pantalla encendida).";
 
-// ¿Este usuario debe tener la jornada iniciada para operar? Solo los que
-// tienen cobrador vinculado (los de oficina no hacen ruta). `collector_id`
-// llega en el login; una sesión guardada de antes del cambio no lo trae y no
-// queda sujeta a la regla hasta que vuelva a iniciar sesión.
+// ¿Este usuario debe tener la jornada iniciada para operar? Los que tienen
+// cobrador vinculado y los que entregan desembolsos en la calle (permiso
+// especial.creditos.entregar, el Desembolsador no tiene cobrador); los de
+// oficina no hacen ruta. `collector_id` llega en el login; una sesión guardada
+// de antes del cambio no lo trae y no queda sujeta a la regla hasta que vuelva
+// a iniciar sesión.
 export function workdayRequired(session) {
-  return REQUIRE_WORKDAY && !!session?.user?.collector_id;
+  return (
+    REQUIRE_WORKDAY &&
+    (!!session?.user?.collector_id || !!session?.permissions?.includes("especial.creditos.entregar"))
+  );
 }
 
 const NO_PERMISSION_MESSAGE =
