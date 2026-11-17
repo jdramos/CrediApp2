@@ -849,6 +849,12 @@ export default function ClientPortfolioScreen() {
                         <Text style={styles.balanceValue}>{rateLabel(item)}</Text>
                       </View>
                     )}
+                    {Number(item.loan_total_payable) > 0 && (
+                      <View>
+                        <Text style={styles.balanceLabel}>Total a pagar</Text>
+                        <Text style={styles.balanceValue}>{money(item.loan_total_payable)}</Text>
+                      </View>
+                    )}
                     {!!item.loan_frequency_name && (
                       <View>
                         <Text style={styles.balanceLabel}>Frecuencia</Text>
