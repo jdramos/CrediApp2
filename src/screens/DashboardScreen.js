@@ -23,6 +23,7 @@ import { workdayRequired } from "../tracking/workday";
 import { useTenantLogo } from "../hooks/useTenantLogo";
 import WorkdayCard from "../components/WorkdayCard";
 import FinanceGlance from "../components/FinanceGlance";
+import RecoveryCard from "../components/RecoveryCard";
 import { money } from "../utils/format";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
@@ -91,6 +92,30 @@ function ActionTile({ icon, title, subtitle, gradient, onPress, badge }) {
   );
 }
 
+// Acceso grande del Inicio del gestor (contactos, inactivos, simulador).
+function QuickButton({ icon, label, onPress, color = COLORS.primary }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={{
+        flex: 1,
+        backgroundColor: color,
+        borderRadius: RADIUS.lg,
+        paddingVertical: SPACING.md,
+        paddingHorizontal: SPACING.sm,
+        alignItems: "center",
+        gap: 6,
+        ...SHADOW.card,
+      }}
+    >
+      <MaterialCommunityIcons name={icon} size={26} color={COLORS.onGradient} />
+      <Text style={{ color: COLORS.onGradient, fontWeight: "800", textAlign: "center", fontSize: 13 }}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export default function DashboardScreen() {
   const navigation = useNavigation();
   const { session, signOut } = useContext(SessionContext);
@@ -112,6 +137,9 @@ export default function DashboardScreen() {
   const canSeeRoutes = session?.permissions?.includes("rastreo.ver");
   const canViewCustomers = session?.permissions?.includes("clientes.ver");
   const canDeliver = session?.permissions?.includes("especial.creditos.entregar");
+  const canInactive = session?.permissions?.includes("clientes.inactivos.ver");
+  // Quien cobra ve arriba su recuperación del día y los tres accesos (contactos, inactivos y simulador).
+  const showCollectorHome = !!canPay;
 
   const logoUrl = useTenantLogo(session?.token);
   const fullName = session?.user?.full_name || session?.user?.user_name || "Usuario";
@@ -218,10 +246,29 @@ export default function DashboardScreen() {
           />
         ))}
         {(canPay || canDeliver) && <WorkdayCard />}
+        {showCollectorHome && <RecoveryCard />}
+        {showCollectorHome && (canViewCustomers || canInactive || canSimulate) && (
+          <View style={{ flexDirection: "row", gap: SPACING.sm }}>
+            {canViewCustomers && (
+              <QuickButton icon="account-group" label="Lista de contactos" onPress={() => navigation.navigate("Clientes")} />
+            )}
+            {canInactive && (
+              <QuickButton icon="account-clock-outline" label="Lista de inactivos" onPress={() => navigation.navigate("InactiveCustomers")} />
+            )}
+            {canSimulate && (
+              <QuickButton
+                icon="calculator-variant-outline"
+                label="Simulador"
+                color={COLORS.success}
+                onPress={() => navigation.navigate("Creditos", { screen: "LoanSimulator" })}
+              />
+            )}
+          </View>
+        )}
         {session?.permissions?.includes("balances.ver") && <FinanceGlance />}
         <Text style={styles.sectionTitle}>Accesos rápidos</Text>
         <View style={styles.actionsGrid}>
-          {canViewCustomers && (
+          {canViewCustomers && !showCollectorHome && (
             <ActionTile
               icon="account-group"
               title="Clientes"
@@ -294,7 +341,7 @@ export default function DashboardScreen() {
               onPress={() => navigation.navigate("Finance")}
             />
           )}
-          {canSimulate && (
+          {canSimulate && !showCollectorHome && (
             <ActionTile
               icon="calculator-variant-outline"
               title="Simulador"

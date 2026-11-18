@@ -146,3 +146,8 @@ export const getWorklist = (token, params = {}) => {
   ).toString();
   return credimasterGet(`/api/collections/worklist${qs ? `?${qs}` : ""}`, token);
 };
+
+// "Recuperación del día" del Inicio del gestor: lo cobrado ese día (por omisión hoy) partido en del día, mora, vencido
+// y adelantado, más el número de pagos. Si el usuario no está vinculado a un cobrador, la respuesta trae linked: false.
+export const getMyRecovery = (token, date) =>
+  credimasterGet(`/api/collections/my-recovery${date ? `?date=${encodeURIComponent(date)}` : ""}`, token);
