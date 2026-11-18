@@ -139,7 +139,8 @@ export default function DashboardScreen() {
   const canDeliver = session?.permissions?.includes("especial.creditos.entregar");
   const canInactive = session?.permissions?.includes("clientes.inactivos.ver");
   // Quien cobra ve arriba su recuperación del día y los tres accesos (contactos, inactivos y simulador).
-  const showCollectorHome = !!canPay;
+  // Inicio del gestor (recuperación del día + 3 botones): solo con el permiso, que se asigna por empresa/rol.
+  const showCollectorHome = !!canPay && !!session?.permissions?.includes("inicio.recuperacion");
 
   const logoUrl = useTenantLogo(session?.token);
   const fullName = session?.user?.full_name || session?.user?.user_name || "Usuario";
