@@ -8,3 +8,7 @@ export const getCompanyProfile = (token) => credimasterGet("/api/company/profile
 // (24h) -- se pide fresca cada vez que una pantalla la necesita, en vez de
 // cachearla en la sesión del login.
 export const getCompanyLogo = (token) => credimasterGet("/api/company/logo", token);
+
+// Logo ya convertido a blanco y negro para la impresora térmica (grande para el encabezado y pequeño para el
+// pie): { logo: { version, top: { width, height, data }, bottom } | null }. `data` es el mapa de bits en base64.
+export const getCompanyPrintLogo = (token) => credimasterGet("/api/company/logo-print", token);

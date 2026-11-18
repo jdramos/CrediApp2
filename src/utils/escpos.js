@@ -42,15 +42,36 @@ function encodeLine(text, accents) {
   return out;
 }
 
+// Imagen en blanco y negro (GS v 0): `logo` = { width, height, bytes } con 8 puntos por byte, de izquierda a derecha,
+// 1 = negro (lo arma el servidor, ver utils/printLogo.js del backend). Va centrada. Se manda en franjas de 96 filas
+// porque algunas impresoras baratas no aceptan una imagen alta de una sola vez.
+function rasterLogo(logo) {
+  const out = [ESC, 0x61, 1]; // ESC a 1: centrar
+  const rowBytes = logo.width / 8;
+  for (let y = 0; y < logo.height; y += 96) {
+    const rows = Math.min(96, logo.height - y);
+    out.push(GS, 0x76, 0x30, 0x00, rowBytes & 0xff, rowBytes >> 8, rows & 0xff, rows >> 8);
+    for (let i = y * rowBytes; i < (y + rows) * rowBytes; i++) out.push(logo.bytes[i]);
+  }
+  out.push(ESC, 0x61, 0); // ESC a 0: izquierda otra vez
+  return out;
+}
+
+const validLogo = (l) =>
+  !!l && l.width > 0 && l.width <= 384 && l.width % 8 === 0 && l.height > 0 && l.bytes && l.bytes.length === (l.width / 8) * l.height;
+
 // lines: array de strings (ya a 32 columnas). Devuelve Uint8Array con el trabajo completo:
 // iniciar, tabla de caracteres, las líneas, avance de papel (y corte si `cut`).
-export function buildEscPos(lines, { accents = false, feed = 4, cut = false } = {}) {
+// `logoTop` / `logoBottom` (opcionales): logo de la empresa en el encabezado y, más pequeño, al pie.
+export function buildEscPos(lines, { accents = false, feed = 4, cut = false, logoTop = null, logoBottom = null } = {}) {
   const bytes = [ESC, 0x40]; // ESC @: reiniciar la impresora
   if (accents) bytes.push(ESC, 0x74, 19); // ESC t 19: PC858
   else bytes.push(ESC, 0x74, 0); // ESC t 0: PC437 (solo se imprime ASCII)
+  if (validLogo(logoTop)) bytes.push(...rasterLogo(logoTop), 0x0a);
   for (const line of lines || []) {
     bytes.push(...encodeLine(line, accents), 0x0a);
   }
+  if (validLogo(logoBottom)) bytes.push(0x0a, ...rasterLogo(logoBottom), 0x0a);
   bytes.push(ESC, 0x64, Math.max(0, Math.min(feed, 10))); // ESC d n: avanzar n líneas
   if (cut) bytes.push(GS, 0x56, 0x42, 0x00); // GS V 66 0: corte parcial
   return Uint8Array.from(bytes);

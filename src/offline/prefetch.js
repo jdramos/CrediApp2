@@ -6,7 +6,9 @@ import { getCreditPolicies } from "../api/creditPolicyApi";
 import { getPromotersByBranch } from "../api/promoterApi";
 import { getCollectorsByBranch } from "../api/collectorApi";
 import { getEvaluationFormOptions } from "../api/customerEvaluationApi";
+import { getCompanyPrintLogo } from "../api/companyApi";
 import { cachedFetch } from "./cache";
+import { PRINT_LOGO_CACHE_KEY } from "./printLogo";
 import { loadPaymentMethods, prefetchPortfolio, prefetchPayments } from "./paymentData";
 
 export const EVAL_OPTIONS_CACHE_KEY = "evalOptions";
@@ -33,7 +35,8 @@ async function prefetchLoanForm(token) {
 // Cada pieza es independiente y best-effort: si una falla (sin permiso, red caída) las demás siguen.
 export async function prefetchOfflineData(token, userId, permissions = []) {
   const can = (p) => permissions.includes(p);
-  const jobs = [];
+  // El logo de los recibos impresos lo necesita todo usuario que imprima, tenga el permiso que tenga.
+  const jobs = [cachedFetch(PRINT_LOGO_CACHE_KEY, () => getCompanyPrintLogo(token))];
   if (userId && (can("pagos.insertar") || can("pagos.ver"))) {
     jobs.push(loadPaymentMethods(token, userId), prefetchPortfolio(token, userId), prefetchPayments(token, userId));
   }
