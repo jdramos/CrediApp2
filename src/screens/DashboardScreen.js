@@ -28,6 +28,10 @@ import { money } from "../utils/format";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
+// Tarjeta «Recuperación del día»: apagada por ahora (dueño, 2026-11-18). Para volver a mostrarla, compilar con
+// EXPO_PUBLIC_RECOVERY_CARD=1 (los tres botones del inicio del gestor no dependen de esto).
+const SHOW_RECOVERY_CARD = process.env.EXPO_PUBLIC_RECOVERY_CARD === "1";
+
 const WEEKDAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
 const styles = StyleSheet.create({
@@ -247,7 +251,7 @@ export default function DashboardScreen() {
           />
         ))}
         {(canPay || canDeliver) && <WorkdayCard />}
-        {showCollectorHome && <RecoveryCard />}
+        {showCollectorHome && SHOW_RECOVERY_CARD && <RecoveryCard />}
         {showCollectorHome && (canViewCustomers || canInactive || canSimulate) && (
           <View style={{ flexDirection: "row", gap: SPACING.sm }}>
             {canViewCustomers && (
