@@ -938,6 +938,9 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     if (!amt || amt <= 0) return "Ingrese un monto válido";
     if (!trm || trm <= 0) return "Ingrese un plazo válido";
     if (frecuencies.length > 0 && !frequencyId) return "Seleccione la frecuencia de pago";
+    // Gestor obligatorio (JELDER 2026-11-17): sin gestor el crédito no aparece en la
+    // cartera de ninguna ruta. El servidor también lo exige.
+    if (collectors.length > 0 && !vendorId) return "Seleccione el gestor del crédito (la ruta que lo va a cobrar).";
     if (String(interestRate ?? "").trim() === "" || Number.isNaN(Number(interestRate))) return "Ingrese la tasa de interés";
     if (Number(interestRate) < 0) return "La tasa de interés no puede ser negativa";
     if (Number(interestRate) === 0 && !canZeroRate) {
@@ -1372,7 +1375,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                 )}
                 {collectors.length > 0 && (
                   <CatalogPickerField
-                    label="Gestor"
+                    label="Gestor (ruta que lo va a cobrar) *"
                     value={vendorId}
                     options={collectors.map((c) => ({ id: c.id, label: c.name }))}
                     onChange={setVendorId}
