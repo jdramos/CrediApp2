@@ -4,11 +4,19 @@ import * as FileSystem from "expo-file-system/legacy";
 import { markPickerOpen, clearPickerMark } from "./crashLog";
 import { inAppCameraAvailable, requestInAppPhoto } from "../components/InAppCameraHost";
 
+// El servidor solo acepta JPG, PNG, WEBP y GIF. Con la galería, Android a veces reporta el tipo de la foto ORIGINAL
+// (p. ej. image/heic o image/jpg) aunque el selector ya la recomprimió a JPEG (quality 0.7), y el servidor rechazaba la
+// entrega con «Algo salió mal» (Pedro Prado, 2026-11-18). El tipo se saca de la extensión del archivo que se envía.
+const SAFE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const TYPE_BY_EXT = { jpg: "image/jpeg", jpeg: "image/jpeg", jpe: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif", heic: "image/jpeg", heif: "image/jpeg" };
 const buildFile = (asset) => {
   const uri = asset.uri;
-  const name = asset.fileName || uri.split("/").pop() || `foto_${Date.now()}.jpg`;
-  const ext = name.split(".").pop()?.toLowerCase();
-  const type = asset.mimeType || (ext === "png" ? "image/png" : "image/jpeg");
+  const uriExt = (uri.split("?")[0].split(".").pop() || "").toLowerCase();
+  let name = asset.fileName || uri.split("/").pop() || `foto_${Date.now()}.jpg`;
+  const nameExt = name.split(".").pop()?.toLowerCase();
+  const mime = String(asset.mimeType || "").toLowerCase();
+  const type = TYPE_BY_EXT[uriExt] || (SAFE_TYPES.has(mime) ? mime : null) || TYPE_BY_EXT[nameExt] || "image/jpeg";
+  if (type === "image/jpeg" && (nameExt === "heic" || nameExt === "heif")) name = name.replace(/\.(heic|heif)$/i, ".jpg");
   return { uri, name, type };
 };
 
