@@ -28,10 +28,6 @@ import { money } from "../utils/format";
 import { COLORS, GRADIENTS } from "../theme/colors";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 
-// Tarjeta «Recuperación del día»: apagada por ahora (dueño, 2026-11-18). Para volver a mostrarla, compilar con
-// EXPO_PUBLIC_RECOVERY_CARD=1 (los tres botones del inicio del gestor no dependen de esto).
-const SHOW_RECOVERY_CARD = process.env.EXPO_PUBLIC_RECOVERY_CARD === "1";
-
 const WEEKDAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
 const styles = StyleSheet.create({
@@ -145,6 +141,8 @@ export default function DashboardScreen() {
   // Quien cobra ve arriba su recuperación del día y los tres accesos (contactos, inactivos y simulador).
   // Inicio del gestor (recuperación del día + 3 botones): solo con el permiso, que se asigna por empresa/rol.
   const showCollectorHome = !!canPay && !!session?.permissions?.includes("inicio.recuperacion");
+  // La tarjeta «Recuperación del día» tiene su propio permiso (dueño, 2026-11-20): se enciende por empresa y rol.
+  const showRecoveryCard = showCollectorHome && !!session?.permissions?.includes("inicio.recuperacion.tarjeta");
 
   const logoUrl = useTenantLogo(session?.token);
   const fullName = session?.user?.full_name || session?.user?.user_name || "Usuario";
@@ -251,7 +249,7 @@ export default function DashboardScreen() {
           />
         ))}
         {(canPay || canDeliver) && <WorkdayCard />}
-        {showCollectorHome && SHOW_RECOVERY_CARD && <RecoveryCard />}
+        {showRecoveryCard && <RecoveryCard />}
         {showCollectorHome && (canViewCustomers || canInactive || canSimulate) && (
           <View style={{ flexDirection: "row", gap: SPACING.sm }}>
             {canViewCustomers && (
