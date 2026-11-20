@@ -116,9 +116,14 @@ export default function PrinterHost() {
     setInfo("Impresora olvidada.");
   };
 
+  // El Portal solo existe mientras la ventana está abierta: así se monta DESPUÉS de cualquier ventana ya abierta
+  // (p. ej. el comprobante de «Mis cobros») y queda encima. Montado siempre desde el inicio, quedaba debajo de ella y
+  // «Imprimir» parecía no hacer nada cuando aún no había impresora guardada.
+  if (!visible) return null;
+
   return (
     <Portal>
-      <Modal visible={visible} onDismiss={() => close(null)} contentContainerStyle={styles.modal}>
+      <Modal visible onDismiss={() => close(null)} contentContainerStyle={styles.modal}>
         <Text variant="titleMedium" style={styles.title}>Impresora Bluetooth</Text>
         {!isPrinterFeatureAvailable() ? (
           <Text style={styles.hint}>
