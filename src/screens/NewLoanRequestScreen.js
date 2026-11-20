@@ -7,7 +7,7 @@ import Animated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import DateWheelPicker from "../components/DateWheelPicker";
 import { SessionContext } from "../auth/SessionContext";
-import { searchCustomers, getCustomer, saveCustomerGuarantees } from "../api/customerApi";
+import { searchCustomers, getCustomer, saveCustomerGuarantees, getCustomerInfoUpdate } from "../api/customerApi";
 import { getAccessibleBranches } from "../api/branchApi";
 import { createLoanRequest, simulateLoan, updateLoanRequest, getLoanDetail, getCustomerActiveLoans } from "../api/loanApi";
 import { summarizeSchedule } from "../utils/loanSimulation";
@@ -33,6 +33,7 @@ import {
 import { fieldsInSection, firstCustomFieldError, customFieldsPayload, validateCustomFieldValues } from "../utils/customFields";
 import CustomFieldInputs from "../components/CustomFieldInputs";
 import LoanAlerts, { isIdentityFrozen } from "../components/LoanAlerts";
+import InfoUpdateBanner, { isInfoUpdateBlocked, BLOCKED_MESSAGE } from "../components/InfoUpdateBanner";
 import LoanRiskSummary from "../components/LoanRiskSummary";
 import CatalogPickerField from "../components/CatalogPickerField";
 import GuaranteeExtraFields, { guaranteeExtraPayload, guaranteeExtraSummary } from "../components/GuaranteeExtraFields";
@@ -247,6 +248,8 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   const [customValues, setCustomValues] = useState({});
   const [customErrors, setCustomErrors] = useState({});
   const [identityStatus, setIdentityStatus] = useState(null);
+  // Expediente del cliente (vencido = no se envía si la empresa lo bloquea).
+  const [infoStatus, setInfoStatus] = useState(null);
   const [represtamo, setRepresamo] = useState(null);
   const [activeSummary, setActiveSummary] = useState(null);
 
@@ -353,6 +356,8 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     setRepresamo(null);
     setActiveSummary(null);
     getIdentityStatus(session.token, customer.id).then((r) => setIdentityStatus(r?.data || null)).catch(() => {});
+    setInfoStatus(null);
+    getCustomerInfoUpdate(session.token, customer.id).then((r) => setInfoStatus(r?.data || null)).catch(() => {});
     getReprestamoEligibility(session.token, customer.id).then((r) => setRepresamo(r?.data || null)).catch(() => {});
     getCustomerActiveLoans(session.token, customer.id).then((r) => setActiveSummary(r || null)).catch(() => {});
   }, [customer?.id, session.token]);
@@ -380,7 +385,11 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   useFocusEffect(
     useCallback(() => {
       refreshEvaluation();
-    }, [refreshEvaluation]),
+      // Al volver de «Actualizar cliente» se quita la traba sin salir de la solicitud.
+      if (customer?.id && !isLocalCustomerId(customer.id)) {
+        getCustomerInfoUpdate(session.token, customer.id).then((r) => setInfoStatus(r?.data || null)).catch(() => {});
+      }
+    }, [refreshEvaluation, customer?.id, session.token]),
   );
 
   // Prellena los catálogos complementarios con la fila "por defecto" del
@@ -924,6 +933,7 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     const trm = Number(term);
     if (isProspect && !evaluation?.id && !freshEvaluation?.id) return "Falta digitar la evaluación financiera del cliente: es obligatoria para este cliente nuevo.";
     if (isIdentityFrozen(identityStatus)) return "La cédula del cliente está vencida y, por política de crédito, la solicitud está congelada. Actualice la fecha de vencimiento en su ficha.";
+    if (!editLoanId && isInfoUpdateBlocked(infoStatus)) return `El expediente del cliente está vencido. ${BLOCKED_MESSAGE}`;
     if (!branchId) return "Seleccione una sucursal";
     if (productsEnabled && !productId) return "Seleccione el producto financiero";
     const productProblem = productViolationsMessage(selectedProduct, {
@@ -1277,6 +1287,22 @@ export default function NewLoanRequestScreen({ route, navigation }) {
             )}
 
             <LoanAlerts identityStatus={identityStatus} represtamo={represtamo} />
+
+            {!editLoanId && infoStatus && ["OVERDUE", "DUE_SOON"].includes(infoStatus.status) && (
+              <View style={{ marginBottom: SPACING.sm, gap: SPACING.xs }}>
+                <InfoUpdateBanner status={infoStatus} />
+                {isInfoUpdateBlocked(infoStatus) && (
+                  <Button
+                    mode="contained"
+                    icon="account-sync-outline"
+                    onPress={() => navigation.navigate("Clientes", { screen: "CustomerInfoUpdate", params: { customerId: customer?.id, customerName: customer?.customer_name } })}
+                    style={{ borderRadius: RADIUS.md, alignSelf: "flex-start" }}
+                  >
+                    Actualizar cliente
+                  </Button>
+                )}
+              </View>
+            )}
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Sucursal</Text>

@@ -1,9 +1,10 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useCallback, useContext, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 import { DateWheelField } from "../components/DateWheelPicker";
 import { View, StyleSheet, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Text, TextInput, Button, ActivityIndicator, HelperText, Checkbox } from "react-native-paper";
+import { Text, TextInput, Button, ActivityIndicator, HelperText, Checkbox, Chip } from "react-native-paper";
 import * as Location from "expo-location";
 import { SessionContext } from "../auth/SessionContext";
 import { getCustomerInfoUpdate, saveCustomerInfoUpdate } from "../api/customerApi";
@@ -18,6 +19,14 @@ import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 // se revisan los datos con el cliente, se corrige lo que cambió y se guarda.
 // Guardar sin cambios también cuenta (se confirmaron). Queda de una vez, sin
 // aprobación de supervisor. Sin señal se guarda en el equipo y se envía sola.
+//
+// «Actualizar cliente» (JELDER 2026-11-20): como al crear el cliente, pero solo
+// lo que cambia con el tiempo: evaluación financiera (nueva versión), garantías,
+// ubicación y fotos, teléfonos, direcciones y referencias. El nombre, la cédula,
+// el nombre y el tipo de negocio no se cambian aquí. Si la empresa lo exige
+// (políticas expediente_exige_evaluacion / expediente_exige_garantia) no se
+// puede guardar hasta tener la evaluación y la garantía al día; el servidor lo
+// vuelve a revisar.
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -41,7 +50,7 @@ const styles = StyleSheet.create({
 const GROUPS = [
   ["Contacto", [["cellphone", "Celular", "phone-pad"], ["telephone", "Teléfono", "phone-pad"]]],
   ["Domicilio", [["home_address", "Dirección de domicilio"]]],
-  ["Negocio / trabajo", [["business_name", "Nombre del negocio"], ["business_address", "Dirección del negocio"], ["business_telephone", "Teléfono del negocio", "phone-pad"], ["occupation", "Ocupación"]]],
+  ["Negocio / trabajo", [["business_address", "Dirección del negocio"], ["business_telephone", "Teléfono del negocio", "phone-pad"], ["occupation", "Ocupación"]]],
   ["Ingresos mensuales", [["business_monthly_income", "Ingreso del negocio", "decimal-pad"], ["monthly_salary", "Salario", "decimal-pad"], ["other_incomes", "Otros ingresos", "decimal-pad"]]],
   ["Cédula", [["identity_expiration_date", "Vencimiento de la cédula (AAAA-MM-DD)"]]],
   ["Referencias", [
@@ -50,6 +59,36 @@ const GROUPS = [
   ]],
 ];
 const KEYS = GROUPS.flatMap(([, list]) => list.map(([k]) => k));
+const dmy = (v) => (v ? String(v).slice(0, 10).split("-").reverse().join("/") : "");
+
+// Paso de la actualización (evaluación, garantías, ubicación). `req` = requisito de la
+// política: obligatorio y si ya está; sin requisito el paso es opcional.
+function Step({ title, req, hint, action, onPress, disabledReason }) {
+  const done = Boolean(req?.done);
+  return (
+    <View style={styles.card}>
+      <View style={[styles.row, { justifyContent: "space-between", gap: SPACING.sm }]}>
+        <Text variant="titleMedium" style={{ fontWeight: "800", color: COLORS.text, flex: 1 }}>{title}</Text>
+        <Chip
+          compact
+          icon={req ? (done ? "check-circle" : "alert-circle-outline") : "information-outline"}
+          style={{ backgroundColor: req ? (done ? COLORS.successSoft : COLORS.warningSoft) : COLORS.bg }}
+          textStyle={{ color: req ? (done ? COLORS.success : COLORS.warning) : COLORS.muted, fontWeight: "700" }}
+        >
+          {req ? (done ? "Listo" : "Obligatorio") : "Si cambió"}
+        </Chip>
+      </View>
+      <Text style={styles.hint}>{hint}</Text>
+      {disabledReason ? (
+        <Text style={styles.hint}>{disabledReason}</Text>
+      ) : (
+        <Button mode={req && !done ? "contained" : "outlined"} onPress={onPress} style={{ borderRadius: RADIUS.md, alignSelf: "flex-start" }}>
+          {action}
+        </Button>
+      )}
+    </View>
+  );
+}
 
 export default function CustomerInfoUpdateScreen({ route, navigation }) {
   const { customerId, customerName } = route.params;
@@ -65,21 +104,35 @@ export default function CustomerInfoUpdateScreen({ route, navigation }) {
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    let alive = true;
-    getCustomerInfoUpdate(session.token, customerId)
-      .then((res) => {
-        if (!alive) return;
-        const data = res?.data || {};
-        setStatus(data);
-        const f = data.fields || {};
-        setForm(Object.fromEntries(KEYS.map((k) => [k, f[k] == null ? "" : k === "identity_expiration_date" ? String(f[k]).slice(0, 10) : String(f[k])])));
-      })
-      .catch((e) => alive && setError(e?.message ?? "No se pudo cargar el expediente del cliente"));
-    return () => {
-      alive = false;
-    };
-  }, [customerId, session.token]);
+  const perms = session?.permissions || [];
+  const canEvaluate = perms.includes("clientes.evaluacion.insertar") || perms.includes("clientes.evaluacion.editar") || perms.includes("clientes.expediente.actualizar");
+  const canGuarantees = perms.includes("garantias.ver") || perms.includes("clientes.editar");
+  const canLocation = perms.includes("clientes.editar") || perms.includes("clientes.documentos.subir");
+
+  // Se vuelve a consultar al regresar de la evaluación, las garantías o la ubicación
+  // (cambian los requisitos); lo digitado en el formulario no se pierde.
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      getCustomerInfoUpdate(session.token, customerId)
+        .then((res) => {
+          if (!alive) return;
+          const data = res?.data || {};
+          setStatus(data);
+          const f = data.fields || {};
+          setForm((prev) => prev || Object.fromEntries(KEYS.map((k) => [k, f[k] == null ? "" : k === "identity_expiration_date" ? String(f[k]).slice(0, 10) : String(f[k])])));
+        })
+        .catch((e) => alive && setError((prev) => prev || (e?.message ?? "No se pudo cargar el expediente del cliente")));
+      return () => {
+        alive = false;
+      };
+    }, [customerId, session.token]),
+  );
+
+  const requirements = Array.isArray(status?.requirements) ? status.requirements : [];
+  const requirement = (key) => requirements.find((r) => r.key === key) || null;
+  const missing = requirements.filter((r) => !r.done);
+  const params = { customerId, customerName };
 
   const takeLocation = async () => {
     setError("");
@@ -152,9 +205,37 @@ export default function CustomerInfoUpdateScreen({ route, navigation }) {
         <Text variant="titleLarge" style={styles.header}>{customerName || "Cliente"}</Text>
         <InfoUpdateBanner status={status} />
         <Text style={styles.hint}>
-          Revisá los datos con el cliente, corregí lo que cambió y guardá. Si todo sigue igual, guardá de todos modos: queda
-          registrado que se confirmaron.
+          Revise con el cliente su evaluación financiera, sus garantías, la ubicación y sus datos de contacto; corrija lo que
+          cambió y guarde. El nombre, la cédula y el negocio no se cambian aquí.
         </Text>
+
+        <Step
+          title="Evaluación financiera"
+          req={requirement("evaluation")}
+          hint={requirement("evaluation")?.done ? `Actualizada el ${dmy(requirement("evaluation").date)}.` : "Ingresos, gastos y deudas de hoy. Se parte de la evaluación anterior."}
+          action="Actualizar evaluación"
+          disabledReason={canEvaluate ? null : "Su usuario no tiene permiso para registrar evaluaciones."}
+          onPress={() => navigation.navigate("CustomerEvaluation", { ...params, renew: true })}
+        />
+        <Step
+          title="Garantías"
+          req={requirement("guarantee")}
+          hint={
+            requirement("guarantee")?.done
+              ? "Garantía al día."
+              : "Registre o corrija las garantías con su artículo, marca, serie, valor y fotos. La del sistema anterior es solo referencia."
+          }
+          action="Ver / agregar garantías"
+          disabledReason={canGuarantees ? null : "Su usuario no tiene permiso para las garantías."}
+          onPress={() => navigation.navigate("CustomerGuarantees", params)}
+        />
+        <Step
+          title="Ubicación y fotos"
+          hint="Si cambió de casa o de negocio, marque la nueva ubicación y tome las fotos."
+          action="Ver / cambiar ubicación"
+          disabledReason={canLocation ? null : "Su usuario no tiene permiso para guardar ubicaciones."}
+          onPress={() => navigation.navigate("CustomerLocation", params)}
+        />
 
         {GROUPS.map(([title, list]) => (
           <View key={title} style={styles.card}>
@@ -203,8 +284,13 @@ export default function CustomerInfoUpdateScreen({ route, navigation }) {
 
         <TextInput mode="outlined" label="Comentario (opcional)" value={comment} onChangeText={setComment} multiline style={styles.input} />
 
+        {missing.length > 0 && (
+          <Text style={[styles.hint, { color: COLORS.warning, fontWeight: "700" }]}>
+            {`Para guardar falta: ${missing.map((r) => r.label.toLowerCase()).join(" y ")}.`}
+          </Text>
+        )}
         <HelperText type="error" visible={!!error}>{error}</HelperText>
-        <Button mode="contained" icon="content-save" onPress={save} loading={busy} disabled={busy} style={{ borderRadius: RADIUS.md }}>
+        <Button mode="contained" icon="content-save" onPress={save} loading={busy} disabled={busy || missing.length > 0} style={{ borderRadius: RADIUS.md }}>
           Guardar actualización
         </Button>
       </KeyboardAwareScroll>

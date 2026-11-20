@@ -181,7 +181,7 @@ export default function CustomerDetailScreen({ route, navigation }) {
               onPress={() => navigation.navigate("CustomerInfoUpdate", { customerId, customerName: customer?.customer_name })}
               style={{ marginTop: SPACING.sm, borderRadius: RADIUS.md, alignSelf: "flex-start" }}
             >
-              Actualizar expediente
+              Actualizar cliente
             </Button>
           )}
           {canRequestLoan && !!customer?.id && (

@@ -4,7 +4,7 @@ import { View, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Text, TextInput, Button, ActivityIndicator, HelperText, Chip } from "react-native-paper";
 import { SessionContext } from "../auth/SessionContext";
-import { createEvaluation, getCurrentEvaluation, getEvaluationFormOptions } from "../api/customerEvaluationApi";
+import { createEvaluation, getCurrentEvaluation, getEvaluationFormOptions, reviseEvaluation } from "../api/customerEvaluationApi";
 import { isNetworkError } from "../api/credimasterClient";
 import { confirmAction } from "../utils/confirm";
 import { enqueue } from "../offline/queue";
@@ -133,9 +133,14 @@ function ResultCard({ ev, title }) {
 
 export default function CustomerEvaluationScreen({ route, navigation }) {
   const { customerId, customerName } = route.params;
+  // «Actualizar cliente» (JELDER 2026-11-20): con evaluación vigente se digita una nueva
+  // versión, prellenada con la anterior para corregir solo lo que cambió.
+  const renew = Boolean(route.params?.renew);
   const { session } = useContext(SessionContext);
   const { refreshPendingCount } = useSync();
-  const canCreate = session?.permissions?.includes("clientes.evaluacion.insertar");
+  const perms = session?.permissions || [];
+  const canRenew = perms.includes("clientes.evaluacion.editar") || perms.includes("clientes.expediente.actualizar");
+  const canCreate = perms.includes("clientes.evaluacion.insertar") || (renew && canRenew);
 
   const [loading, setLoading] = useState(true);
   const [current, setCurrent] = useState(null);
@@ -169,6 +174,7 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
         if (!isLocalCustomerId(rid)) {
           const cur = await getCurrentEvaluation(session.token, rid).catch(() => null);
           if (alive) setCurrent(cur && cur.id ? cur : null);
+          if (alive && renew && cur?.id) prefillFrom(cur);
         }
         if (canCreate) {
           // Las opciones de la empresa se guardan: sin señal se usa la última copia.
@@ -188,6 +194,20 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
     })();
     return () => { alive = false; };
   }, [session.token, customerId, canCreate]);
+
+  // Prellena el formulario con la evaluación vigente (modo actualizar).
+  function prefillFrom(ev) {
+    const num = (v) => (v == null || Number(v) === 0 ? "" : formatAmountInput(String(Number(v).toFixed(2))));
+    if (ev.methodology) setMethodology(ev.methodology);
+    setValues(Object.fromEntries((ev.concept_values || []).map((c) => [c.concept_key, num(c.value)])));
+    setProposed(num(ev.proposed_installment));
+    setYears(ev.years_in_business == null ? "" : String(Number(ev.years_in_business)));
+    setSales(num(ev.monthly_sales));
+    setInventory(num(ev.inventory_value));
+    setBizLocation(ev.business_location || "");
+    setReferences(ev.references_result || "");
+    setBureau(ev.bureau_result || "NO_APLICA");
+  }
 
   // Vista previa de los totales mientras se escribe (el servidor recalcula todo al guardar).
   const totals = useMemo(() => {
@@ -256,6 +276,20 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
         return;
       }
       let res;
+      if (renew && current?.id) {
+        // Nueva versión: necesita señal (no se encola para no chocar con la vigente).
+        try {
+          res = await reviseEvaluation(session.token, current.id, { ...payload, change_reason: "Actualización del cliente" });
+        } catch (e) {
+          if (isNetworkError(e)) {
+            setError("Sin señal no se puede actualizar la evaluación. Intente de nuevo cuando haya conexión.");
+            return;
+          }
+          throw e;
+        }
+        setSaved({ ...res, concept_values: concepts.map((c) => ({ concept_key: c.concept_key, concept_label: c.label, value: toNumber(values[c.concept_key]) })) });
+        return;
+      }
       try {
         res = await createEvaluation(session.token, { customer_id: Number(id), ...payload });
       } catch (e) {
@@ -301,7 +335,8 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
     );
   }
 
-  const done = saved || current;
+  // En modo actualizar la vigente no cuenta como hecha: se digita la nueva versión.
+  const done = saved || (renew ? null : current);
   const pv = queued?.preview;
 
   return (
@@ -331,7 +366,7 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
           </>
         ) : done ? (
           <>
-            <ResultCard ev={done} title={saved ? "Evaluación guardada" : "Evaluación vigente"} />
+            <ResultCard ev={done} title={saved ? (renew && current ? "Evaluación actualizada" : "Evaluación guardada") : "Evaluación vigente"} />
             {!saved && (
               <Text style={styles.hint}>
                 Este cliente ya tiene una evaluación vigente. Para hacer una nueva versión use la web (Cliente → Evaluación financiera).
@@ -345,6 +380,11 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
           <Text style={styles.hint}>Su usuario no tiene permiso para registrar evaluaciones financieras.</Text>
         ) : (
           <>
+            {renew && current && (
+              <Text style={styles.hint}>
+                Actualizando la evaluación: los datos de la anterior ya están puestos. Corrija lo que cambió y guarde; la anterior queda en el historial.
+              </Text>
+            )}
             <View style={styles.card}>
               <Text style={styles.group}>Metodología</Text>
               <Choice options={options.methodologies} value={methodology} onChange={(v) => v && setMethodology(v)} />

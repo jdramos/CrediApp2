@@ -37,7 +37,11 @@ export default function CustomerSearchScreen({ navigation }) {
   // Registrar un cliente nuevo: solo con el permiso clientes.insertar.
   const canCreateCustomer = session?.permissions?.includes("clientes.insertar");
   // JELDER: solicitud de crédito nuevo en una sola hoja (política solicitud_cliente_nuevo_hoja).
-  const sheetRequest = useSheetRequest(session?.token) && canCreateCustomer && session?.permissions?.includes("creditos.insertar");
+  const sheetPolicy = useSheetRequest(session?.token);
+  const sheetRequest = sheetPolicy && canCreateCustomer && session?.permissions?.includes("creditos.insertar");
+  // Dueño JELDER 2026-11-20: con la hoja encendida el cliente nuevo se registra SOLO por la hoja; el
+  // «Nuevo cliente» de antes se quita para que ningún gestor lo cree con el formulario incompleto.
+  const showOldNewCustomer = canCreateCustomer && !sheetPolicy;
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -84,9 +88,9 @@ export default function CustomerSearchScreen({ navigation }) {
         </Button>
       )}
 
-      {canCreateCustomer && (
+      {showOldNewCustomer && (
         <Button
-          mode={sheetRequest ? "outlined" : "contained"}
+          mode="contained"
           icon="account-plus"
           onPress={() => navigation.navigate("NewCustomer")}
           style={{ borderRadius: RADIUS.md, marginBottom: SPACING.md }}

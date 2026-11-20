@@ -53,7 +53,7 @@ export default function CustomerStackNavigator() {
       <Stack.Screen
         name="CustomerInfoUpdate"
         component={CustomerInfoUpdateScreen}
-        options={{ title: "Actualizar expediente" }}
+        options={{ title: "Actualizar cliente" }}
       />
       <Stack.Screen
         name="NewCustomer"

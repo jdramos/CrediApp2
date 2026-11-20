@@ -17,3 +17,8 @@ export const getEvaluationFormOptions = (token) =>
 // clientes.evaluacion.insertar. Un 409 = el cliente ya tiene una evaluación vigente.
 export const createEvaluation = (token, payload) =>
   credimasterPost("/api/customer-credit-evaluations", payload, token);
+
+// Nueva versión de la evaluación vigente (la anterior queda en el historial). Se usa en
+// «Actualizar cliente» — permiso clientes.evaluacion.editar o clientes.expediente.actualizar.
+export const reviseEvaluation = (token, evaluationId, payload) =>
+  credimasterPost(`/api/customer-credit-evaluations/${evaluationId}/revise`, payload, token);

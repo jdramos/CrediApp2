@@ -5,11 +5,17 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { COLORS } from "../theme/colors";
 import { RADIUS, SPACING } from "../theme/layout";
 
-// Aviso del expediente del cliente vencido o por vencer (solo alerta).
-// `status` viene de GET /api/customers/:id/info-update.
+// Aviso del expediente del cliente vencido o por vencer.
+// `status` viene de GET /api/customers/:id/info-update. Con la política
+// expediente_bloquea_solicitud (JELDER 2026-11-20) el expediente vencido no
+// deja enviar la solicitud: ver isInfoUpdateBlocked.
 
 const RISK = { BAJO: "bajo", MEDIO: "medio", ALTO: "alto", MUY_ALTO: "muy alto" };
 const dmy = (v) => (v ? String(v).slice(0, 10).split("-").reverse().join("/") : "");
+
+export const isInfoUpdateBlocked = (s) => s?.status === "OVERDUE" && Boolean(s?.policy?.block);
+
+export const BLOCKED_MESSAGE = "No se puede enviar la solicitud hasta hacer «Actualizar cliente» en su ficha.";
 
 export const infoUpdateMessage = (s) => {
   if (!s || !["OVERDUE", "DUE_SOON"].includes(s.status)) return "";
@@ -38,7 +44,7 @@ export default function InfoUpdateBanner({ status, style }) {
       ]}
     >
       <MaterialCommunityIcons name="file-alert-outline" size={20} color={overdue ? COLORS.danger : COLORS.warning} />
-      <Text style={styles.text}>{message}</Text>
+      <Text style={styles.text}>{isInfoUpdateBlocked(status) ? `${message} ${BLOCKED_MESSAGE}` : message}</Text>
     </View>
   );
 }
