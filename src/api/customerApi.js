@@ -93,7 +93,9 @@ export const saveCustomerLocation = async (token, customerId, fullCustomer, loca
 export const saveCustomerGuarantees = (token, customerId, fullCustomer, guarantees) =>
   credimasterPut(
     `/api/customers/${customerId}`,
-    { customer: fullCustomer, guarantees },
+    // guarantees_merge: el servidor no borra las que falten en la lista (quien edita clientes sin poder ver garantías
+    // manda una lista incompleta y se le borraban las demás).
+    { customer: fullCustomer, guarantees, guarantees_merge: true },
     token,
   );
 

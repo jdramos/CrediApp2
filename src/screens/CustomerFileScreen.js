@@ -111,6 +111,12 @@ export default function CustomerFileScreen() {
   // cambiar o quitar). Al guardar la garantía se suben a ella.
   const [newPhotos, setNewPhotos] = useState([]);
   const MAX_NEW_PHOTOS = 6;
+  // Edición de una garantía ya guardada (corregir artículo, marca, serie, valor y datos opcionales).
+  const [editing, setEditing] = useState(null); // la garantía que se edita
+  const [editForm, setEditForm] = useState({ article: "", brand: "", series: "", value: "" });
+  const [editExtra, setEditExtra] = useState({});
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState("");
 
   const load = useCallback(
     async (isRefresh = false) => {
@@ -387,6 +393,64 @@ export default function CustomerFileScreen() {
     );
   };
 
+  const openEditGuarantee = (g) => {
+    setEditError("");
+    setEditForm({
+      article: g.article || "",
+      brand: g.brand || "",
+      series: g.series || "",
+      value: g.value ? String(Number(g.value)) : "",
+    });
+    setEditExtra({
+      model: g.model || "",
+      color: g.color || "",
+      years_of_use: g.years_of_use || "",
+      condition_code: g.condition_code || "",
+      location: g.location || "",
+    });
+    setEditing(g);
+  };
+
+  // El servidor recibe la lista COMPLETA de garantías del cliente: las demás van tal cual (sin tocar sus datos
+  // opcionales) y la editada va con todos sus campos, también los opcionales vacíos (así se pueden borrar).
+  const saveEditGuarantee = async () => {
+    if (!editing) return;
+    if (!editForm.article.trim() && !editForm.brand.trim() && !toNumber(editForm.value)) {
+      setEditError("Deje al menos el artículo, la marca o el valor de la garantía.");
+      return;
+    }
+    try {
+      setSavingEdit(true);
+      setEditError("");
+      const fullRes = await getCustomer(session.token, customerId);
+      const fullCustomer = fullRes?.data?.customer;
+      const payload = guarantees.map((g) =>
+        g.id === editing.id
+          ? {
+              id: g.id,
+              article: editForm.article.trim(),
+              series: editForm.series.trim(),
+              brand: editForm.brand.trim(),
+              // Ligada a un crédito vigente: el valor no cambia (el servidor también lo exige).
+              value: g.is_committed ? g.value : toNumber(editForm.value) || null,
+              model: (editExtra.model || "").trim(),
+              color: (editExtra.color || "").trim(),
+              years_of_use: (editExtra.years_of_use || "").trim(),
+              condition_code: editExtra.condition_code || "",
+              location: editExtra.location || "",
+            }
+          : { id: g.id, article: g.article, series: g.series, brand: g.brand, value: g.value },
+      );
+      await saveCustomerGuarantees(session.token, customerId, fullCustomer, payload);
+      setEditing(null);
+      await load(true);
+    } catch (e) {
+      setEditError(e?.message ?? "No se pudo guardar la garantía");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const onPhotoGuarantee = (g) => {
     startDraft(`Foto de la garantía: ${g.article}`, (file) =>
       uploadOrQueue({
@@ -568,17 +632,30 @@ export default function CustomerFileScreen() {
                   ) : (
                     <Text style={styles.muted}>Sin fotos todavía.</Text>
                   )}
-                  {canPhotoGuarantee && (
+                  {(canPhotoGuarantee || canCreateGuarantee) && (
                     <View style={styles.actions}>
-                      <Button
-                        compact
-                        mode="contained"
-                        icon="camera-plus-outline"
-                        onPress={() => onPhotoGuarantee(g)}
-                        disabled={busy !== null}
-                      >
-                        Agregar foto
-                      </Button>
+                      {canPhotoGuarantee && (
+                        <Button
+                          compact
+                          mode="contained"
+                          icon="camera-plus-outline"
+                          onPress={() => onPhotoGuarantee(g)}
+                          disabled={busy !== null}
+                        >
+                          Agregar foto
+                        </Button>
+                      )}
+                      {canCreateGuarantee && (
+                        <Button
+                          compact
+                          mode="outlined"
+                          icon="pencil-outline"
+                          onPress={() => openEditGuarantee(g)}
+                          disabled={busy !== null}
+                        >
+                          Editar
+                        </Button>
+                      )}
                     </View>
                   )}
                 </View>
@@ -735,6 +812,64 @@ export default function CustomerFileScreen() {
           >
             Guardar garantía
           </Button>
+        </Modal>
+
+        <Modal
+          visible={!!editing}
+          onDismiss={() => !savingEdit && setEditing(null)}
+          contentContainerStyle={guaranteeModalStyle}
+        >
+          <KeyboardAwareScroll style={{ maxHeight: 440 }} keyboardShouldPersistTaps="handled">
+            <Text variant="titleMedium" style={[styles.title, { marginBottom: SPACING.sm }]}>Editar garantía</Text>
+            <TextInput
+              mode="outlined"
+              label="Artículo"
+              value={editForm.article}
+              onChangeText={(t) => setEditForm((f) => ({ ...f, article: t }))}
+              style={{ backgroundColor: COLORS.card, marginBottom: SPACING.sm }}
+              outlineStyle={{ borderRadius: RADIUS.md }}
+            />
+            <TextInput
+              mode="outlined"
+              label="Marca (opcional)"
+              value={editForm.brand}
+              onChangeText={(t) => setEditForm((f) => ({ ...f, brand: t }))}
+              style={{ backgroundColor: COLORS.card, marginBottom: SPACING.sm }}
+              outlineStyle={{ borderRadius: RADIUS.md }}
+            />
+            <TextInput
+              mode="outlined"
+              label="Serie (opcional)"
+              value={editForm.series}
+              onChangeText={(t) => setEditForm((f) => ({ ...f, series: t }))}
+              style={{ backgroundColor: COLORS.card, marginBottom: SPACING.sm }}
+              outlineStyle={{ borderRadius: RADIUS.md }}
+            />
+            <TextInput
+              mode="outlined"
+              label="Valor estimado"
+              value={editForm.value}
+              onChangeText={(t) => setEditForm((f) => ({ ...f, value: t }))}
+              keyboardType="decimal-pad"
+              disabled={!!editing?.is_committed}
+              style={{ backgroundColor: COLORS.card }}
+              outlineStyle={{ borderRadius: RADIUS.md }}
+              left={<TextInput.Icon icon="cash" />}
+            />
+            {!!editing?.is_committed && (
+              <Text style={[styles.muted, { marginTop: SPACING.xs }]}>
+                El valor no se puede cambiar: la garantía está en uso por un crédito vigente.
+              </Text>
+            )}
+            <GuaranteeExtraFields value={editExtra} onChange={setEditExtra} disabled={savingEdit} />
+            <HelperText type="error" visible={!!editError}>{editError}</HelperText>
+          </KeyboardAwareScroll>
+          <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: SPACING.xs, marginTop: SPACING.sm }}>
+            <Button onPress={() => setEditing(null)} disabled={savingEdit}>Cancelar</Button>
+            <Button mode="contained" onPress={saveEditGuarantee} loading={savingEdit} disabled={savingEdit}>
+              Guardar cambios
+            </Button>
+          </View>
         </Modal>
       </Portal>
     </SafeAreaView>
