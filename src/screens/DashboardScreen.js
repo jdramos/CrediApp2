@@ -14,6 +14,7 @@ import Animated, {
 import { SessionContext } from "../auth/SessionContext";
 import { getApprovalInbox } from "../api/approvalApi";
 import { getPendingDeliveries } from "../api/remittanceApi";
+import { getMyCashHandoffs } from "../api/cashHandoffApi";
 import { getAssignedLoans } from "../api/collectionsApi";
 import { useSync } from "../offline/SyncProvider";
 import { useBusinessDayAlerts } from "../hooks/useBusinessDayStatus";
@@ -123,6 +124,10 @@ export default function DashboardScreen() {
   const [pendingCount, setPendingCount] = useState(0);
   const [overdueLoans, setOverdueLoans] = useState({ count: 0, amount: 0 });
   const [pendingDeliveries, setPendingDeliveries] = useState(0);
+  // Traspaso de efectivo cobrador ↔ desembolsador: lo que espera una acción mía.
+  const [handoffTodo, setHandoffTodo] = useState(0);
+  // El acceso solo aparece si el servidor lo habilita: el desembolsador siempre; el cobrador, cuando ya le pidieron efectivo.
+  const [handoffVisible, setHandoffVisible] = useState(false);
 
   const businessDayAlerts = useBusinessDayAlerts(session?.token, session?.user?.branches);
   const multiBranch = (session?.user?.branches || []).length > 1;
@@ -137,6 +142,7 @@ export default function DashboardScreen() {
   const canSeeRoutes = session?.permissions?.includes("rastreo.ver");
   const canViewCustomers = session?.permissions?.includes("clientes.ver");
   const canDeliver = session?.permissions?.includes("especial.creditos.entregar");
+  const canHandoff = !!canDeliver || !!session?.user?.collector_id;
   const canInactive = session?.permissions?.includes("clientes.inactivos.ver");
   // Quien cobra ve arriba su recuperación del día y los tres accesos (contactos, inactivos y simulador).
   // Inicio del gestor (recuperación del día + 3 botones): solo con el permiso, que se asigna por empresa/rol.
@@ -169,6 +175,21 @@ export default function DashboardScreen() {
         .then((res) => setPendingDeliveries((res?.data || []).length))
         .catch(() => {});
     }, [canDeliver, session.token]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!canHandoff) return;
+      getMyCashHandoffs(session.token)
+        .then((res) => {
+          const d = res?.data || {};
+          const asCollector = (d.as_collector || []).filter((h) => h.status === "SOLICITADO").length;
+          const asRequester = (d.as_requester || []).filter((h) => h.status === "ENVIADO").length;
+          setHandoffTodo(asCollector + asRequester);
+          setHandoffVisible(!!d.can_request || (d.as_collector || []).length > 0);
+        })
+        .catch(() => {});
+    }, [canHandoff, session.token]),
   );
 
   useFocusEffect(
@@ -370,6 +391,16 @@ export default function DashboardScreen() {
               gradient={GRADIENTS.success}
               badge={pendingDeliveries}
               onPress={() => navigation.navigate("Creditos", { screen: "PendingDeliveries" })}
+            />
+          )}
+          {canHandoff && handoffVisible && (
+            <ActionTile
+              icon="cash-fast"
+              title="Traspaso de efectivo"
+              subtitle={handoffTodo > 0 ? "Hay algo por atender" : "Entre cobrador y desembolsador"}
+              gradient={GRADIENTS.warning}
+              badge={handoffTodo}
+              onPress={() => navigation.navigate("CashHandoffs")}
             />
           )}
           {canApprove && (

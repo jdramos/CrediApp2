@@ -8,6 +8,7 @@ import ForcePasswordChangeScreen from "../screens/ForcePasswordChangeScreen";
 import PendingSyncScreen from "../screens/PendingSyncScreen";
 import ProductivityScreen from "../screens/ProductivityScreen";
 import DayCloseScreen from "../screens/DayCloseScreen";
+import CashHandoffsScreen from "../screens/CashHandoffsScreen";
 import InactiveCustomersScreen from "../screens/InactiveCustomersScreen";
 import TeamProductivityScreen from "../screens/TeamProductivityScreen";
 import RoutesDayScreen from "../screens/RoutesDayScreen";
@@ -73,6 +74,7 @@ export default function AppNavigator() {
             <Stack.Screen name="PendingSync" component={PendingSyncScreen} options={{ presentation: "modal" }} />
             <Stack.Screen name="Productivity" component={ProductivityScreen} />
             <Stack.Screen name="DayClose" component={DayCloseScreen} />
+            <Stack.Screen name="CashHandoffs" component={CashHandoffsScreen} />
             <Stack.Screen name="InactiveCustomers" component={InactiveCustomersScreen} options={{ headerShown: true, title: "Clientes inactivos" }} />
             <Stack.Screen name="TeamProductivity" component={TeamProductivityScreen} />
             <Stack.Screen name="RoutesDay" component={RoutesDayScreen} />

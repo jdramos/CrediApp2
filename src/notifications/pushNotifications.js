@@ -62,6 +62,9 @@ export function handleNotificationResponse(response, navigationRef) {
   if (!navigationRef?.isReady()) return;
   if (data?.type === "APPROVAL_ASSIGNED") {
     navigationRef.navigate("App", { screen: "Creditos", params: { screen: "ApprovalInbox" } });
+  } else if (data?.type === "CASH_HANDOFF") {
+    // Traspaso de efectivo cobrador → desembolsador: te piden, te transfirieron o lo rechazaron.
+    navigationRef.navigate("CashHandoffs");
   } else if (data?.type === "REMINDER_DAY") {
     navigationRef.navigate("Productivity");
   } else if (data?.type === "WORKDAY_MISSING") {
