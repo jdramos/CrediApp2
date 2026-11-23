@@ -25,6 +25,8 @@ const TYPE_LABEL = {
   CUSTOMER_LOCATION: "Ubicación de cliente",
   VISIT: "Visita de cobranza",
   PAYMENT_EVIDENCE: "Foto o firma de un pago",
+  DELIVERY: "Entrega de desembolso",
+  DELIVERY_FAILED: "Entrega no realizada",
 };
 
 const styles = StyleSheet.create({

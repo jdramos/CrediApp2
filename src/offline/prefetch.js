@@ -7,6 +7,7 @@ import { getPromotersByBranch } from "../api/promoterApi";
 import { getCollectorsByBranch } from "../api/collectorApi";
 import { getEvaluationFormOptions } from "../api/customerEvaluationApi";
 import { getCompanyPrintLogo } from "../api/companyApi";
+import { getPendingDeliveries } from "../api/remittanceApi";
 import { cachedFetch } from "./cache";
 import { PRINT_LOGO_CACHE_KEY } from "./printLogo";
 import { loadPaymentMethods, prefetchPortfolio, prefetchPayments } from "./paymentData";
@@ -39,6 +40,10 @@ export async function prefetchOfflineData(token, userId, permissions = []) {
   const jobs = [cachedFetch(PRINT_LOGO_CACHE_KEY, () => getCompanyPrintLogo(token))];
   if (userId && (can("pagos.insertar") || can("pagos.ver"))) {
     jobs.push(loadPaymentMethods(token, userId), prefetchPortfolio(token, userId), prefetchPayments(token, userId));
+  }
+  // Entregas pendientes del desembolsador: se guardan para verlas y marcarlas sin señal.
+  if (userId && can("especial.creditos.entregar")) {
+    jobs.push(cachedFetch(`${userId}:pendingDeliveries`, () => getPendingDeliveries(token)));
   }
   if (can("clientes.insertar")) {
     jobs.push(prefetchCustomerCatalogs(token), getAccessibleBranches(token));

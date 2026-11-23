@@ -7,6 +7,12 @@ import { SessionContext } from "../auth/SessionContext";
 import { getPendingDeliveries, markDelivered, reportNotDelivered, MAX_DELIVERY_PHOTOS } from "../api/remittanceApi";
 import { getCreditPolicies } from "../api/creditPolicyApi";
 import { isGalleryAllowed, pickImage } from "../utils/imagePicker";
+import { isNetworkError } from "../api/credimasterClient";
+import { cachedFetch } from "../offline/cache";
+import { enqueue, listQueue } from "../offline/queue";
+import { persistLocalFile } from "../offline/filePersist";
+import { useSync } from "../offline/SyncProvider";
+import OfflineNotice from "../components/OfflineNotice";
 import { confirmAction } from "../utils/confirm";
 import { ensureWorkday } from "../tracking/workday";
 import { money } from "../utils/format";
@@ -26,6 +32,9 @@ const norm = (v) =>
     .trim();
 
 const IMAGE_REQUIRED_TRUE = ["true", "1", "si", "sí"];
+
+// Tipos de la cola offline que son entregas de esta pantalla.
+const DELIVERY_QUEUE_TYPES = ["DELIVERY", "DELIVERY_FAILED"];
 
 const METHOD_LABEL = { CHEQUE: "Cheque", TRANSFERENCIA: "Transferencia", EFECTIVO: "Efectivo" };
 
@@ -87,8 +96,12 @@ export default function PendingDeliveriesScreen() {
   const modalStyle = useKeyboardModalStyle(styles.modal);
   const navigation = useNavigation();
   const { session } = useContext(SessionContext);
+  const { refreshPendingCount } = useSync();
 
   const [deliveries, setDeliveries] = useState([]);
+  // Sin señal: fecha de la copia guardada de la lista, y entregas ya marcadas aquí que esperan la señal ({ loan_id: ítem de la cola }).
+  const [cachedAt, setCachedAt] = useState(null);
+  const [queued, setQueued] = useState({});
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -123,14 +136,21 @@ export default function PendingDeliveriesScreen() {
     try {
       setLoading(true);
       setError("");
-      const res = await getPendingDeliveries(session.token);
-      setDeliveries(res?.data || []);
+      // Sin señal se muestra la última lista guardada (offline/cache.js).
+      const res = await cachedFetch(`${session.user.id}:pendingDeliveries`, () => getPendingDeliveries(session.token));
+      setDeliveries(res.data?.data || []);
+      setCachedAt(res.cachedAt);
     } catch (e) {
-      setError(e?.message ?? "Error cargando entregas pendientes");
+      setError(isNetworkError(e) ? "Sin señal y todavía no hay una lista guardada. Abrí la app una vez con señal." : e?.message ?? "Error cargando entregas pendientes");
     } finally {
       setLoading(false);
     }
-  }, [session.token]);
+    const waiting = {};
+    (await listQueue().catch(() => [])).forEach((i) => {
+      if (DELIVERY_QUEUE_TYPES.includes(i.type)) waiting[String(i.payload?.loanId)] = i;
+    });
+    setQueued(waiting);
+  }, [session.token, session.user.id]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -166,17 +186,41 @@ export default function PendingDeliveriesScreen() {
     }
   };
 
+  // Sin señal: la entrega (con sus fotos) se guarda en el teléfono con la hora REAL en que se
+  // confirmó y se envía sola cuando vuelva la red (offline/syncManager.js). El servidor toma esa
+  // hora como la de la entrega.
+  const queueDelivery = async (type, payload, label, doneMessage) => {
+    const files = [];
+    for (const f of photos) files.push({ ...f, uri: await persistLocalFile(f.uri, f.name) });
+    await enqueue({ type, label, payload: { ...payload, loanId: active.loan_id, files } });
+    refreshPendingCount();
+    setActive(null);
+    setNotice(doneMessage);
+    load();
+  };
+
   const submitDelivery = async () => {
     if (savingRef.current) return;
     // Jornada obligatoria para quien entrega (ver tracking/workday.js): la ruta de sus entregas queda registrada.
     if (!(await ensureWorkday(session, "entregas"))) return;
     savingRef.current = true;
+    const deliveredAtDevice = new Date().toISOString();
     try {
       setSaving(true);
       setModalError("");
-      await markDelivered(session.token, active.loan_id, { deliveryNotes: notes, files: photos });
-      setActive(null);
-      load();
+      try {
+        await markDelivered(session.token, active.loan_id, { deliveryNotes: notes, files: photos });
+        setActive(null);
+        load();
+      } catch (e) {
+        if (!isNetworkError(e)) throw e;
+        await queueDelivery(
+          "DELIVERY",
+          { deliveryNotes: notes, deliveredAtDevice },
+          `Entrega — crédito #${active.credit_code || active.loan_id} · ${active.customer_name}`,
+          "Sin señal: la entrega quedó guardada con la hora en que la confirmaste y se envía sola cuando vuelva la red.",
+        );
+      }
     } catch (e) {
       setModalError(e?.message ?? "No se pudo registrar la entrega");
     } finally {
@@ -189,13 +233,24 @@ export default function PendingDeliveriesScreen() {
     if (savingRef.current) return;
     if (!(await ensureWorkday(session, "entregas"))) return;
     savingRef.current = true;
+    const deliveredAtDevice = new Date().toISOString();
     try {
       setSaving(true);
       setModalError("");
-      const res = await reportNotDelivered(session.token, active.loan_id, { reasonCode: reason, notes, files: photos });
-      setActive(null);
-      setNotice(res?.message || "Quedó reportado. Devolvé el dinero a la oficina.");
-      load();
+      try {
+        const res = await reportNotDelivered(session.token, active.loan_id, { reasonCode: reason, notes, files: photos });
+        setActive(null);
+        setNotice(res?.message || "Quedó reportado. Devolvé el dinero a la oficina.");
+        load();
+      } catch (e) {
+        if (!isNetworkError(e)) throw e;
+        await queueDelivery(
+          "DELIVERY_FAILED",
+          { reasonCode: reason, notes, deliveredAtDevice },
+          `No se pudo entregar — crédito #${active.credit_code || active.loan_id} · ${active.customer_name}`,
+          "Sin señal: el reporte quedó guardado y se envía solo cuando vuelva la red. Devolvé el dinero a la oficina.",
+        );
+      }
     } catch (e) {
       setModalError(e?.message ?? "No se pudo registrar el reporte");
     } finally {
@@ -242,6 +297,11 @@ export default function PendingDeliveriesScreen() {
           <Text style={{ color: COLORS.text }}>{notice}</Text>
         </Card>
       )}
+      {!!cachedAt && (
+        <View style={{ marginHorizontal: SPACING.lg, marginBottom: SPACING.sm }}>
+          <OfflineNotice cachedAt={cachedAt} />
+        </View>
+      )}
       {!loading && deliveries.length > 0 && (
         <Searchbar
           placeholder="Buscar por nombre, cédula o crédito"
@@ -279,11 +339,20 @@ export default function PendingDeliveriesScreen() {
               {!!formatDisbursedAt(item.disbursed_at) && (
                 <Text style={styles.muted}>Desembolsado: {formatDisbursedAt(item.disbursed_at)}</Text>
               )}
+              {!!queued[String(item.loan_id)] && (
+                <Text style={{ color: queued[String(item.loan_id)].status === "FAILED" ? COLORS.danger : COLORS.warning, fontWeight: "700", marginTop: 2 }}>
+                  {queued[String(item.loan_id)].status === "FAILED"
+                    ? "El envío fue rechazado: revisalo en Pendientes por enviar."
+                    : queued[String(item.loan_id)].type === "DELIVERY_FAILED"
+                      ? "Reporte guardado sin señal: se envía al volver la red."
+                      : "Entrega guardada sin señal: se envía al volver la red."}
+                </Text>
+              )}
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: SPACING.xs }}>
                 <Chip compact style={{ backgroundColor: COLORS.primarySoft }}>
                   {METHOD_LABEL[item.disbursement_method] || item.disbursement_method}
                 </Chip>
-                <Button mode="contained" compact onPress={() => openConfirm(item)} style={{ borderRadius: RADIUS.md }}>
+                <Button mode="contained" compact disabled={!!queued[String(item.loan_id)]} onPress={() => openConfirm(item)} style={{ borderRadius: RADIUS.md }}>
                   Marcar entregado
                 </Button>
               </View>
@@ -291,6 +360,7 @@ export default function PendingDeliveriesScreen() {
                 mode="text"
                 compact
                 icon="close-circle-outline"
+                disabled={!!queued[String(item.loan_id)]}
                 textColor={COLORS.danger}
                 onPress={() => openConfirm(item, "failed")}
                 style={{ alignSelf: "flex-end", marginTop: SPACING.xs }}

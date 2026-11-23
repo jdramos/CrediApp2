@@ -39,7 +39,8 @@ function locked(fn) {
 }
 
 // item: { type: 'PAYMENT'|'PAYMENT_USD'|'GUARANTEE_PHOTO'|'CUSTOMER_DOCUMENT'|'CUSTOMER_LOCATION'|
-//   'CUSTOMER_INFO_UPDATE'|'CUSTOMER_CREATE'|'CUSTOMER_EVALUATION'|'LOAN_REQUEST'|'VISIT'|'PAYMENT_EVIDENCE', payload, label }
+//   'CUSTOMER_INFO_UPDATE'|'CUSTOMER_CREATE'|'CUSTOMER_EVALUATION'|'LOAN_REQUEST'|'VISIT'|'PAYMENT_EVIDENCE'|
+//   'DELIVERY'|'DELIVERY_FAILED', payload, label }
 // `label` es un texto corto para mostrar en la lista de pendientes.
 export function enqueue(item) {
   return locked(async () => {

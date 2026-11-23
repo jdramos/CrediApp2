@@ -6,6 +6,7 @@ import { createEvaluation } from "../api/customerEvaluationApi";
 import { createLoanRequest } from "../api/loanApi";
 import { logVisit } from "../api/collectionsApi";
 import { uploadPaymentEvidence } from "../api/paymentEvidenceApi";
+import { markDelivered, reportNotDelivered } from "../api/remittanceApi";
 import { isNetworkError, setOfflineSyncMode } from "../api/credimasterClient";
 import { listQueue, removeFromQueue, updateQueueItem, clearQueue } from "./queue";
 import { deletePersistedFile } from "./filePersist";
@@ -109,6 +110,21 @@ function processItem(token, item) {
     case "CUSTOMER_EVALUATION":
       // El servidor calcula puntaje, riesgo y recomendación al recibirla, igual que en línea.
       return createEvaluation(token, { ...item.payload.evaluation, customer_id: Number(item.payload.customerId) });
+    case "DELIVERY":
+      // Entrega marcada sin señal, con la hora REAL en que se entregó (el servidor la acota). Si ya
+      // había llegado (respuesta perdida) el servidor responde ok y no repite.
+      return markDelivered(token, item.payload.loanId, {
+        deliveryNotes: item.payload.deliveryNotes,
+        files: item.payload.files || [],
+        deliveredAtDevice: item.payload.deliveredAtDevice,
+      });
+    case "DELIVERY_FAILED":
+      return reportNotDelivered(token, item.payload.loanId, {
+        reasonCode: item.payload.reasonCode,
+        notes: item.payload.notes,
+        files: item.payload.files || [],
+        deliveredAtDevice: item.payload.deliveredAtDevice,
+      });
     case "PAYMENT_EVIDENCE":
       // Se encola DESPUÉS del pago (misma cola, en orden), identificada por el
       // client_reference_id del pago o por su payment_id si ya estaba registrado.
@@ -155,6 +171,7 @@ export async function flushQueue(token, { onProgress } = {}) {
         if (item.payload?.file?.uri) {
           await deletePersistedFile(item.payload.file.uri);
         }
+        for (const f of item.payload?.files || []) await deletePersistedFile(f?.uri);
         await removeFromQueue(item.id);
         synced += 1;
         onProgress?.({ item, ok: true });
