@@ -40,7 +40,9 @@ const FAILED_REASONS = [
 // De dónde sale el dinero: número de cheque y cuenta, o la caja.
 const sourceLabel = (item) => {
   if (item.check_number) return `Cheque #${item.check_number}${item.bank_account_alias ? ` · ${item.bank_account_alias}` : ""}`;
-  return item.cash_register_name || item.bank_account_alias || "";
+  // Efectivo del fondo de campo del desembolsador (cash_registers.register_type = CAMPO): se rotula para que sepa que sale de su fondo.
+  if (item.cash_register_name) return item.cash_register_type === "CAMPO" ? `${item.cash_register_name} (fondo de campo)` : item.cash_register_name;
+  return item.bank_account_alias || "";
 };
 
 // disbursed_at llega como "YYYY-MM-DD HH:mm:ss" en hora de Nicaragua (la
