@@ -49,12 +49,17 @@ import PayoffModal from "../components/PayoffModal";
 import { formatReceiptNumber } from "../utils/receipt";
 import { ensureWorkday } from "../tracking/workday";
 import OfflineNotice from "../components/OfflineNotice";
-import { cachedFetch, readCache } from "../offline/cache";
+import { cachedFetch } from "../offline/cache";
 import { COLORS } from "../theme/colors";
 import CopyableId from "../components/CopyableId";
 import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 import KeyboardAwareScroll from "../components/KeyboardAwareScroll";
 import { canRequestRestructure } from "../utils/restructure";
+
+// Para buscar sin importar mayúsculas ni tildes («maria» encuentra «María»),
+// como el LIKE del servidor.
+const ACCENTS = { á: "a", à: "a", ä: "a", â: "a", é: "e", è: "e", ë: "e", ê: "e", í: "i", ì: "i", ï: "i", î: "i", ó: "o", ò: "o", ö: "o", ô: "o", ú: "u", ù: "u", ü: "u", û: "u", ñ: "n" };
+const normalizeText = (v) => String(v ?? "").toLowerCase().replace(/[áàäâéèëêíìïîóòöôúùüûñ]/g, (c) => ACCENTS[c]);
 
 const emptyGestionForm = {
   action_type: "VISIT",
@@ -140,7 +145,8 @@ export default function ClientPortfolioScreen() {
   const { refreshPendingCount } = useSync();
 
   const [search, setSearch] = useState("");
-  const [loans, setLoans] = useState([]);
+  // Cartera completa del servidor; la búsqueda la filtra en el teléfono (loans).
+  const [allLoans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -248,14 +254,20 @@ export default function ClientPortfolioScreen() {
   const canLogVisit = session?.permissions?.includes("cobranza.gestionar");
   const canRestructure = canRequestRestructure(session);
 
-  // Búsqueda con pausa (auditoría run-2): cada letra recargaba la cartera
-  // completa desde el servidor. Se espera a que deje de escribir, y una
-  // respuesta vieja no pisa a la más nueva.
-  const [debouncedSearch, setDebouncedSearch] = useState(search);
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 400);
-    return () => clearTimeout(t);
-  }, [search]);
+  // Búsqueda en el teléfono (2026-11-24): antes cada letra (con pausa de
+  // 400 ms, que al escribir en el teléfono no alcanza) pedía la cartera
+  // completa al servidor; Ruta6 de JELDER mandaba ~10 consultas por búsqueda
+  // y cada una tardaba 3 s. La cartera ya está cargada: se filtra aquí, al
+  // instante y también sin señal. Mismos campos que buscaba el servidor.
+  const loans = useMemo(() => {
+    const q = normalizeText(search.trim());
+    if (!q) return allLoans;
+    return allLoans.filter((l) =>
+      [l.customer_name, l.credit_code, l.customer_identification, l.customer_code].some((v) =>
+        normalizeText(v).includes(q),
+      ),
+    );
+  }, [allLoans, search]);
   const loadSeq = useRef(0);
 
   const load = useCallback(async () => {
@@ -263,38 +275,14 @@ export default function ClientPortfolioScreen() {
     try {
       setLoading(true);
       setError("");
-      const q = debouncedSearch.trim();
       // La ruta propia conserva su clave (la usa el cobro sin señal); el
       // equipo y cada gestor se guardan aparte.
       const cacheKey = scope === "mine" ? `${session.user.id}:portfolio` : `${session.user.id}:portfolio:${scope}`;
       const collectorParam = scope === "mine" ? undefined : scope;
-      let res;
-      let stamp = null;
-      if (!q) {
-        // Cartera completa: se guarda para poder verla sin señal.
-        const r = await cachedFetch(cacheKey, () => getAssignedLoans(session.token, { collector_id: collectorParam }));
-        res = r.data;
-        stamp = r.cachedAt;
-      } else {
-        try {
-          res = await getAssignedLoans(session.token, { search: q, collector_id: collectorParam });
-        } catch (e) {
-          if (!isNetworkError(e)) throw e;
-          // Sin señal: se busca dentro de la última cartera guardada.
-          const cached = await readCache(cacheKey);
-          if (!cached) throw e;
-          const ql = q.toLowerCase();
-          res = {
-            ...cached.data,
-            data: (cached.data?.data || []).filter((l) =>
-              [l.customer_name, l.credit_code, l.customer_identification].some((v) =>
-                String(v || "").toLowerCase().includes(ql),
-              ),
-            ),
-          };
-          stamp = cached.cachedAt;
-        }
-      }
+      // Cartera completa: se guarda para poder verla sin señal.
+      const r = await cachedFetch(cacheKey, () => getAssignedLoans(session.token, { collector_id: collectorParam }));
+      const res = r.data;
+      const stamp = r.cachedAt;
       if (seq !== loadSeq.current) return;
       setLoans(res?.data || []);
       setMessage(res?.message || "");
@@ -311,7 +299,7 @@ export default function ClientPortfolioScreen() {
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
-  }, [session.token, session.user.id, debouncedSearch, scope]);
+  }, [session.token, session.user.id, scope]);
 
   useFocusEffect(useCallback(() => { setManagedIds(new Set()); load(); }, [load]));
 
@@ -686,7 +674,6 @@ export default function ClientPortfolioScreen() {
           placeholder="Buscar por nombre, cédula o # de crédito"
           value={search}
           onChangeText={setSearch}
-          onSubmitEditing={load}
           autoCapitalize="none"
           style={{ backgroundColor: COLORS.card }}
           outlineStyle={{ borderRadius: RADIUS.md }}
