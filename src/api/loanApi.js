@@ -84,3 +84,13 @@ export const simulateLoan = (token, { amount, interest_rate, term, requestDate, 
     token,
   );
 
+
+// Saldo de hoy de un crédito vigente que se descuenta de una solicitud nueva
+// («Descontar el saldo completo de un crédito vigente», igual que la web).
+// excludeLoanId: la solicitud que se está modificando (ya lo descuenta).
+// Permiso creditos.insertar o creditos.editar.
+export const getRenewalQuote = (token, loanId, excludeLoanId = null) =>
+  credimasterGet(
+    `/api/loans/express/renewal-quote/${loanId}${excludeLoanId ? `?exclude_loan_id=${excludeLoanId}` : ""}`,
+    token,
+  );

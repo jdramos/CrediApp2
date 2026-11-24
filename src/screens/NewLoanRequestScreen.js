@@ -9,7 +9,7 @@ import DateWheelPicker from "../components/DateWheelPicker";
 import { SessionContext } from "../auth/SessionContext";
 import { searchCustomers, getCustomer, saveCustomerGuarantees, getCustomerInfoUpdate } from "../api/customerApi";
 import { getAccessibleBranches } from "../api/branchApi";
-import { createLoanRequest, simulateLoan, updateLoanRequest, getLoanDetail, getCustomerActiveLoans } from "../api/loanApi";
+import { createLoanRequest, simulateLoan, updateLoanRequest, getLoanDetail, getCustomerActiveLoans, getRenewalQuote } from "../api/loanApi";
 import { summarizeSchedule } from "../utils/loanSimulation";
 import { getLoanCatalogs } from "../api/conamiApi";
 import { getFrecuencies } from "../api/frecuencyApi";
@@ -35,6 +35,7 @@ import CustomFieldInputs from "../components/CustomFieldInputs";
 import LoanAlerts, { isIdentityFrozen } from "../components/LoanAlerts";
 import InfoUpdateBanner, { isInfoUpdateBlocked, BLOCKED_MESSAGE } from "../components/InfoUpdateBanner";
 import LoanRiskSummary from "../components/LoanRiskSummary";
+import RenewalDeductionCard, { renewalProblem } from "../components/RenewalDeductionCard";
 import CatalogPickerField from "../components/CatalogPickerField";
 import GuaranteeExtraFields, { guaranteeExtraPayload, guaranteeExtraSummary } from "../components/GuaranteeExtraFields";
 import useKeyboardModalStyle from "../components/useKeyboardModalStyle";
@@ -252,6 +253,12 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   const [infoStatus, setInfoStatus] = useState(null);
   const [represtamo, setRepresamo] = useState(null);
   const [activeSummary, setActiveSummary] = useState(null);
+  // «Descontar el saldo completo de un crédito vigente» (renews_loan_id), igual
+  // que la web. Al modificar también se puede marcar o quitar, salvo en
+  // prórrogas/refinanciamientos/reestructuraciones (Credilix, 2026-11-24).
+  const [renewsLoanId, setRenewsLoanId] = useState(null);
+  const [renewalAllowed, setRenewalAllowed] = useState(!route?.params?.editLoanId);
+  const [renewalQuote, setRenewalQuote] = useState({ loading: false, data: null, error: "", offline: false });
 
   // Garantías
   const [selectedGuaranteeIds, setSelectedGuaranteeIds] = useState([]);
@@ -355,12 +362,33 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     setIdentityStatus(null);
     setRepresamo(null);
     setActiveSummary(null);
+    // Al cambiar de cliente se quita (al modificar, el cliente no cambia).
+    if (!editLoanId) setRenewsLoanId(null);
     getIdentityStatus(session.token, customer.id).then((r) => setIdentityStatus(r?.data || null)).catch(() => {});
     setInfoStatus(null);
     getCustomerInfoUpdate(session.token, customer.id).then((r) => setInfoStatus(r?.data || null)).catch(() => {});
     getReprestamoEligibility(session.token, customer.id).then((r) => setRepresamo(r?.data || null)).catch(() => {});
     getCustomerActiveLoans(session.token, customer.id).then((r) => setActiveSummary(r || null)).catch(() => {});
   }, [customer?.id, session.token]);
+
+  // Saldo de hoy del crédito a descontar.
+  useEffect(() => {
+    if (!renewsLoanId || !renewalAllowed) {
+      setRenewalQuote({ loading: false, data: null, error: "", offline: false });
+      return undefined;
+    }
+    let alive = true;
+    setRenewalQuote({ loading: true, data: null, error: "", offline: false });
+    getRenewalQuote(session.token, renewsLoanId, editLoanId)
+      .then((r) => alive && setRenewalQuote({ loading: false, data: r?.data || null, error: "", offline: false }))
+      .catch((e) => alive && setRenewalQuote({
+        loading: false,
+        data: null,
+        offline: isNetworkError(e),
+        error: e?.message || "No se pudo calcular el saldo del crédito.",
+      }));
+    return () => { alive = false; };
+  }, [renewsLoanId, renewalAllowed, session.token, editLoanId]);
 
   // Cliente nuevo pendiente de aprobación: la evaluación financiera es obligatoria y se digita
   // en su pantalla; al volver aquí se vuelve a consultar (también la copia guardada sin señal).
@@ -719,6 +747,9 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     : "CUOTAS";
   // Prima que se resta del neto al desembolsar (las cuotas no llevan seguro).
   const insuranceUpfront = insuranceEnabled && effectiveInsuranceId && insuranceChargeMode === "DESEMBOLSO" ? toNumber(insurance) || 0 : 0;
+  // Monto − deducción − seguro descontado: con esto se cancela el crédito a descontar.
+  const renewalNet = (toNumber(amount) || 0) - (toNumber(deduction) || 0) - insuranceUpfront;
+  const renewalPayoff = renewsLoanId && renewalQuote.data?.can_renew ? Number(renewalQuote.data.payoff_today || 0) : 0;
   const insurancePremiumLabel = (o) =>
     o.premium_type === "PORCENTAJE_MONTO" ? `${Number(o.premium_value || 0)} % del monto` : `${money(Number(o.premium_value || 0))} fijo`;
   const chooseInsurance = (id) => {
@@ -961,6 +992,8 @@ export default function NewLoanRequestScreen({ route, navigation }) {
     if (insuranceUpfront > 0 && (toNumber(deduction) || 0) + insuranceUpfront >= amt) {
       return "La deducción más el seguro descontado no pueden ser mayores o iguales al monto.";
     }
+    const renewalError = renewalAllowed ? renewalProblem({ renewsLoanId, quote: renewalQuote, net: renewalNet }) : null;
+    if (renewalError) return renewalError;
 
     // Políticas de crédito (igual que la web, useLoanForm.js::validateForm)
     if (getPolicy("max_amount") && amt > Number(getPolicy("max_amount"))) {
@@ -1051,6 +1084,8 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       id_estado_credito: 1,
       guarantee_ids: selectedGuaranteeIds,
       ...(productId ? { product_id: productId } : {}),
+      // Al modificar se manda siempre (null = quitar el descuento).
+      ...(renewalAllowed && (renewsLoanId || editLoanId) ? { renews_loan_id: renewsLoanId ? Number(renewsLoanId) : null } : {}),
       // Seguro escogido y su forma de cobro (el servidor reparte la prima). Sin la función no se manda nada.
       ...(insuranceEnabled
         ? {
@@ -1174,6 +1209,8 @@ export default function NewLoanRequestScreen({ route, navigation }) {
         setBeneficiaryRelationship(loan.insurance_beneficiary_relationship || "");
         setOtherCharges(Number(loan.other_charges) ? formatAmountInput(String(loan.other_charges)) : "");
         setDeduction(Number(loan.deduction) ? formatAmountInput(String(loan.deduction)) : "");
+        setRenewalAllowed(!Number(loan.is_restructuring) && (!loan.modification_type || loan.modification_type === "NORMAL"));
+        setRenewsLoanId(loan.modification_parent_loan_id || null);
         setPromoterId(loan.promoter_id ?? null);
         setVendorId(loan.vendor_id ?? null);
         if (loan.product_id) setProductId(loan.product_id);
@@ -1565,6 +1602,17 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                 left={<TextInput.Icon icon="cash-remove" />}
               />
             </View>
+
+            {renewalAllowed && (
+              <RenewalDeductionCard
+                loans={activeSummary?.loans || []}
+                renewsLoanId={renewsLoanId}
+                onChange={setRenewsLoanId}
+                quote={renewalQuote}
+                net={renewalNet}
+                cardStyle={styles.card}
+              />
+            )}
 
             {insuranceEnabled && (insuranceOptions.data.length > 0 || insuranceRequired || selectedInsurance) && (
               <View style={styles.card}>
@@ -1990,6 +2038,10 @@ export default function NewLoanRequestScreen({ route, navigation }) {
                     : null,
                   toNumber(otherCharges) > 0 ? ["Cargos administrativos", money(toNumber(otherCharges))] : null,
                   toNumber(deduction) > 0 ? ["Deducción", money(toNumber(deduction))] : null,
+                  renewalPayoff > 0
+                    ? [`Saldo a descontar (crédito #${renewalQuote.data?.loan?.credit_code || renewsLoanId})`, money(renewalPayoff)]
+                    : null,
+                  renewalPayoff > 0 ? ["Neto a entregar (estimado)", money(renewalNet - renewalPayoff)] : null,
                   selectedFrequency?.tag === "V" ? ["Fecha de vencimiento", dueDate] : null,
                   selectedFrequency && selectedFrequency.tag !== "V" && firstPaymentDate ? ["Primera cuota", firstPaymentDate] : null,
                 ]
