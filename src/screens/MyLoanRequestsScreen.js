@@ -39,6 +39,7 @@ const styles = StyleSheet.create({
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.xs },
   // Filtros en una sola línea deslizable (antes los chips se acomodaban en varias líneas y ocupaban media pantalla).
   chipsScroll: { flexDirection: "row", alignItems: "center", gap: SPACING.xs, paddingRight: SPACING.lg },
+  headerChips: { gap: SPACING.sm, paddingBottom: SPACING.xs },
   searchRow: { flexDirection: "row", alignItems: "center", gap: SPACING.xs },
   listContent: { padding: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: 96, gap: SPACING.sm },
   row: {
@@ -144,42 +145,10 @@ export default function MyLoanRequestsScreen() {
   const periodLabel = PERIODS.find((p) => p.key === period)?.label?.toLowerCase();
   const moreActive = !mineOnly || branchId !== undefined;
 
-  return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <View style={styles.headerRow}>
-        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
-        <Text variant="headlineSmall" style={styles.title}>Mis solicitudes</Text>
-      </View>
-      <Text style={styles.sub}>
-        {total} solicitud{total === 1 ? "" : "es"}{period === "all" ? "" : ` (${periodLabel})`} · {pendingTotal} pendiente
-        {pendingTotal === 1 ? "" : "s"} de aprobación en total
-      </Text>
-
-      <View style={styles.filtersWrap}>
-        <View style={styles.searchRow}>
-          <TextInput
-            mode="outlined"
-            dense
-            placeholder="Buscar por nombre o cédula"
-            value={search}
-            onChangeText={setSearch}
-            onSubmitEditing={() => load()}
-            autoCapitalize="none"
-            style={{ backgroundColor: COLORS.card, flex: 1 }}
-            outlineStyle={{ borderRadius: RADIUS.md }}
-            left={<TextInput.Icon icon="magnify" />}
-            right={search ? <TextInput.Icon icon="close" onPress={() => { setSearch(""); }} /> : null}
-          />
-          <IconButton
-            icon={showMore ? "filter-variant-remove" : "filter-variant"}
-            mode={moreActive ? "contained" : "outlined"}
-            selected={moreActive}
-            onPress={() => setShowMore((v) => !v)}
-            accessibilityLabel="Más filtros"
-            style={{ margin: 0 }}
-          />
-        </View>
-
+  // Los filtros van DENTRO de la lista (se deslizan con ella): antes estaban fijos arriba y en pantallas
+  // bajas ocupaban todo el espacio y la lista no se veía.
+  const listHeader = (
+    <View style={styles.headerChips}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
           {PERIODS.map((p) => (
             <Chip
@@ -273,20 +242,58 @@ export default function MyLoanRequestsScreen() {
             ))}
           </ScrollView>
         )}
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <View style={styles.headerRow}>
+        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} />
+        <Text variant="headlineSmall" style={styles.title}>Mis solicitudes</Text>
+      </View>
+      <Text style={styles.sub}>
+        {total} solicitud{total === 1 ? "" : "es"}{period === "all" ? "" : ` (${periodLabel})`} · {pendingTotal} pendiente
+        {pendingTotal === 1 ? "" : "s"} de aprobación en total
+      </Text>
+
+      <View style={styles.filtersWrap}>
+        <View style={styles.searchRow}>
+          <TextInput
+            mode="outlined"
+            dense
+            placeholder="Buscar por nombre o cédula"
+            value={search}
+            onChangeText={setSearch}
+            onSubmitEditing={() => load()}
+            autoCapitalize="none"
+            style={{ backgroundColor: COLORS.card, flex: 1 }}
+            outlineStyle={{ borderRadius: RADIUS.md }}
+            left={<TextInput.Icon icon="magnify" />}
+            right={search ? <TextInput.Icon icon="close" onPress={() => { setSearch(""); }} /> : null}
+          />
+          <IconButton
+            icon={showMore ? "filter-variant-remove" : "filter-variant"}
+            mode={moreActive ? "contained" : "outlined"}
+            selected={moreActive}
+            onPress={() => setShowMore((v) => !v)}
+            accessibilityLabel="Más filtros"
+            style={{ margin: 0 }}
+          />
+        </View>
+
       </View>
 
       <HelperText type="error" visible={!!error} style={{ marginHorizontal: SPACING.lg }}>{error}</HelperText>
-      {loading && <ActivityIndicator style={{ marginTop: SPACING.lg }} />}
-
-      {!loading && (
+      {(
         <FlatList
-          data={loans}
+          data={loading ? [] : loans}
+          ListHeaderComponent={listHeader}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.listContent}
           refreshing={refreshing}
           onRefresh={() => load(true)}
           ListEmptyComponent={
-            <Text style={styles.empty}>
+            loading ? <ActivityIndicator style={{ marginTop: SPACING.lg }} /> : <Text style={styles.empty}>
               {period === "today" ? "Hoy no has sometido solicitudes. Tocá «Todas» para ver las anteriores." : "Sin solicitudes con estos filtros."}
             </Text>
           }
