@@ -134,6 +134,18 @@ export default function CustomerInfoUpdateScreen({ route, navigation }) {
   const missing = requirements.filter((r) => !r.done);
   const params = { customerId, customerName };
 
+  // La evaluación y la garantía se actualizan en una sola pantalla (dueño, 2026-11-26): un solo paso con el
+  // estado de cada una. Es obligatorio si la empresa exige cualquiera de las dos (políticas de expediente).
+  const evReq = requirement("evaluation");
+  const guReq = requirement("guarantee");
+  const combinedReq = evReq || guReq ? { done: (!evReq || evReq.done) && (!guReq || guReq.done) } : null;
+  const combinedHint = combinedReq
+    ? [
+        evReq ? (evReq.done ? `Evaluación actualizada el ${dmy(evReq.date)}.` : "Falta actualizar la evaluación financiera (ingresos, gastos y deudas de hoy).") : null,
+        guReq ? (guReq.done ? "Garantía al día." : "Falta registrar o actualizar la garantía (artículo, marca, serie, valor y fotos).") : null,
+      ].filter(Boolean).join(" ")
+    : "Ingresos, gastos y deudas de hoy, y las garantías con su artículo, marca, serie, valor y fotos. Todo en la misma pantalla.";
+
   const takeLocation = async () => {
     setError("");
     setLocating(true);
@@ -210,24 +222,12 @@ export default function CustomerInfoUpdateScreen({ route, navigation }) {
         </Text>
 
         <Step
-          title="Evaluación financiera"
-          req={requirement("evaluation")}
-          hint={requirement("evaluation")?.done ? `Actualizada el ${dmy(requirement("evaluation").date)}.` : "Ingresos, gastos y deudas de hoy. Se parte de la evaluación anterior."}
-          action="Actualizar evaluación"
-          disabledReason={canEvaluate ? null : "Su usuario no tiene permiso para registrar evaluaciones."}
-          onPress={() => navigation.navigate("CustomerEvaluation", { ...params, renew: true })}
-        />
-        <Step
-          title="Garantías"
-          req={requirement("guarantee")}
-          hint={
-            requirement("guarantee")?.done
-              ? "Garantía al día."
-              : "Registre o corrija las garantías con su artículo, marca, serie, valor y fotos. La del sistema anterior es solo referencia."
-          }
-          action="Ver / agregar garantías"
-          disabledReason={canGuarantees ? null : "Su usuario no tiene permiso para las garantías."}
-          onPress={() => navigation.navigate("CustomerGuarantees", params)}
+          title="Evaluación financiera y garantías"
+          req={combinedReq}
+          hint={combinedHint}
+          action="Actualizar evaluación y garantías"
+          disabledReason={canEvaluate || canGuarantees ? null : "Su usuario no tiene permiso para evaluaciones ni garantías."}
+          onPress={() => navigation.navigate("CustomerEvaluation", { ...params, renew: true, withGuarantees: canGuarantees })}
         />
         <Step
           title="Ubicación y fotos"

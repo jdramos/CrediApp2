@@ -11,6 +11,7 @@ import { enqueue } from "../offline/queue";
 import { cachedFetch } from "../offline/cache";
 import { EVAL_OPTIONS_CACHE_KEY } from "../offline/prefetch";
 import { useSync } from "../offline/SyncProvider";
+import GuaranteesPanel from "../components/GuaranteesPanel";
 import { isLocalCustomerId, resolveCustomerId, getQueuedEvaluation } from "../offline/localCustomers";
 import { money, toNumber, formatAmountInput } from "../utils/format";
 import { todayISO } from "../utils/date";
@@ -23,6 +24,10 @@ import { RADIUS, SHADOW, SPACING } from "../theme/layout";
 // Si el cliente ya tiene una evaluación vigente se muestra (para revisarla se usa la web).
 // Sin señal (o si el cliente se creó sin señal y todavía no está registrado) la evaluación se
 // guarda en el teléfono y se envía sola; el servidor calcula el puntaje cuando la recibe.
+//
+// «Actualizar cliente» abre esta pantalla con withGuarantees: debajo de la evaluación va el bloque de
+// garantías completo (agregar con fotos, editar, agregar fotos), así la evaluación y la garantía se
+// actualizan en la MISMA pantalla (dueño, 2026-11-26). Cada bloque se guarda con su botón.
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
@@ -136,6 +141,7 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
   // «Actualizar cliente» (JELDER 2026-11-20): con evaluación vigente se digita una nueva
   // versión, prellenada con la anterior para corregir solo lo que cambió.
   const renew = Boolean(route.params?.renew);
+  const withGuarantees = Boolean(route.params?.withGuarantees);
   const { session } = useContext(SessionContext);
   const { refreshPendingCount } = useSync();
   const perms = session?.permissions || [];
@@ -162,6 +168,10 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
   const [references, setReferences] = useState("");
   const [bureau, setBureau] = useState("NO_APLICA");
   const [comment, setComment] = useState("");
+
+  useEffect(() => {
+    if (withGuarantees) navigation.setOptions({ title: "Evaluación y garantías" });
+  }, [withGuarantees, navigation]);
 
   useEffect(() => {
     let alive = true;
@@ -360,9 +370,11 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
                 </>
               )}
             </View>
-            <Button mode="contained" onPress={() => navigation.goBack()} style={{ borderRadius: RADIUS.md }}>
-              Listo
-            </Button>
+            {!withGuarantees && (
+              <Button mode="contained" onPress={() => navigation.goBack()} style={{ borderRadius: RADIUS.md }}>
+                Listo
+              </Button>
+            )}
           </>
         ) : done ? (
           <>
@@ -372,9 +384,11 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
                 Este cliente ya tiene una evaluación vigente. Para hacer una nueva versión use la web (Cliente → Evaluación financiera).
               </Text>
             )}
-            <Button mode="contained" onPress={() => navigation.goBack()} style={{ borderRadius: RADIUS.md }}>
-              Listo
-            </Button>
+            {!withGuarantees && (
+              <Button mode="contained" onPress={() => navigation.goBack()} style={{ borderRadius: RADIUS.md }}>
+                Listo
+              </Button>
+            )}
           </>
         ) : !canCreate ? (
           <Text style={styles.hint}>Su usuario no tiene permiso para registrar evaluaciones financieras.</Text>
@@ -464,6 +478,16 @@ export default function CustomerEvaluationScreen({ route, navigation }) {
           </>
         )}
         {!!error && (done || !canCreate) && <HelperText type="error" visible>{error}</HelperText>}
+        {withGuarantees && !isLocalCustomerId(customerId) && (
+          <View style={{ marginTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: SPACING.sm }}>
+            <GuaranteesPanel customerId={customerId} title="Garantías del cliente" />
+          </View>
+        )}
+        {withGuarantees && (
+          <Button mode="contained" icon="check" onPress={() => navigation.goBack()} style={{ borderRadius: RADIUS.md, marginTop: SPACING.md }}>
+            Listo: volver a Actualizar cliente
+          </Button>
+        )}
       </KeyboardAwareScroll>
     </SafeAreaView>
   );
