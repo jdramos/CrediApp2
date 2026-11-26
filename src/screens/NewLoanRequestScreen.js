@@ -467,6 +467,13 @@ export default function NewLoanRequestScreen({ route, navigation }) {
   };
 
   const pickCustomer = (c) => {
+    // Al cambiar de cliente (volver al paso 0 y elegir otro) las garantías elegidas del anterior no deben quedar:
+    // el servidor respondía «Una o más garantías seleccionadas no existen» (Credilix #8223, 2026-11-26).
+    if (customer && String(customer.id) !== String(c?.id)) {
+      setSelectedGuaranteeIds([]);
+      seenGuaranteeIds.current = new Set();
+      setGuarantees([]);
+    }
     setCustomer(c);
     setError("");
     setStep(1);
@@ -1082,7 +1089,8 @@ export default function NewLoanRequestScreen({ route, navigation }) {
       id_garantia: selectedGuaranteeIds.length > 0 ? "1" : "0",
       id_situacion_credito: 1,
       id_estado_credito: 1,
-      guarantee_ids: selectedGuaranteeIds,
+      // Solo las que el cliente tiene hoy (lista cargada del servidor): una garantía borrada o de otro cliente no se manda.
+      guarantee_ids: selectedGuaranteeIds.filter((id) => guarantees.some((g) => String(g.id) === String(id))),
       ...(productId ? { product_id: productId } : {}),
       // Al modificar se manda siempre (null = quitar el descuento).
       ...(renewalAllowed && (renewsLoanId || editLoanId) ? { renews_loan_id: renewsLoanId ? Number(renewsLoanId) : null } : {}),
